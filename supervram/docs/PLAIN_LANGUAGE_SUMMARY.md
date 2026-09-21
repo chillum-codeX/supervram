@@ -87,7 +87,7 @@ Q8_0 (30 GiB, does not fit in VRAM), 16 GiB cache, cold start unless noted:
 - No native 48 GB card here, so every parity figure is an estimate (about 100 t/s for Q8_0, about 78 for the 43 GiB model).
 - One prompt for the long runs; decode only; the cache does not handle long prompt batches (it errors when a batch needs more experts
   than slots).
-- Prefetch and overlap are not built; a perfect predictor would gain at most about 30% here.
+- Prefetch is not built; simulation shows it would lose speed with history-based prediction and gain at most about 4-11% with an ideal early-router predictor.
 - The 43 GiB model is synthetic: throughput and capacity only, not quality.
 - Quality is measured on one text domain and against a Q8 reference, with no full-precision baseline or task benchmark.
 - The second NVMe (Intel, PCIe 3.0 x4, unmounted, Windows-style NTFS) was not read: it needs root, and I did not use it. There is no
@@ -100,7 +100,7 @@ Q8_0 (30 GiB, does not fit in VRAM), 16 GiB cache, cold start unless noted:
    the biggest lever and it is hardware.
 2. **Fewer bytes per expert** (Q4-style formats): about 30% faster for about 2% perplexity.
 3. **Cache capacity:** the model's routing working set has to fit; below about half the experts cached, throughput collapses.
-4. **Prediction-based prefetch:** best case about +30%, a large graph-engineering effort.
+4. **Prediction-based prefetch:** tested by simulation and **not built**. A perfect predictor would gain +4% to +30% here, but predictions from routing history are right only 1-2% of the time, so wrong reads would make decoding slower (details in `IMPLEMENTATION_STATUS.md`). Only a model-router-based early predictor could work, for about 4-11%.
 
 ## 9. Where everything lives
 

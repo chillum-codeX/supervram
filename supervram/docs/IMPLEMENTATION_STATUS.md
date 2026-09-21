@@ -149,9 +149,35 @@ Measurement fix: `scripts/cold_run.py` sampled the launching session's cgroup (4
 
 There is no PCIe 4 drive here, so the faster-drive test could not be run. The Intel drive could only add bandwidth in parallel; whether it does depends on how both are wired to the CPU. A read-only benchmark (`scripts/ssd_expert_read_bench.py` now accepts block devices and several targets) would answer that, but needs root to open `/dev/nvme1n1`; it was not run.
 
+## Prefetch feasibility: measured before building (`scripts/simulate_prefetch.py`, `scripts/prefetch_predictor_eval.py`)
+
+Prefetching means reading the experts a layer will miss while the GPU is still computing earlier layers. Before touching the model graph, two questions were tested on the 3,276-token Q8_0 routing traces (16 GiB cache, per-layer LRU).
+
+**1. How much could any prefetch gain?** A timing model of the layer pipeline (GPU 0.19 ms/layer, one SSD serving missed experts at 2.4 ms each; it reproduces the measured speed within 7 %: 29.6 vs 31.8 t/s) with an oracle that knows every miss D layers ahead and wastes no reads:
+
+| Lookahead D (layers) | Speedup, this drive (2.4 GB/s) | at ~3.5 GB/s | at ~7 GB/s |
+|---|---|---|---|
+| 1 | +4 % | +5 % | +8 % |
+| 4 | +11 % | +15 % | +23 % |
+| 8 | +17 % | +23 % | +31 % |
+| 48 (a whole token ahead) | +30 % | +37 % | +43 % |
+
+A missed expert takes about 2.4 ms to read but a whole layer computes in about 0.19 ms, so a short lookahead hides almost nothing; the reads must start many layers early.
+
+**2. Can routing history predict the misses?** An online cross-layer co-occurrence predictor (which experts a layer picks, given the experts chosen D layers earlier for the same token), evaluated only on real misses:
+
+| Lookahead | Top-1 guess is right | Most confident 0.1 % of guesses right | Always prefetching top-4: recall / wrong reads per useful read |
+|---|---|---|---|
+| 1 layer | 2.0 % | 12.5 % | 34 % / 69 |
+| 8 layers | 1.4 % | 13.0 % | 28 % / 95 |
+
+Misses are the rarely used experts (about 0.2 per layer per token), so they are close to unpredictable from routing history. Because the SSD is already the bottleneck, every wrong read costs a full 2.4 ms: in the timing model, a predictor with 50 % recall and just 0.5 wrong reads per useful one is already **slower** than no prefetch (0.96x), and one with 1.0 wrong per useful is 0.82x. No confidence threshold reached even a 1-in-2 hit rate.
+
+**Conclusion:** history-based prefetch would lose speed. The only credible predictor is the model's own router applied early to the hidden state (a "pre-gated" design), which needs extra graph nodes and host read-backs in `qwen3moe`; even a perfect version would gain about 4-11 % at 1-4 layers of lookahead on this drive (about 8-23 % on a 7 GB/s drive). It was therefore not built. Prefetch becomes more attractive only with a much faster SSD.
+
 ## Remaining gaps
 
 - Prompt ubatches that route more distinct experts than `n_slots` return a hard error (observed as llama-bench warmup `res = -3` at `-ub 16`). Use `-ub 1` or a larger cache for decode; prompt processing is not a v1 win.
-- No next-token prefetch, no GDS copy backend, no llama-server `/metrics` cache stats (stats are in the server task JSON only), and only the 20-run cache-size x policy ablation above, not the 720-run matrix (no prefetch/predictor axes, no repetitions).
+- No prefetch (measured to be a net loss with history-based prediction and worth at most about 4-11 % with an ideal early-router predictor, see above), no GDS copy backend, no llama-server `/metrics` cache stats (stats are in the server task JSON only), and only the 20-run cache-size x policy ablation above, not the 720-run matrix (no prefetch/predictor axes, no repetitions).
 - Direct I/O (`SVRAM_DIRECT_IO=1`, Linux only, env-var controlled, no CLI flag yet) uses one pinned staging buffer with a synchronize before each reuse: no double buffering and no prefetch, so reads never overlap compute (reads of one layer are batched, see above). The default path is still mmap.
 - CUDA graphs were disabled (`GGML_CUDA_DISABLE_GRAPHS=1`) for bring-up.

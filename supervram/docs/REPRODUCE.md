@@ -37,6 +37,7 @@ cd supervram/build && ninja svram-verify
 | SSD ceiling for expert-sized reads | `python3 scripts/ssd_expert_read_bench.py ~/models/Qwen3-30B-A3B-Q8_0.gguf` (accepts block devices and several targets) |
 | Cache size x policy sweep, 3 reps | `scripts/run_ablation_sweep.sh`, then `python3 scripts/aggregate_ablations.py results/rtx3090/ablations-long` |
 | Routing traces + Q4-vs-Q8 teacher-forced quality | `scripts/run_traces_and_quality.sh` (prompts in `scripts/prompts.txt`), then `analyze_policies.py` and `compare_quality.py` |
+| Prefetch upper bound and predictor accuracy (simulation on the traces) | `python3 scripts/simulate_prefetch.py results/rtx3090/traces/q8-p*.trace [--r 1.65]` and `python3 scripts/prefetch_predictor_eval.py results/rtx3090/traces/q8-p*.trace` |
 | Ground-truth perplexity, Q4_K_M vs Q8_0 | `scripts/run_ground_truth_ppl.sh` |
 | 43 GiB synthetic test model | `scripts/make_synthetic_model.sh`, then `cold_run.py` with `--model ~/models/Qwen3-30B-A3B-synthetic-F16x24-Q8x24.gguf` |
 
