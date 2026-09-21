@@ -60,6 +60,24 @@ Q8_0 (30.3 GiB, does not fit VRAM), 16 GiB GPU cache, LRU, `-ub 1`, 256 tokens, 
 - SSD ceiling: `scripts/ssd_expert_read_bench.py` measures the WD SN550 at about 2.4 GB/s for expert-sized (1.6 MB) O_DIRECT reads at queue depth >= 8 (1.6 GB/s at QD1). Bandwidth-only ceiling for Q8_0: about 21 t/s at 94 % hits, 42 t/s at 97 %, 62 t/s at 98 %, 125 t/s at 99 %. The direct path reaches about 1.8 GB/s during waits, roughly 70 % of that ceiling.
 - Estimated parity (not measured): a native 48 GB card at 3090-class bandwidth would decode Q8_0 at roughly 100 t/s (about twice Q4's 195-200 t/s). 14 t/s is therefore about 0.14x, below the notes' 0.5x "basic viability" line. Reaching 0.5x needs a hit rate near 97.5 % or better, fewer bytes per expert, or more SSD bandwidth.
 
+## Cache policy headroom and steady state (`results/rtx3090/traces/`, `results/rtx3090/cold/*long1536*`)
+
+Method: `SVRAM_TRACE=<file>` (patch 0003) records the distinct experts each layer picks for every token. Eight varied prompts (code, science, story, translation, math, history, engineering, literature) x 384 tokens on Q8_0 (3,276 tokens, 48 layers) were replayed offline by `scripts/analyze_policies.py`, including Belady's offline-optimal policy as the upper bound. Hit rate is per distinct expert per (token, layer), like the runtime stats; per-layer pools of 71 slots = 16 GiB.
+
+| Policy (71 slots/layer, each prompt from a cold cache) | Hit rate |
+|---|---|
+| LRU (current) | 96.28 % |
+| LFU (current) / LFU with decay / SLRU | 96.08 / 96.36 / 96.29 % |
+| **Optimal (Belady), per-layer pools** | **97.10 %** |
+| Optimal, one shared pool across layers | 97.31 % |
+
+- **Replacement policy is already within about 0.8 points of optimal.** Even a perfect policy cuts misses by only about 25 %. Smarter eviction cannot reach the ~97.5-98 % hit rate that 0.5x parity needs on this SSD. (A "pinned hot experts" variant looked better at 89 slots but gets its hot set loaded for free, so that comparison is not fair and is not claimed.)
+- **A persistent cache matters more than the policy.** Replaying all eight prompts back to back with a warm cache gives 97.3 % (LRU). A real long cold-start run agrees: 1,536 tokens, 4 GiB RAM cap, direct I/O: 97.4 % hits and **26.3 t/s overall, 27.5 t/s from token 256 on** (first 256 tokens: 21.7 t/s). The 13.8 t/s of the short cold runs is mostly filling an empty cache.
+- **Prompt matters:** decode speed on the eight prompts ranged 15-48 t/s (hit rate 94-97.7 %) with direct I/O; the single-prompt figures elsewhere in this document are not typical.
+- **Sharing loads across tokens does not help.** Verifying k consecutive tokens together (best case of speculative decoding, all accepted) reduces missed experts per token only from 10.2 to 9.6 at k=8 (-6 %). Running k independent requests in lock-step is worse per token (23 misses/token at k=4, 36 at k=8, hit rate down to 87 %) because they evict each other's experts. Trace-based estimate, LRU, not measured end to end.
+- **Time split in steady state (1,536-token run):** 42.6 s of 58.4 s decode is SSD wait (73 %), the other ~10 ms/token is per-layer synchronization and compute. Overlapping reads with compute could therefore gain up to about 1.35x here (the earlier "at most ~10 %" applied only to the cold 256-token runs).
+- **SSD bandwidth is the binding limit.** At the steady-state 97.3 % hit rate a token needs about 51 MB from the SSD. That is at most 47 t/s at this drive's 2.4 GB/s, about 68 t/s at 3.5 GB/s and about 137 t/s at 7 GB/s (bandwidth-only arithmetic; a native-card estimate of ~100 t/s caps the useful range). The steady-state 27.5 t/s is about 0.27x of that unmeasured native estimate.
+
 ## Remaining gaps
 
 - Prompt ubatches that route more distinct experts than `n_slots` return a hard error (observed as llama-bench warmup `res = -3` at `-ub 16`). Use `-ub 1` or a larger cache for decode; prompt processing is not a v1 win.

@@ -1,0 +1,62 @@
+{
+  "71": {
+    "lru": 96.28,
+    "lfu": 96.08,
+    "lfu-decay": 96.36,
+    "slru": 96.29,
+    "belady-layer": 97.1,
+    "belady-global": 97.31,
+    "pinned+lru (profiled on other prompts)": 96.09
+  },
+  "continuous_session": {
+    "cap": 71,
+    "lru": 97.34,
+    "lfu": 93.69,
+    "lfu-decay": 97.06,
+    "slru": 97.35,
+    "belady-layer": 98.66
+  },
+  "amortization": {
+    "cap": 71,
+    "1": {
+      "chain": {
+        "misses_per_token": 10.2,
+        "hit_rate": 97.34
+      },
+      "batch": {
+        "misses_per_token": 10.2,
+        "hit_rate": 97.34
+      }
+    },
+    "2": {
+      "chain": {
+        "misses_per_token": 10.08,
+        "hit_rate": 96.62
+      },
+      "batch": {
+        "misses_per_token": 14.8,
+        "hit_rate": 95.95
+      }
+    },
+    "4": {
+      "chain": {
+        "misses_per_token": 9.89,
+        "hit_rate": 95.71
+      },
+      "batch": {
+        "misses_per_token": 23.0,
+        "hit_rate": 93.03
+      }
+    },
+    "8": {
+      "chain": {
+        "misses_per_token": 9.59,
+        "hit_rate": 94.42
+      },
+      "batch": {
+        "misses_per_token": 36.42,
+        "hit_rate": 86.96
+      }
+    }
+  }
+}
