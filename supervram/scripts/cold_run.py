@@ -50,9 +50,14 @@ def status_kib(pid: int, key: str) -> int:
     return 0
 
 
-def cgroup_current(pid: int) -> int:
+def cgroup_current(pid: int, require_scope: bool) -> int:
+    """memory.current of the process's cgroup. With a RAM cap the process starts in its parent's cgroup and is moved
+    into the systemd-run scope a moment later; samples taken before the move belong to the parent (the whole desktop
+    session) and are ignored."""
     try:
         rel = Path(f"/proc/{pid}/cgroup").read_text().strip().split("::")[-1]
+        if require_scope and "/run-" not in rel:
+            return 0
         return int(Path(f"/sys/fs/cgroup{rel}/memory.current").read_text())
     except (OSError, ValueError):
         return 0
@@ -88,7 +93,7 @@ def main() -> None:
         while not stop.is_set():
             peaks["rss_anon_kib"] = max(peaks["rss_anon_kib"], status_kib(pid, "RssAnon"))
             peaks["rss_file_kib"] = max(peaks["rss_file_kib"], status_kib(pid, "RssFile"))
-            peaks["cgroup_bytes"] = max(peaks["cgroup_bytes"], cgroup_current(pid))
+            peaks["cgroup_bytes"] = max(peaks["cgroup_bytes"], cgroup_current(pid, bool(args.ram_cap)))
             time.sleep(0.25)
 
     read_before = sectors_read(disk)
