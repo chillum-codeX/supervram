@@ -278,6 +278,7 @@ llama_context::llama_context(
     cparams.moe_expert_io_threads   = params.moe_expert_io_threads;
     cparams.moe_expert_staging_mib  = params.moe_expert_staging_mib;
     cparams.moe_expert_trace        = params.moe_expert_trace;
+    cparams.moe_expert_zerocopy     = params.moe_expert_zerocopy;
     if (model.moe_expert_storage() == LLAMA_MOE_EXPERT_STORAGE_CACHE && cparams.moe_expert_cache_bytes == 0) {
         cparams.moe_expert_cache_bytes = 8ull * 1024 * 1024 * 1024;
         LLAMA_LOG_WARN("%s: moe_expert_storage = cache but no cache size given, using %zu MiB\n", __func__, cparams.moe_expert_cache_bytes / 1024 / 1024);
@@ -622,6 +623,7 @@ void llama_context::sched_set_expert_cache() {
         /*.io_threads     =*/ cparams.moe_expert_io_threads,
         /*.staging_bytes  =*/ (size_t) std::max<int32_t>(0, cparams.moe_expert_staging_mib) << 20,
         /*.trace_path     =*/ cparams.moe_expert_trace,
+        /*.zero_copy      =*/ cparams.moe_expert_zerocopy,
     };
     ggml_backend_sched_set_expert_cache(sched.get(), &xc);
 }
@@ -3728,6 +3730,7 @@ llama_context_params llama_context_default_params() {
         /*.moe_expert_io_threads       =*/ 0,
         /*.moe_expert_staging_mib      =*/ 0,
         /*.moe_expert_trace            =*/ nullptr,
+        /*.moe_expert_zerocopy         =*/ 0,
         /*.embeddings                  =*/ false,
         /*.offload_kqv                 =*/ true,
         /*.no_perf                     =*/ true,

@@ -54,3 +54,17 @@
 # patches/0006-override-tensor-pinned-host-buffer.patch (applies on top of 0005)
  common/arg.cpp | 3 +++
  1 file changed, 3 insertions(+)
+
+# patches/0007-zero-copy-expert-tier-stage1.patch (applies on top of 0006)
+ common/arg.cpp                  |  7 +++++++
+ common/common.cpp               |  1 +
+ common/common.h                 |  1 +
+ ggml/include/ggml-backend.h     |  1 +
+ ggml/src/ggml-backend.cpp       | 45 +++++++++++++++++++++++++++++++++++++----
+ ggml/src/ggml-cuda/common.cuh   |  4 ++++
+ ggml/src/ggml-cuda/ggml-cuda.cu |  4 ++++
+ ggml/src/ggml-cuda/mmvq.cu      | 32 ++++++++++++++++++++++++++++-
+ include/llama.h                 |  1 +
+ src/llama-context.cpp           |  3 +++
+ src/llama-cparams.h             |  1 +
+ 11 files changed, 95 insertions(+), 5 deletions(-)

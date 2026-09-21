@@ -491,6 +491,7 @@ struct common_params {
     int32_t     moe_expert_io_threads   = 0;     // 0 = default
     int32_t     moe_expert_staging_mib  = 0;     // 0 = default
     std::string moe_expert_trace;                // record per-token expert selections to this file
+    bool        moe_expert_zerocopy     = false; // experts in pinned host RAM, read in place by the GPU (use with -ot ...=CUDA_Host)
 
     common_cpu_params cpuparams;
     common_cpu_params cpuparams_batch;

@@ -917,6 +917,10 @@ struct ggml_backend_sched_expert_tensor {
 
     std::vector<int32_t> remap_host;            // per-tensor: the id upload of one weight must not overwrite another's
 
+    // zero-copy tier: pointer to the expert weights (int64 per expert) read by the CUDA kernel
+    struct ggml_tensor * ptr_table = nullptr;   // per-graph tensor object, rebuilt for every graph
+    bool                 table_ready = false;   // the device memory behind it holds valid pointers (persists across graphs)
+
     // direct-I/O source (-1 when the weight is read through the mmap)
     int      src_fd     = -1;
     uint64_t src_offset = 0;                    // file offset of the weight's data
@@ -929,6 +933,7 @@ struct ggml_backend_sched_expert_cache {
     bool layout_dirty = true;
 
     // direct I/O (Linux, SVRAM_DIRECT_IO=1): O_DIRECT reads into a pinned staging buffer, then async H2D copies
+    bool     zero_copy      = false;            // experts run from pinned host RAM through pointer tables (no per-layer host round trip)
     FILE *   trace          = nullptr;          // SVRAM_TRACE=<file>: one line per (token, layer): "<layer> <distinct expert ids>"
     bool     direct_io      = false;
     int      io_threads     = 8;
@@ -1080,7 +1085,8 @@ static struct ggml_tensor * ggml_backend_sched_expert_cache_weight(ggml_backend_
         return NULL;
     }
     // prompt processing: a big batch touches most experts of every layer, so a small slot cache cannot serve it
-    if (node->src[2] != NULL && node->src[2]->ne[1] > GGML_SCHED_EXPERT_CACHE_MAX_BATCH) {
+    const int64_t max_batch = sched->expert_cache->zero_copy ? 1 : GGML_SCHED_EXPERT_CACHE_MAX_BATCH;
+    if (node->src[2] != NULL && node->src[2]->ne[1] > max_batch) {
         return NULL;
     }
     return w;
@@ -1100,6 +1106,7 @@ static void ggml_backend_sched_expert_cache_free_buffers(struct ggml_backend_sch
     for (auto & it : cache->tensors) {
         ggml_backend_buffer_free(it.second.buffer);
         it.second.buffer = nullptr;
+        it.second.table_ready = false;
     }
 }
 
@@ -1213,6 +1220,7 @@ static void ggml_backend_sched_expert_cache_prepare(ggml_backend_sched_t sched, 
         it.second.slots_view = nullptr;
         it.second.ids_remap  = nullptr;
         it.second.ids_orig   = nullptr;
+        it.second.ptr_table  = nullptr;
     }
     for (int i = 0; i < graph->n_nodes; i++) {
         struct ggml_tensor * node = graph->nodes[i];
@@ -1224,7 +1232,10 @@ static void ggml_backend_sched_expert_cache_prepare(ggml_backend_sched_t sched, 
         if (backend_id < 0) {
             continue; // no device backend supports this op, the CPU path will be used
         }
-        const size_t ids_nbytes = ggml_nbytes(node->src[2]);
+        size_t ids_nbytes = ggml_nbytes(node->src[2]);
+        if (cache->zero_copy) {
+            ids_nbytes = std::max(ids_nbytes, (size_t) w->ne[2] * sizeof(int64_t)); // the pointer table lives where the ids remap would
+        }
         auto it = cache->tensors.find(w);
         if (it == cache->tensors.end()) {
             ggml_backend_sched_expert_tensor et;
@@ -1258,6 +1269,29 @@ static struct ggml_tensor * ggml_backend_sched_expert_cache_slots_view(ggml_back
 }
 
 static void ggml_backend_sched_expert_cache_bind_ids(ggml_backend_sched_t sched, struct ggml_tensor * node, ggml_backend_sched_expert_tensor & et, struct ggml_tensor * ids) {
+    if (sched->expert_cache->zero_copy) {
+        // the ids stay as the router produced them; the kernel picks each expert's weights through the pointer table
+        GGML_ASSERT(et.ptr_table == nullptr && "expert cache: weight used by multiple MUL_MAT_ID nodes");
+        GGML_ASSERT((size_t) et.n_expert * sizeof(int64_t) <= et.ids_nbytes);
+        struct ggml_tensor * table = ggml_new_tensor_1d(sched->ctx, GGML_TYPE_I64, et.n_expert);
+        ggml_format_name(table, "%s#xptrs", et.weight->name);
+        if (ggml_backend_tensor_alloc(et.buffer, table, (char *) ggml_backend_buffer_get_base(et.buffer) + et.ids_offset) != GGML_STATUS_SUCCESS) {
+            GGML_ABORT("%s: failed to bind the expert pointer table for %s\n", __func__, et.weight->name);
+        }
+        if (!et.table_ready) {
+            // every expert starts out served from its pinned host copy
+            std::vector<int64_t> ptrs(et.n_expert);
+            for (int64_t e = 0; e < et.n_expert; e++) {
+                ptrs[e] = (int64_t) (uintptr_t) ((const uint8_t *) et.weight->data + (size_t) e * et.expert_size);
+            }
+            ggml_backend_tensor_set(table, ptrs.data(), 0, ptrs.size() * sizeof(int64_t));
+            et.table_ready = true;
+        }
+        et.ptr_table = table;
+        et.ids_orig = ids;
+        node->src[3] = et.ptr_table;
+        return;
+    }
     if (et.ids_remap != nullptr) {
         // a weight is expected to be consumed by exactly one MUL_MAT_ID per graph
         GGML_ASSERT(et.ids_orig == ids && "expert cache: weight used by multiple MUL_MAT_ID nodes with different ids");
@@ -2129,7 +2163,7 @@ void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct ggml_cgra
             }
 
             // check if we should start a new split based on the sources of the current node
-            bool need_new_split = xc != nullptr && i != split->i_start;
+            bool need_new_split = xc != nullptr && !sched->expert_cache->zero_copy && i != split->i_start;
             if (!need_new_split && node_backend_id == cur_backend_id && split->n_inputs > 0) {
                 for (int j = 0; j < GGML_MAX_SRC; j++) {
                     struct ggml_tensor * src = node->src[j];
@@ -2492,7 +2526,8 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
 
         // expert cache: a cached MUL_MAT_ID starts its own split, so gate/up/down of a layer are three consecutive splits
         // that share one ids tensor. Make all of them resident here with one wait and one batch of reads.
-        if (sched->expert_cache) {
+        // (zero-copy mode has nothing to load: the kernels read the experts in place)
+        if (sched->expert_cache && !sched->expert_cache->zero_copy) {
             auto cached_inputs = [&](int sid, std::vector<ggml_backend_sched_expert_tensor *> & out) {
                 struct ggml_backend_sched_split * sp = &sched->splits[sid];
                 for (int k = 0; k < sp->n_inputs; k++) {
@@ -2824,6 +2859,8 @@ void ggml_backend_sched_set_expert_cache(ggml_backend_sched_t sched, const struc
     sched->expert_cache->params = *params;
     memset(&sched->expert_cache->stats, 0, sizeof(sched->expert_cache->stats));
     sched->expert_cache->layout_dirty = true;
+    const char * env_zc = getenv("SVRAM_ZEROCOPY");
+    sched->expert_cache->zero_copy = params->zero_copy != 0 || (env_zc != nullptr && atoi(env_zc) != 0);
     // explicit parameters win, the SVRAM_* environment variables are the fallback
     const char * trace_path = params->trace_path != nullptr && params->trace_path[0] != '\0' ? params->trace_path : getenv("SVRAM_TRACE");
     if (trace_path != nullptr && trace_path[0] != '\0') {

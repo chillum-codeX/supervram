@@ -51,6 +51,8 @@ struct options {
     int n_cpu_moe = 0;
     int cache_mib = 0;
     std::string cache_policy = "lru";
+    bool zerocopy = false;     // --zerocopy: experts read in place from pinned RAM through per-expert pointers
+    bool pinned_moe = false;   // --pinned-moe: place expert tensors in pinned host RAM (CUDA_Host)
     bool direct_io = false;    // --direct-io: O_DIRECT reads for cache misses (also SVRAM_DIRECT_IO=1)
     int io_threads = 0;        // --io-threads N (0 = default)
     int staging_mib = 0;       // --staging-mib N (0 = default)
@@ -84,6 +86,8 @@ bool parse(int argc, char ** argv, options & o) {
         else if (a == "--cache-mib") { if (!next(v)) return false; o.cache_mib = std::atoi(v.c_str()); }
         else if (a == "--cache-policy") { if (!next(o.cache_policy)) return false; }
         else if (a == "--direct-io") { o.direct_io = true; }
+        else if (a == "--zerocopy") { o.zerocopy = true; }
+        else if (a == "--pinned-moe") { o.pinned_moe = true; }
         else if (a == "--io-threads") { if (!next(v)) return false; o.io_threads = std::atoi(v.c_str()); }
         else if (a == "--staging-mib") { if (!next(v)) return false; o.staging_mib = std::atoi(v.c_str()); }
         else if (a == "--trace") { if (!next(o.trace)) return false; }
@@ -135,7 +139,16 @@ int main(int argc, char ** argv) {
     std::vector<std::string> patterns;
     std::vector<llama_model_tensor_buft_override> overrides;
     ggml_backend_buffer_type_t cpu_buft = ggml_backend_dev_buffer_type(ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU));
-    if (o.cpu_moe) {
+    ggml_backend_buffer_type_t override_buft = cpu_buft;
+    if (o.pinned_moe) {
+        ggml_backend_dev_t gpu = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU);
+        override_buft = gpu ? ggml_backend_dev_host_buffer_type(gpu) : nullptr;
+        if (override_buft == nullptr) {
+            std::fprintf(stderr, "--pinned-moe needs a GPU with a pinned host buffer type\n");
+            return 1;
+        }
+        patterns.push_back("\\.ffn_(up|down|gate)_(ch|)exps");
+    } else if (o.cpu_moe) {
         patterns.push_back("\\.ffn_(up|down|gate)_(ch|)exps");
     } else if (o.n_cpu_moe > 0) {
         for (int i = 0; i < o.n_cpu_moe; ++i) {
@@ -143,7 +156,7 @@ int main(int argc, char ** argv) {
         }
     }
     for (const auto & p : patterns) {
-        overrides.push_back({ p.c_str(), cpu_buft });
+        overrides.push_back({ p.c_str(), override_buft });
     }
     if (!overrides.empty()) {
         overrides.push_back({ nullptr, nullptr });
@@ -165,7 +178,8 @@ int main(int argc, char ** argv) {
     cparams.n_threads = o.threads;
     cparams.n_threads_batch = o.threads;
 #ifdef SVRAM_HAVE_EXPERT_CACHE
-    if (o.storage == "cache") {
+    if (o.storage == "cache" || o.zerocopy) {
+        cparams.moe_expert_zerocopy = o.zerocopy ? 1 : 0;
         cparams.moe_expert_cache_bytes = (size_t) o.cache_mib << 20;
         cparams.moe_expert_cache_policy = o.cache_policy == "lfu" ? LLAMA_MOE_EXPERT_CACHE_POLICY_LFU : LLAMA_MOE_EXPERT_CACHE_POLICY_LRU;
         cparams.moe_expert_direct_io = o.direct_io ? 1 : 0;

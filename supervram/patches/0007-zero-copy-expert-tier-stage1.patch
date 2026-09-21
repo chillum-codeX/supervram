@@ -1,0 +1,347 @@
+diff --git a/common/arg.cpp b/common/arg.cpp
+index 039cdb9..f572a45 100644
+--- a/common/arg.cpp
++++ b/common/arg.cpp
+@@ -2793,6 +2793,13 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
+             params.moe_expert_trace = value;
+         }
+     ).set_env("LLAMA_ARG_MOE_EXPERT_TRACE"));
++    add_opt(common_arg(
++        {"--moe-expert-zerocopy"},
++        "keep MoE experts in pinned host RAM (place them with -ot \"\\.ffn_(up|down|gate)_exps\\.=CUDA_Host\") and let the GPU read them in place; needs --moe-expert-cache-size > 0",
++        [](common_params & params) {
++            params.moe_expert_zerocopy = true;
++        }
++    ).set_env("LLAMA_ARG_MOE_EXPERT_ZEROCOPY"));
+     add_opt(common_arg(
+         {"--numa"}, "TYPE",
+         "attempt optimizations that help on some NUMA systems\n"
+diff --git a/common/common.cpp b/common/common.cpp
+index 92690f9..c8aa4ec 100644
+--- a/common/common.cpp
++++ b/common/common.cpp
+@@ -1754,6 +1754,7 @@ struct llama_context_params common_context_params_to_llama(const common_params &
+     cparams.moe_expert_io_threads   = params.moe_expert_io_threads;
+     cparams.moe_expert_staging_mib  = params.moe_expert_staging_mib;
+     cparams.moe_expert_trace        = params.moe_expert_trace.empty() ? nullptr : params.moe_expert_trace.c_str();
++    cparams.moe_expert_zerocopy     = params.moe_expert_zerocopy ? 1 : 0;
+     if (params.moe_expert_storage == LLAMA_MOE_EXPERT_STORAGE_CACHE && cparams.moe_expert_cache_bytes == 0) {
+         cparams.moe_expert_cache_bytes = 8ull << 30;
+     }
+diff --git a/common/common.h b/common/common.h
+index c969155..2acd165 100644
+--- a/common/common.h
++++ b/common/common.h
+@@ -491,6 +491,7 @@ struct common_params {
+     int32_t     moe_expert_io_threads   = 0;     // 0 = default
+     int32_t     moe_expert_staging_mib  = 0;     // 0 = default
+     std::string moe_expert_trace;                // record per-token expert selections to this file
++    bool        moe_expert_zerocopy     = false; // experts in pinned host RAM, read in place by the GPU (use with -ot ...=CUDA_Host)
+ 
+     common_cpu_params cpuparams;
+     common_cpu_params cpuparams_batch;
+diff --git a/ggml/include/ggml-backend.h b/ggml/include/ggml-backend.h
+index 6337701..ee03458 100644
+--- a/ggml/include/ggml-backend.h
++++ b/ggml/include/ggml-backend.h
+@@ -376,6 +376,7 @@ extern "C" {
+         int    io_threads;                                  // parallel direct reads (0 -> SVRAM_IO_THREADS or 8)
+         size_t staging_bytes;                               // pinned staging buffer size (0 -> SVRAM_STAGING_MIB or 128 MiB)
+         const char * trace_path;                            // record the experts each layer selects per token (NULL -> SVRAM_TRACE)
++        int    zero_copy;                                   // 1 = experts stay in pinned host RAM and the GPU kernels read them in place through a per-expert pointer table (also SVRAM_ZEROCOPY=1)
+     };
+ 
+     struct ggml_backend_sched_expert_cache_stats {
+diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
+index f6945ae..0c572a6 100644
+--- a/ggml/src/ggml-backend.cpp
++++ b/ggml/src/ggml-backend.cpp
+@@ -917,6 +917,10 @@ struct ggml_backend_sched_expert_tensor {
+ 
+     std::vector<int32_t> remap_host;            // per-tensor: the id upload of one weight must not overwrite another's
+ 
++    // zero-copy tier: pointer to the expert weights (int64 per expert) read by the CUDA kernel
++    struct ggml_tensor * ptr_table = nullptr;   // per-graph tensor object, rebuilt for every graph
++    bool                 table_ready = false;   // the device memory behind it holds valid pointers (persists across graphs)
++
+     // direct-I/O source (-1 when the weight is read through the mmap)
+     int      src_fd     = -1;
+     uint64_t src_offset = 0;                    // file offset of the weight's data
+@@ -929,6 +933,7 @@ struct ggml_backend_sched_expert_cache {
+     bool layout_dirty = true;
+ 
+     // direct I/O (Linux, SVRAM_DIRECT_IO=1): O_DIRECT reads into a pinned staging buffer, then async H2D copies
++    bool     zero_copy      = false;            // experts run from pinned host RAM through pointer tables (no per-layer host round trip)
+     FILE *   trace          = nullptr;          // SVRAM_TRACE=<file>: one line per (token, layer): "<layer> <distinct expert ids>"
+     bool     direct_io      = false;
+     int      io_threads     = 8;
+@@ -1080,7 +1085,8 @@ static struct ggml_tensor * ggml_backend_sched_expert_cache_weight(ggml_backend_
+         return NULL;
+     }
+     // prompt processing: a big batch touches most experts of every layer, so a small slot cache cannot serve it
+-    if (node->src[2] != NULL && node->src[2]->ne[1] > GGML_SCHED_EXPERT_CACHE_MAX_BATCH) {
++    const int64_t max_batch = sched->expert_cache->zero_copy ? 1 : GGML_SCHED_EXPERT_CACHE_MAX_BATCH;
++    if (node->src[2] != NULL && node->src[2]->ne[1] > max_batch) {
+         return NULL;
+     }
+     return w;
+@@ -1100,6 +1106,7 @@ static void ggml_backend_sched_expert_cache_free_buffers(struct ggml_backend_sch
+     for (auto & it : cache->tensors) {
+         ggml_backend_buffer_free(it.second.buffer);
+         it.second.buffer = nullptr;
++        it.second.table_ready = false;
+     }
+ }
+ 
+@@ -1213,6 +1220,7 @@ static void ggml_backend_sched_expert_cache_prepare(ggml_backend_sched_t sched,
+         it.second.slots_view = nullptr;
+         it.second.ids_remap  = nullptr;
+         it.second.ids_orig   = nullptr;
++        it.second.ptr_table  = nullptr;
+     }
+     for (int i = 0; i < graph->n_nodes; i++) {
+         struct ggml_tensor * node = graph->nodes[i];
+@@ -1224,7 +1232,10 @@ static void ggml_backend_sched_expert_cache_prepare(ggml_backend_sched_t sched,
+         if (backend_id < 0) {
+             continue; // no device backend supports this op, the CPU path will be used
+         }
+-        const size_t ids_nbytes = ggml_nbytes(node->src[2]);
++        size_t ids_nbytes = ggml_nbytes(node->src[2]);
++        if (cache->zero_copy) {
++            ids_nbytes = std::max(ids_nbytes, (size_t) w->ne[2] * sizeof(int64_t)); // the pointer table lives where the ids remap would
++        }
+         auto it = cache->tensors.find(w);
+         if (it == cache->tensors.end()) {
+             ggml_backend_sched_expert_tensor et;
+@@ -1258,6 +1269,29 @@ static struct ggml_tensor * ggml_backend_sched_expert_cache_slots_view(ggml_back
+ }
+ 
+ static void ggml_backend_sched_expert_cache_bind_ids(ggml_backend_sched_t sched, struct ggml_tensor * node, ggml_backend_sched_expert_tensor & et, struct ggml_tensor * ids) {
++    if (sched->expert_cache->zero_copy) {
++        // the ids stay as the router produced them; the kernel picks each expert's weights through the pointer table
++        GGML_ASSERT(et.ptr_table == nullptr && "expert cache: weight used by multiple MUL_MAT_ID nodes");
++        GGML_ASSERT((size_t) et.n_expert * sizeof(int64_t) <= et.ids_nbytes);
++        struct ggml_tensor * table = ggml_new_tensor_1d(sched->ctx, GGML_TYPE_I64, et.n_expert);
++        ggml_format_name(table, "%s#xptrs", et.weight->name);
++        if (ggml_backend_tensor_alloc(et.buffer, table, (char *) ggml_backend_buffer_get_base(et.buffer) + et.ids_offset) != GGML_STATUS_SUCCESS) {
++            GGML_ABORT("%s: failed to bind the expert pointer table for %s\n", __func__, et.weight->name);
++        }
++        if (!et.table_ready) {
++            // every expert starts out served from its pinned host copy
++            std::vector<int64_t> ptrs(et.n_expert);
++            for (int64_t e = 0; e < et.n_expert; e++) {
++                ptrs[e] = (int64_t) (uintptr_t) ((const uint8_t *) et.weight->data + (size_t) e * et.expert_size);
++            }
++            ggml_backend_tensor_set(table, ptrs.data(), 0, ptrs.size() * sizeof(int64_t));
++            et.table_ready = true;
++        }
++        et.ptr_table = table;
++        et.ids_orig = ids;
++        node->src[3] = et.ptr_table;
++        return;
++    }
+     if (et.ids_remap != nullptr) {
+         // a weight is expected to be consumed by exactly one MUL_MAT_ID per graph
+         GGML_ASSERT(et.ids_orig == ids && "expert cache: weight used by multiple MUL_MAT_ID nodes with different ids");
+@@ -2129,7 +2163,7 @@ void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct ggml_cgra
+             }
+ 
+             // check if we should start a new split based on the sources of the current node
+-            bool need_new_split = xc != nullptr && i != split->i_start;
++            bool need_new_split = xc != nullptr && !sched->expert_cache->zero_copy && i != split->i_start;
+             if (!need_new_split && node_backend_id == cur_backend_id && split->n_inputs > 0) {
+                 for (int j = 0; j < GGML_MAX_SRC; j++) {
+                     struct ggml_tensor * src = node->src[j];
+@@ -2492,7 +2526,8 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
+ 
+         // expert cache: a cached MUL_MAT_ID starts its own split, so gate/up/down of a layer are three consecutive splits
+         // that share one ids tensor. Make all of them resident here with one wait and one batch of reads.
+-        if (sched->expert_cache) {
++        // (zero-copy mode has nothing to load: the kernels read the experts in place)
++        if (sched->expert_cache && !sched->expert_cache->zero_copy) {
+             auto cached_inputs = [&](int sid, std::vector<ggml_backend_sched_expert_tensor *> & out) {
+                 struct ggml_backend_sched_split * sp = &sched->splits[sid];
+                 for (int k = 0; k < sp->n_inputs; k++) {
+@@ -2824,6 +2859,8 @@ void ggml_backend_sched_set_expert_cache(ggml_backend_sched_t sched, const struc
+     sched->expert_cache->params = *params;
+     memset(&sched->expert_cache->stats, 0, sizeof(sched->expert_cache->stats));
+     sched->expert_cache->layout_dirty = true;
++    const char * env_zc = getenv("SVRAM_ZEROCOPY");
++    sched->expert_cache->zero_copy = params->zero_copy != 0 || (env_zc != nullptr && atoi(env_zc) != 0);
+     // explicit parameters win, the SVRAM_* environment variables are the fallback
+     const char * trace_path = params->trace_path != nullptr && params->trace_path[0] != '\0' ? params->trace_path : getenv("SVRAM_TRACE");
+     if (trace_path != nullptr && trace_path[0] != '\0') {
+diff --git a/ggml/src/ggml-cuda/common.cuh b/ggml/src/ggml-cuda/common.cuh
+index 2e78ae4..fa60566 100644
+--- a/ggml/src/ggml-cuda/common.cuh
++++ b/ggml/src/ggml-cuda/common.cuh
+@@ -1578,6 +1578,8 @@ struct ggml_cuda_mm_fusion_args_host {
+     const ggml_tensor * gate_bias = nullptr;
+     const ggml_tensor * x_scale = nullptr;
+     const ggml_tensor * gate_scale = nullptr;
++    const ggml_tensor * x_ptrs = nullptr;    // zero-copy expert tier: per-expert weight pointer tables (MUL_MAT_ID)
++    const ggml_tensor * gate_ptrs = nullptr;
+     ggml_glu_op glu_op;
+     float glu_limit = 0.0f;
+ };
+@@ -1587,6 +1589,8 @@ struct ggml_cuda_mm_fusion_args_device {
+     const void * gate_bias = nullptr;
+     const void * x_scale = nullptr;
+     const void * gate_scale = nullptr;
++    const void * const * x_ptrs = nullptr;    // per-expert weight pointers (VRAM slot or pinned host RAM), indexed by expert id
++    const void * const * gate_ptrs = nullptr;
+     ggml_glu_op glu_op;
+     float glu_limit = 0.0f;
+ };
+diff --git a/ggml/src/ggml-cuda/ggml-cuda.cu b/ggml/src/ggml-cuda/ggml-cuda.cu
+index a9038f1..ae78e59 100644
+--- a/ggml/src/ggml-cuda/ggml-cuda.cu
++++ b/ggml/src/ggml-cuda/ggml-cuda.cu
+@@ -3757,6 +3757,7 @@ static int ggml_cuda_try_fuse(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph
+ 
+                 ggml_cuda_mm_fusion_args_host fusion_data{};
+                 fusion_data.gate       = gate_n->src[0];
++                if (up_n->op == GGML_OP_MUL_MAT_ID) { fusion_data.x_ptrs = up_n->src[3]; fusion_data.gate_ptrs = gate_n->src[3]; }
+                 fusion_data.x_bias     = up_bias;
+                 fusion_data.gate_bias  = gate_bias;
+                 fusion_data.x_scale    = up_scale;
+@@ -3851,6 +3852,7 @@ static int ggml_cuda_try_fuse(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph
+ 
+                 ggml_cuda_mm_fusion_args_host fusion_data{};
+                 fusion_data.gate       = gate_n->src[0];
++                if (up_n->op == GGML_OP_MUL_MAT_ID) { fusion_data.x_ptrs = up_n->src[3]; fusion_data.gate_ptrs = gate_n->src[3]; }
+                 fusion_data.x_bias     = up_bias;
+                 fusion_data.gate_bias  = gate_bias;
+                 fusion_data.x_scale    = up_scale;
+@@ -3910,6 +3912,7 @@ static int ggml_cuda_try_fuse(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph
+             if (ggml_cuda_should_fuse_mul_mat_vec_f(up_n)) {
+                 ggml_cuda_mm_fusion_args_host fusion_data{};
+                 fusion_data.gate      = gate_n->src[0];
++                if (up_n->op == GGML_OP_MUL_MAT_ID) { fusion_data.x_ptrs = up_n->src[3]; fusion_data.gate_ptrs = gate_n->src[3]; }
+                 fusion_data.x_bias    = up_bias_tensor;
+                 fusion_data.gate_bias = gate_bias_tensor;
+                 fusion_data.glu_op    = ggml_get_glu_op(glu);
+@@ -3924,6 +3927,7 @@ static int ggml_cuda_try_fuse(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph
+             if (ggml_cuda_should_fuse_mul_mat_vec_q(up_n)) {
+                 ggml_cuda_mm_fusion_args_host fusion_data{};
+                 fusion_data.gate      = gate_n->src[0];
++                if (up_n->op == GGML_OP_MUL_MAT_ID) { fusion_data.x_ptrs = up_n->src[3]; fusion_data.gate_ptrs = gate_n->src[3]; }
+                 fusion_data.x_bias    = up_bias_tensor;
+                 fusion_data.gate_bias = gate_bias_tensor;
+                 fusion_data.glu_op    = ggml_get_glu_op(glu);
+diff --git a/ggml/src/ggml-cuda/mmvq.cu b/ggml/src/ggml-cuda/mmvq.cu
+index 6305230..668f12c 100644
+--- a/ggml/src/ggml-cuda/mmvq.cu
++++ b/ggml/src/ggml-cuda/mmvq.cu
+@@ -620,6 +620,12 @@ static __global__ void mul_mat_vec_q(
+     channel_y  = ncols_dst == 1 && ids ? fastmodulo(channel_dst, nchannels_y) : channel_dst;
+     sample_dst = blockIdx.z;
+ 
++    // zero-copy expert tier: this expert's weights live wherever the pointer table says
++    const bool per_expert_ptr = ncols_dst == 1 && ids && fusion.x_ptrs != nullptr;
++    if (per_expert_ptr) {
++        vx = fusion.x_ptrs[channel_x];
++    }
++
+     const uint32_t sample_x    = fastdiv(sample_dst, sample_ratio);
+     const uint32_t sample_y    = sample_dst;
+ 
+@@ -641,6 +647,9 @@ static __global__ void mul_mat_vec_q(
+         use_bias      = fusion.x_bias    != nullptr;
+         use_gate_bias = fusion.gate_bias != nullptr && use_gate;
+         vgate         = fusion.gate;
++        if (per_expert_ptr && fusion.gate_ptrs != nullptr) {
++            vgate = fusion.gate_ptrs[channel_x];
++        }
+         x_bias        = (const float *) fusion.x_bias;
+         gate_bias     = (const float *) fusion.gate_bias;
+         active_glu    = fusion.glu_op;
+@@ -694,7 +703,7 @@ static __global__ void mul_mat_vec_q(
+     float tmp_gate[ncols_dst][rows_per_cuda_block] = {{0.0f}};
+ 
+     const block_q8_1 * y = ((const block_q8_1 *) vy) + sample_y*stride_sample_y + channel_y*stride_channel_y;
+-    const int kbx_offset = sample_x*stride_sample_x + channel_x*stride_channel_x + row0*stride_row_x;
++    const int kbx_offset = sample_x*stride_sample_x + (per_expert_ptr ? 0 : channel_x*stride_channel_x) + row0*stride_row_x;
+ 
+     for (int kbx = tid / (qi/vdr); kbx < blocks_per_row_x; kbx += blocks_per_iter) {
+         const int kby = kbx * (qk/QK8_1); // y block index that aligns with kbx
+@@ -1430,6 +1439,27 @@ void ggml_cuda_mul_mat_vec_q(
+ 
+     ggml_cuda_mm_fusion_args_device fusion_local{};
+ 
++    // zero-copy expert tier: weights of each expert come from a pointer table (VRAM slot or pinned host RAM over PCIe)
++    {
++        const ggml_tensor * x_tbl    = nullptr;
++        const ggml_tensor * gate_tbl = nullptr;
++        if (fusion && fusion->x_ptrs) {
++            x_tbl    = fusion->x_ptrs;
++            gate_tbl = fusion->gate_ptrs;
++        } else if (ids && dst->op == GGML_OP_MUL_MAT_ID) {
++            x_tbl = dst->src[3];
++        }
++        if (x_tbl) {
++            GGML_ASSERT(ids && dst->ne[2] == 1 && "per-expert pointer tables support one token per call");
++            GGML_ASSERT(x_tbl->type == GGML_TYPE_I64);
++            fusion_local.x_ptrs = (const void * const *) x_tbl->data;
++            if (fusion && fusion->gate) {
++                GGML_ASSERT(gate_tbl && gate_tbl->type == GGML_TYPE_I64);
++                fusion_local.gate_ptrs = (const void * const *) gate_tbl->data;
++            }
++        }
++    }
++
+     if (fusion) {
+         const int cc = ggml_cuda_info().devices[ggml_cuda_get_device()].cc;
+         GGML_ASSERT( !ids || dst->ne[2] <= get_mmvq_mmid_max_batch(src0->type, cc));
+diff --git a/include/llama.h b/include/llama.h
+index 98f8bef..dd80981 100644
+--- a/include/llama.h
++++ b/include/llama.h
+@@ -415,6 +415,7 @@ extern "C" {
+         int32_t      moe_expert_io_threads;   // parallel direct reads (0 = default 8)
+         int32_t      moe_expert_staging_mib;  // pinned staging buffer size in MiB (0 = default 128)
+         const char * moe_expert_trace;        // if set, record the experts each layer selects per token to this file
++        int32_t      moe_expert_zerocopy;     // 1 = experts stay in pinned host RAM (see --override-tensor ...=CUDA_Host) and GPU kernels read them in place
+ 
+         // Keep the booleans together and at the end of the struct to avoid misalignment during copy-by-value.
+         bool embeddings;  // if true, extract embeddings (together with logits)
+diff --git a/src/llama-context.cpp b/src/llama-context.cpp
+index e5d2387..cb15b82 100644
+--- a/src/llama-context.cpp
++++ b/src/llama-context.cpp
+@@ -278,6 +278,7 @@ llama_context::llama_context(
+     cparams.moe_expert_io_threads   = params.moe_expert_io_threads;
+     cparams.moe_expert_staging_mib  = params.moe_expert_staging_mib;
+     cparams.moe_expert_trace        = params.moe_expert_trace;
++    cparams.moe_expert_zerocopy     = params.moe_expert_zerocopy;
+     if (model.moe_expert_storage() == LLAMA_MOE_EXPERT_STORAGE_CACHE && cparams.moe_expert_cache_bytes == 0) {
+         cparams.moe_expert_cache_bytes = 8ull * 1024 * 1024 * 1024;
+         LLAMA_LOG_WARN("%s: moe_expert_storage = cache but no cache size given, using %zu MiB\n", __func__, cparams.moe_expert_cache_bytes / 1024 / 1024);
+@@ -622,6 +623,7 @@ void llama_context::sched_set_expert_cache() {
+         /*.io_threads     =*/ cparams.moe_expert_io_threads,
+         /*.staging_bytes  =*/ (size_t) std::max<int32_t>(0, cparams.moe_expert_staging_mib) << 20,
+         /*.trace_path     =*/ cparams.moe_expert_trace,
++        /*.zero_copy      =*/ cparams.moe_expert_zerocopy,
+     };
+     ggml_backend_sched_set_expert_cache(sched.get(), &xc);
+ }
+@@ -3728,6 +3730,7 @@ llama_context_params llama_context_default_params() {
+         /*.moe_expert_io_threads       =*/ 0,
+         /*.moe_expert_staging_mib      =*/ 0,
+         /*.moe_expert_trace            =*/ nullptr,
++        /*.moe_expert_zerocopy         =*/ 0,
+         /*.embeddings                  =*/ false,
+         /*.offload_kqv                 =*/ true,
+         /*.no_perf                     =*/ true,
+diff --git a/src/llama-cparams.h b/src/llama-cparams.h
+index 0f8ba3c..b5dbf91 100644
+--- a/src/llama-cparams.h
++++ b/src/llama-cparams.h
+@@ -60,6 +60,7 @@ struct llama_cparams {
+     int32_t      moe_expert_io_threads;
+     int32_t      moe_expert_staging_mib;
+     const char * moe_expert_trace;
++    int32_t      moe_expert_zerocopy;
+ 
+     std::vector<bool> embeddings_layer_inp; // [n_layer()] extract input embeddings for layer
+ 

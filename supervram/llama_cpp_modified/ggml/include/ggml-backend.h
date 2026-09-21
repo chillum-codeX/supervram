@@ -376,6 +376,7 @@ extern "C" {
         int    io_threads;                                  // parallel direct reads (0 -> SVRAM_IO_THREADS or 8)
         size_t staging_bytes;                               // pinned staging buffer size (0 -> SVRAM_STAGING_MIB or 128 MiB)
         const char * trace_path;                            // record the experts each layer selects per token (NULL -> SVRAM_TRACE)
+        int    zero_copy;                                   // 1 = experts stay in pinned host RAM and the GPU kernels read them in place through a per-expert pointer table (also SVRAM_ZEROCOPY=1)
     };
 
     struct ggml_backend_sched_expert_cache_stats {

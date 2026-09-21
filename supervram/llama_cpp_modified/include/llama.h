@@ -415,6 +415,7 @@ extern "C" {
         int32_t      moe_expert_io_threads;   // parallel direct reads (0 = default 8)
         int32_t      moe_expert_staging_mib;  // pinned staging buffer size in MiB (0 = default 128)
         const char * moe_expert_trace;        // if set, record the experts each layer selects per token to this file
+        int32_t      moe_expert_zerocopy;     // 1 = experts stay in pinned host RAM (see --override-tensor ...=CUDA_Host) and GPU kernels read them in place
 
         // Keep the booleans together and at the end of the struct to avoid misalignment during copy-by-value.
         bool embeddings;  // if true, extract embeddings (together with logits)

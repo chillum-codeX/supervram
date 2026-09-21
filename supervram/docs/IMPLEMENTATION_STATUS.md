@@ -195,6 +195,24 @@ Goal (clarified): run the same weights at the maximum context using any combinat
 - The 4 GiB decode rate (15.2 t/s) is below the 31.8 t/s of the earlier short-context run because the cache is 14 GiB (61 slots) instead of 16 GiB (71 slots) to leave room for the KV cache and the prefill batch buffers, the cache starts empty after a prompt (prompt batches do not fill it), and attention over 32,000 keys costs extra. Hit rate 95.2 %.
 - Single runs, one prompt, Q8_0 only. Expected next lever for mid-size RAM (for example 16 GB): an explicit RAM tier between the VRAM cache and the SSD; not built yet.
 
+## Zero-copy expert tier, stage 1 (patch 0007) - measured on this machine
+
+**Idea.** Today every layer stops the GPU, sends the routing result to the CPU, and copies the missed experts over PCIe (about 10-11 ms of a 25 ms decode token is spent in that host loading path). New design: all experts live in pinned host RAM; the GPU kernel gets a per-expert pointer table and reads a missed expert straight from RAM over PCIe, with no copy and no per-layer CPU round trip; hot experts are promoted into VRAM slots in the background (stage 2). Correctness (any expert can always run from RAM) is decoupled from performance (VRAM residency).
+
+**Stage 1 (built, patch 0007, 95 lines).** `mmvq` reads each expert's weights through `fusion.x_ptrs[expert_id]` (and `gate_ptrs` for the fused gate/up kernel); in `--moe-expert-zerocopy` mode the scheduler keeps the router's original ids, attaches the table as an extra source of the `MUL_MAT_ID` node, skips the per-weight forced split and the load step, and initializes the table with each expert's pinned-RAM address. Experts are placed in pinned RAM with `-ot "\.ffn_(up|down|gate)_exps\.=CUDA_Host"` (now accepted) or `svram-verify --pinned-moe`. Single-token decode only; batches of 2+ tokens use the regular whole-expert path.
+
+| Check | Result |
+|---|---|
+| Exactness: Q4_K_M, all experts in pinned RAM and read in place by the GPU kernel vs ordinary all-in-VRAM execution, 64 tokens | tokens **identical**, logits hashes **identical** |
+| Unit tests (`test-expert-cache`), patch chain 0001-0007 vs built tree | pass / identical |
+| Decode with all experts read from RAM, Q4_K_M | 6.09 t/s = 164 ms/token, effective **6.7 GB/s** over PCIe |
+| Decode with all experts read from RAM, Q8_0 | 3.99 t/s = 250 ms/token, effective **7.8 GB/s** over PCIe |
+| Ceilings measured with standalone CUDA programs (`scripts/microbench/`) | pinned copy 11.8-12.1 GB/s, kernel reading pinned RAM 10.8-11.5 GB/s, pageable copy 6.6-8.3 GB/s, at least 60 GiB pinnable |
+
+- The real `mmvq` kernel therefore reaches 60-70 % of the PCIe ceiling when reading from RAM (its loads are narrower than the 16-byte loads of the microbenchmark); a wider-load variant could recover part of that.
+- Also observed: with the experts in pinned RAM but the flag off, the scheduler runs them on the CPU (25 t/s, GPU 6-28 % busy, PCIe about 30 MB/s): the CPU streams experts from RAM at about 48 GB/s. This is the stock `--cpu-moe` behavior, not part of this work.
+- **Projection (not yet measured):** with a 14 GiB VRAM cache at the 97 % hit rate seen in long-context runs, about 10 missed experts per token at 7.8 GB/s cost about 7 ms, on top of about 9 ms of compute (including the 32k-token KV read), for roughly 60 t/s decode, against 40.5 t/s (current tiered) and 33.7 t/s (plain llama.cpp). Stage 2 (background promotion into VRAM) is needed to confirm this.
+
 ## Remaining gaps
 
 - Prompt ubatches that route more distinct experts than `n_slots` return a hard error (observed as llama-bench warmup `res = -3` at `-ub 16`). Use `-ub 1` or a larger cache for decode; prompt processing is not a v1 win.

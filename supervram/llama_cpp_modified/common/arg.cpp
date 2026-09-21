@@ -2794,6 +2794,13 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         }
     ).set_env("LLAMA_ARG_MOE_EXPERT_TRACE"));
     add_opt(common_arg(
+        {"--moe-expert-zerocopy"},
+        "keep MoE experts in pinned host RAM (place them with -ot \"\\.ffn_(up|down|gate)_exps\\.=CUDA_Host\") and let the GPU read them in place; needs --moe-expert-cache-size > 0",
+        [](common_params & params) {
+            params.moe_expert_zerocopy = true;
+        }
+    ).set_env("LLAMA_ARG_MOE_EXPERT_ZEROCOPY"));
+    add_opt(common_arg(
         {"--numa"}, "TYPE",
         "attempt optimizations that help on some NUMA systems\n"
         "- distribute: spread execution evenly over all nodes\n"

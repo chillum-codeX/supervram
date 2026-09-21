@@ -21,3 +21,6 @@ tools/server/server-context.cpp
 tools/server/server-context.h
 tools/server/server-task.cpp
 tools/server/server-task.h
+ggml/src/ggml-cuda/common.cuh
+ggml/src/ggml-cuda/ggml-cuda.cu
+ggml/src/ggml-cuda/mmvq.cu
