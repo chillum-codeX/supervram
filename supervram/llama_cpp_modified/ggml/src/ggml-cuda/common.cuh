@@ -1580,6 +1580,7 @@ struct ggml_cuda_mm_fusion_args_host {
     const ggml_tensor * gate_scale = nullptr;
     const ggml_tensor * x_ptrs = nullptr;    // zero-copy expert tier: per-expert weight pointer tables (MUL_MAT_ID)
     const ggml_tensor * gate_ptrs = nullptr;
+    const ggml_tensor * x_cnt = nullptr;     // per-expert use counters (int32), incremented by the kernel
     ggml_glu_op glu_op;
     float glu_limit = 0.0f;
 };
@@ -1591,6 +1592,7 @@ struct ggml_cuda_mm_fusion_args_device {
     const void * gate_scale = nullptr;
     const void * const * x_ptrs = nullptr;    // per-expert weight pointers (VRAM slot or pinned host RAM), indexed by expert id
     const void * const * gate_ptrs = nullptr;
+    unsigned int * x_cnt = nullptr;          // per-expert use counters, incremented once per expert per call
     ggml_glu_op glu_op;
     float glu_limit = 0.0f;
 };

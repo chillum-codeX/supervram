@@ -68,3 +68,10 @@
  src/llama-context.cpp           |  3 +++
  src/llama-cparams.h             |  1 +
  11 files changed, 95 insertions(+), 5 deletions(-)
+
+# patches/0008-zero-copy-expert-tier-stage2-promotion.patch (applies on top of 0007)
+ ggml/src/ggml-backend.cpp       | 295 ++++++++++++++++++++++++++++++++++++++--
+ ggml/src/ggml-cuda/common.cuh   |   2 +
+ ggml/src/ggml-cuda/ggml-cuda.cu |   8 +-
+ ggml/src/ggml-cuda/mmvq.cu      |  10 ++
+ 4 files changed, 298 insertions(+), 17 deletions(-)

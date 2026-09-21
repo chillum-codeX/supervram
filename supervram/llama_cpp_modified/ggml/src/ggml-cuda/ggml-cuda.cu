@@ -3757,7 +3757,7 @@ static int ggml_cuda_try_fuse(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph 
 
                 ggml_cuda_mm_fusion_args_host fusion_data{};
                 fusion_data.gate       = gate_n->src[0];
-                if (up_n->op == GGML_OP_MUL_MAT_ID) { fusion_data.x_ptrs = up_n->src[3]; fusion_data.gate_ptrs = gate_n->src[3]; }
+                if (up_n->op == GGML_OP_MUL_MAT_ID) { fusion_data.x_ptrs = up_n->src[3]; fusion_data.gate_ptrs = gate_n->src[3]; fusion_data.x_cnt = up_n->src[4]; }
                 fusion_data.x_bias     = up_bias;
                 fusion_data.gate_bias  = gate_bias;
                 fusion_data.x_scale    = up_scale;
@@ -3852,7 +3852,7 @@ static int ggml_cuda_try_fuse(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph 
 
                 ggml_cuda_mm_fusion_args_host fusion_data{};
                 fusion_data.gate       = gate_n->src[0];
-                if (up_n->op == GGML_OP_MUL_MAT_ID) { fusion_data.x_ptrs = up_n->src[3]; fusion_data.gate_ptrs = gate_n->src[3]; }
+                if (up_n->op == GGML_OP_MUL_MAT_ID) { fusion_data.x_ptrs = up_n->src[3]; fusion_data.gate_ptrs = gate_n->src[3]; fusion_data.x_cnt = up_n->src[4]; }
                 fusion_data.x_bias     = up_bias;
                 fusion_data.gate_bias  = gate_bias;
                 fusion_data.x_scale    = up_scale;
@@ -3912,7 +3912,7 @@ static int ggml_cuda_try_fuse(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph 
             if (ggml_cuda_should_fuse_mul_mat_vec_f(up_n)) {
                 ggml_cuda_mm_fusion_args_host fusion_data{};
                 fusion_data.gate      = gate_n->src[0];
-                if (up_n->op == GGML_OP_MUL_MAT_ID) { fusion_data.x_ptrs = up_n->src[3]; fusion_data.gate_ptrs = gate_n->src[3]; }
+                if (up_n->op == GGML_OP_MUL_MAT_ID) { fusion_data.x_ptrs = up_n->src[3]; fusion_data.gate_ptrs = gate_n->src[3]; fusion_data.x_cnt = up_n->src[4]; }
                 fusion_data.x_bias    = up_bias_tensor;
                 fusion_data.gate_bias = gate_bias_tensor;
                 fusion_data.glu_op    = ggml_get_glu_op(glu);
@@ -3927,7 +3927,7 @@ static int ggml_cuda_try_fuse(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph 
             if (ggml_cuda_should_fuse_mul_mat_vec_q(up_n)) {
                 ggml_cuda_mm_fusion_args_host fusion_data{};
                 fusion_data.gate      = gate_n->src[0];
-                if (up_n->op == GGML_OP_MUL_MAT_ID) { fusion_data.x_ptrs = up_n->src[3]; fusion_data.gate_ptrs = gate_n->src[3]; }
+                if (up_n->op == GGML_OP_MUL_MAT_ID) { fusion_data.x_ptrs = up_n->src[3]; fusion_data.gate_ptrs = gate_n->src[3]; fusion_data.x_cnt = up_n->src[4]; }
                 fusion_data.x_bias    = up_bias_tensor;
                 fusion_data.gate_bias = gate_bias_tensor;
                 fusion_data.glu_op    = ggml_get_glu_op(glu);

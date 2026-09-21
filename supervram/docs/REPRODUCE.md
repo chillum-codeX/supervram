@@ -7,7 +7,7 @@ Everything lives under `/home/truppy/Downloads/workspace/project/supervram/`. Mo
 
 | What | Where |
 |---|---|
-| Patches to llama.cpp (apply 0001 to 0007 in order to `ce8caa6`) | `patches/` |
+| Patches to llama.cpp (apply 0001 to 0008 in order to `ce8caa6`) | `patches/` |
 | The same 23 modified/added llama.cpp files, readable and tracked | `llama_cpp_modified/` (refresh: `scripts/sync_llama_cpp_modified.sh`) |
 | The working llama.cpp checkout and CUDA build | `third_party/llama.cpp/`, `third_party/llama.cpp/build-3090/` |
 | Test/measurement tool (`svram-verify`) | `src/svram_verify.cpp`, built to `build/svram-verify` |
@@ -45,6 +45,7 @@ The environment variables `SVRAM_DIRECT_IO=1`, `SVRAM_IO_THREADS`, `SVRAM_STAGIN
 | 32,000-token prompt + 4,096-token output, three ways to use VRAM/RAM/SSD | `scripts/run_longctx_compare.sh NAME --storage resident --n-cpu-moe 25` (stock), `... --storage cache --cache-mib 14336` (tiered, RAM), and `cold_run.py --ram-cap 4G ... -- --storage cache --cache-mib 14336 --direct-io --n-ubatch 4096 --prompt-file ... --prompt-tokens 32000` (RAM-poor); summarize with `scripts/summarize_longctx.py` |
 | Prefetch upper bound and predictor accuracy (simulation on the traces) | `python3 scripts/simulate_prefetch.py results/rtx3090/traces/q8-p*.trace [--r 1.65]` and `python3 scripts/prefetch_predictor_eval.py results/rtx3090/traces/q8-p*.trace` |
 | Zero-copy expert tier (stage 1): exactness and all-from-RAM speed | `build/svram-verify --model ~/models/Qwen3-30B-A3B-Q4_K_M.gguf --storage resident --pinned-moe --zerocopy --cache-mib 512 --n-ubatch 1 --n-predict 64` vs `--storage resident` (tokens and logits hashes must match); CUDA micro-benchmarks in `scripts/microbench/` |
+| Zero-copy tier stage 2 on the 32k-prompt workload | `LONGCTX_NPREDICT=2048 SVRAM_SCORE_DECAY=0.99 scripts/run_longctx_compare.sh NAME --storage resident --pinned-moe --zerocopy --cache-mib 14336` |
 | Ground-truth perplexity, Q4_K_M vs Q8_0 | `scripts/run_ground_truth_ppl.sh` |
 | 43 GiB synthetic test model | `scripts/make_synthetic_model.sh`, then `cold_run.py` with `--model ~/models/Qwen3-30B-A3B-synthetic-F16x24-Q8x24.gguf` |
 

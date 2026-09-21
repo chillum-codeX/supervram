@@ -624,6 +624,9 @@ static __global__ void mul_mat_vec_q(
     const bool per_expert_ptr = ncols_dst == 1 && ids && fusion.x_ptrs != nullptr;
     if (per_expert_ptr) {
         vx = fusion.x_ptrs[channel_x];
+        if (fusion.x_cnt != nullptr && blockIdx.x == 0 && blockIdx.z == 0 && threadIdx.x == 0 && threadIdx.y == 0) {
+            atomicAdd(fusion.x_cnt + channel_x, 1u); // usage signal for the promotion step
+        }
     }
 
     const uint32_t sample_x    = fastdiv(sample_dst, sample_ratio);
@@ -1443,16 +1446,23 @@ void ggml_cuda_mul_mat_vec_q(
     {
         const ggml_tensor * x_tbl    = nullptr;
         const ggml_tensor * gate_tbl = nullptr;
+        const ggml_tensor * x_cnt = nullptr;
         if (fusion && fusion->x_ptrs) {
             x_tbl    = fusion->x_ptrs;
             gate_tbl = fusion->gate_ptrs;
+            x_cnt    = fusion->x_cnt;
         } else if (ids && dst->op == GGML_OP_MUL_MAT_ID) {
             x_tbl = dst->src[3];
+            x_cnt = dst->src[4];
         }
         if (x_tbl) {
             GGML_ASSERT(ids && dst->ne[2] == 1 && "per-expert pointer tables support one token per call");
             GGML_ASSERT(x_tbl->type == GGML_TYPE_I64);
             fusion_local.x_ptrs = (const void * const *) x_tbl->data;
+            if (x_cnt) {
+                GGML_ASSERT(x_cnt->type == GGML_TYPE_I32);
+                fusion_local.x_cnt = (unsigned int *) x_cnt->data;
+            }
             if (fusion && fusion->gate) {
                 GGML_ASSERT(gate_tbl && gate_tbl->type == GGML_TYPE_I64);
                 fusion_local.gate_ptrs = (const void * const *) gate_tbl->data;

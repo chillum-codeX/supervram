@@ -213,6 +213,28 @@ Goal (clarified): run the same weights at the maximum context using any combinat
 - Also observed: with the experts in pinned RAM but the flag off, the scheduler runs them on the CPU (25 t/s, GPU 6-28 % busy, PCIe about 30 MB/s): the CPU streams experts from RAM at about 48 GB/s. This is the stock `--cpu-moe` behavior, not part of this work.
 - **Projection (not yet measured):** with a 14 GiB VRAM cache at the 97 % hit rate seen in long-context runs, about 10 missed experts per token at 7.8 GB/s cost about 7 ms, on top of about 9 ms of compute (including the 32k-token KV read), for roughly 60 t/s decode, against 40.5 t/s (current tiered) and 33.7 t/s (plain llama.cpp). Stage 2 (background promotion into VRAM) is needed to confirm this.
 
+## Zero-copy expert tier, stage 2 (patch 0008): background promotion into VRAM
+
+**Built.** The `mmvq` kernel counts each expert's use (one atomic per expert per call). At every token boundary the scheduler (1) reads all counters with one copy, (2) commits the promotions whose copies finished (flips their table entries to the VRAM slot only after the copy is done, so the kernel never reads a half-copied expert), and (3) copies the most used experts that were served from RAM into VRAM slots on a second CUDA stream, overlapped with the next token's compute. Admission control: a candidate replaces the lowest-scoring resident expert only if its decayed use score is higher (`SVRAM_SCORE_DECAY`, default 0.97, best 0.99; `SVRAM_PROMOTE_PER_STEP`, default 48).
+
+**Exactness.** Q4_K_M, 384-512 tokens, promotion active in every configuration tried: tokens and logits hashes identical to full-GPU execution (no races).
+
+**Q4_K_M, 8 GiB cache, short context (steady state, tokens 256-512):** promote every miss 12/step: 14.6 t/s (cache still filling); 48/step: 39.8 t/s at 87 % hits; with admission control and decay 0.99: **50.5 t/s** (hit rate 86.7 %, copy traffic 24.8 GB vs 36-39 GB), against 42.4 t/s for the earlier VRAM-cache design at the same size.
+
+**The target workload (Q8_0, 32,000-token prompt, 14 GiB cache, first 2,048 output tokens, `results/rtx3090/longctx/zerocopy-cache14g-*`):**
+
+| System | Prefill | Decode | Prompt + 2,048 tokens |
+|---|---|---|---|
+| Plain llama.cpp, static split (25 layers' experts on CPU) | 22.6 s | 33.7 t/s | **83 s** |
+| Previous design: VRAM cache + RAM, sync per layer | 34.7 s | **40.5 t/s** | 85 s |
+| Zero-copy tier, stage 2 | 33.4 s | 32.7 t/s (0-512: 21.8, 512-1024: 37.7, 1024-2048: 39.9) | 96 s |
+
+- **The projection of about 60 t/s was not reached.** Steady state (39.9 t/s) only matches the previous design; the cold cache costs the first 512 tokens (21.8 t/s), so the whole request is slower (96 s vs 83-85 s).
+- Cache at the end: 94.5 % hit rate (62 slots per layer), 44 MB/token promoted, and the promotion step itself costs about **5.4 ms per token of host time**, out of a 25 ms token in steady state. Misses read in place at 7.8 GB/s and promotion copies share the same PCIe link, which is at or near saturation (read misses plus about 44 MB of copies per token).
+- Where the projected time went: about 9 ms compute + about 6 ms miss reads = 15 ms was the model; the measured 25 ms adds about 5 ms promotion step and link contention.
+- Identified next steps, none built: (1) take the promotion step off the critical path (helper thread; the blocking counter read and commit sync are its cost), (2) warm start (populate the cache from a usage profile before the first token), (3) a higher admission threshold to cut copy traffic, (4) a wider-load kernel variant to lift in-place reads from 7.8 toward 11 GB/s.
+- Single run, one prompt, Q8_0.
+
 ## Remaining gaps
 
 - Prompt ubatches that route more distinct experts than `n_slots` return a hard error (observed as llama-bench warmup `res = -3` at `-ub 16`). Use `-ub 1` or a larger cache for decode; prompt processing is not a v1 win.

@@ -11,5 +11,5 @@ CORPUS="${LONGCTX_CORPUS:-/tmp/corpus-32k.txt}"; [ -f "$CORPUS" ] || python3 "$R
 UB="${LONGCTX_UBATCH:-4096}"; OUT="$ROOT/results/rtx3090/longctx"; mkdir -p "$OUT"
 "$ROOT/build/svram-verify" --model "$MODELS/Qwen3-30B-A3B-Q8_0.gguf" "$@" --n-ctx 36352 --n-batch "$UB" --n-ubatch "$UB" --threads 12 \
   --prompt-file "$CORPUS" --prompt-tokens 32000 --prompt-suffix $'\n\n---\nWrite a detailed, structured summary of the documentation above.\n' \
-  --n-predict 4096 --ignore-eos --json "$OUT/$NAME-ctx32000-out4096.json" > "$OUT/$NAME.out" 2> "$OUT/$NAME.err"
+  --n-predict "${LONGCTX_NPREDICT:-4096}" --ignore-eos --json "$OUT/$NAME-ctx32000-out4096.json" > "$OUT/$NAME.out" 2> "$OUT/$NAME.err"
 python3 "$ROOT/scripts/summarize_longctx.py" "$OUT/$NAME-ctx32000-out4096.json"
