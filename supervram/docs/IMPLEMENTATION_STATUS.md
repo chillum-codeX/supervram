@@ -78,9 +78,25 @@ Method: `SVRAM_TRACE=<file>` (patch 0003) records the distinct experts each laye
 - **Time split in steady state (1,536-token run):** 42.6 s of 58.4 s decode is SSD wait (73 %), the other ~10 ms/token is per-layer synchronization and compute. Overlapping reads with compute could therefore gain up to about 1.35x here (the earlier "at most ~10 %" applied only to the cold 256-token runs).
 - **SSD bandwidth is the binding limit.** At the steady-state 97.3 % hit rate a token needs about 51 MB from the SSD. That is at most 47 t/s at this drive's 2.4 GB/s, about 68 t/s at 3.5 GB/s and about 137 t/s at 7 GB/s (bandwidth-only arithmetic; a native-card estimate of ~100 t/s caps the useful range). The steady-state 27.5 t/s is about 0.27x of that unmeasured native estimate.
 
+## Layer-batched reads and one sync per layer (patch 0003, `results/rtx3090/cold/*long1536-batched*`)
+
+Finding: a cached `MUL_MAT_ID` is forced to be the first node of its own scheduler split, so gate, up and down of a layer are three consecutive splits. The first version therefore read each weight's missed experts separately (queue depth about 1, about 1 ms per 1.6 MB read) and synchronized the GPU stream once per weight. The scheduler now looks ahead across the following splits that share the same routing ids, plans all three weights together, issues one batch of O_DIRECT reads and synchronizes once per layer.
+
+Same 1,536-token cold-start run as above (Q8_0, 16 GiB cache, direct I/O, 4 GiB RAM cap):
+
+| | Overall t/s | Steady state (from token 256) | SSD wait | SSD read rate while waiting |
+|---|---|---|---|---|
+| per-weight reads | 26.3 | 27.5 | 42.6 s | 1.8 GB/s |
+| **layer-batched reads** | **30.5 / 30.4 (2 reps)** | **31.7-31.9** | **36.1 s** | **2.1 GB/s** |
+
+- Output is unchanged: tokens and logits hashes are identical to the per-weight version; Q4 with direct reads and with mmap still matches full-GPU execution bit for bit; `test-expert-cache` passes.
+- 72 % of decode time is now SSD wait (36.1 of 50.4 s); the remaining ~9 ms/token is GPU compute and launch overhead. The read rate is within about 12 % of the drive's measured 2.4 GB/s ceiling.
+- Estimated parity (native ~100 t/s is an unmeasured estimate): 31.8 t/s is about 0.32x.
+- Overlapping the remaining reads with compute would need a prediction of the missed experts one layer ahead. Because the SSD wait (about 23 ms/token) exceeds the compute (about 9 ms/token), the best case is about 41 t/s, and only with a perfect predictor.
+
 ## Remaining gaps
 
 - Prompt ubatches that route more distinct experts than `n_slots` return a hard error (observed as llama-bench warmup `res = -3` at `-ub 16`). Use `-ub 1` or a larger cache for decode; prompt processing is not a v1 win.
 - No next-token prefetch, no GDS copy backend, no llama-server `/metrics` cache stats (stats are in the server task JSON only), and only the 20-run cache-size x policy ablation above, not the 720-run matrix (no prefetch/predictor axes, no repetitions).
-- Direct I/O (`SVRAM_DIRECT_IO=1`, Linux only, env-var controlled, no CLI flag yet) uses one pinned staging buffer with a synchronize before each reuse: no double buffering and no prefetch, so reads never overlap compute. The default path is still mmap.
+- Direct I/O (`SVRAM_DIRECT_IO=1`, Linux only, env-var controlled, no CLI flag yet) uses one pinned staging buffer with a synchronize before each reuse: no double buffering and no prefetch, so reads never overlap compute (reads of one layer are batched, see above). The default path is still mmap.
 - CUDA graphs were disabled (`GGML_CUDA_DISABLE_GRAPHS=1`) for bring-up.
