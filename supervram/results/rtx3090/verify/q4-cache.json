@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "evidence_class": "measured_rtx3090",
+  "mode": "cache", "ngl": 99, "cpu_moe": false, "n_cpu_moe": 0, "cache_mib": 8192, "cache_policy": "lru",
+  "model": "/home/truppy/models/Qwen3-30B-A3B-Q4_K_M.gguf",
+  "prompt_tokens": 7,
+  "load_ms": 682.392,
+  "prompt_ms": 740.092,
+  "decode_tps": 16.8119,
+  "tokens": [10423,86478,11,7407,304,13622,13,11445],
+  "logits_hashes": ["1f9ab2784781b987","3b5ba25f1bbc5687","a9cd70b1b4f7b270","abb0137014ca9ae1","0eccad0e475e6d0b","4d5e4b7f3e58f68f","8ee7a14c6eb0a1cc","231432807c377f0b"],
+  "step_ms": [71.8941,62.0584,98.7597,58.3764,33.6981,33.5014,61.5604,56.0062]
+}

@@ -1,0 +1,5 @@
+mode=cache ngl=99 cpu_moe=0 n_cpu_moe=0 cache_mib=12288 prompt_tokens=7 generated=8 load_ms=794 prompt_ms=1176.7 decode_tps=11.28
+cache_stats accesses=13323 hits=7113 misses=6210 evictions=72 hit_rate=53.4 bytes_h2d=10377953280 n_slots=7632 host_ms=1675.6
+tokens=10423,86478,11,892,374,220,23,11
+logits_hash_step0=346367c3223b0681
+text= Mount Everest, which is 8,

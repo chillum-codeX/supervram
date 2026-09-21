@@ -1,0 +1,4 @@
+mode=resident ngl=99 cpu_moe=1 n_cpu_moe=0 cache_mib=0 prompt_tokens=7 generated=8 load_ms=2534 prompt_ms=192.0 decode_tps=21.62
+tokens=10423,86478,11,892,374,220,23,11
+logits_hash_step0=dff38453f777048d
+text= Mount Everest, which is 8,

@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "evidence_class": "measured_rtx3090",
+  "mode": "resident", "ngl": 99, "cpu_moe": false, "n_cpu_moe": 0, "cache_mib": 0, "cache_policy": "lru",
+  "model": "/home/truppy/Downloads/workspace/project/supervram/results/reproduced/arch-test/qwen3moe-moe.gguf",
+  "prompt_tokens": 8,
+  "load_ms": 137.682,
+  "prompt_ms": 103.233,
+  "decode_tps": 2353.6,
+  "tokens": [12,26,91,20,95,56,34,33],
+  "logits_hashes": ["271245696a586aa7","14925bd72c059cd9","5e1737eae1b33a16","063b62dabb6f586d","3e84166ac9e3e59c","a32adfcfc76c5ff9","dd17a935a7c595ec","bb5000822eacf5ed"],
+  "step_ms": [1.36485,0.326723,0.288914,0.28113,0.28118,0.289663,0.285626,0.280965]
+}

@@ -1,0 +1,5 @@
+mode=cache ngl=99 cpu_moe=0 n_cpu_moe=0 cache_mib=8192 prompt_tokens=7 generated=8 load_ms=682 prompt_ms=740.1 decode_tps=16.81
+cache_stats accesses=13329 hits=7173 misses=6156 evictions=0 hit_rate=53.8 bytes_h2d=5883973632 n_slots=8928 host_ms=1009.4
+tokens=10423,86478,11,7407,304,13622,13,11445
+logits_hash_step0=1f9ab2784781b987
+text= Mount Everest, located in Asia. Its

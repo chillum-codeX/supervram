@@ -1,0 +1,808 @@
+{
+  "schema_version": 1,
+  "evidence_class": "measured_rtx3090",
+  "hardware_probe": "hardware-probe.json",
+  "command": [
+    "/home/truppy/Downloads/workspace/project/supervram/third_party/llama.cpp/build-3090/bin/llama-server",
+    "-m",
+    "/home/truppy/models/Qwen3-30B-A3B-Q4_K_M.gguf",
+    "--port",
+    "18101",
+    "--no-webui",
+    "-ngl",
+    "99"
+  ],
+  "records": [
+    {
+      "iteration": 0,
+      "warmup": true,
+      "ttft_proxy_ms": 440.8227869989787,
+      "request_ms": 440.9139969993703,
+      "prompt_tokens": 9,
+      "prompt_ms": 42.798,
+      "prompt_tokens_s": 210.2902004766578,
+      "decode_tokens": 64,
+      "decode_ms": 395.474,
+      "decode_tokens_s": 159.302507876624,
+      "tpot_ms": 6.17928125
+    },
+    {
+      "iteration": 1,
+      "warmup": true,
+      "ttft_proxy_ms": 414.2198509998707,
+      "request_ms": 414.3239659988467,
+      "prompt_tokens": 9,
+      "prompt_ms": 21.369,
+      "prompt_tokens_s": 421.17085497683564,
+      "decode_tokens": 64,
+      "decode_ms": 385.649,
+      "decode_tokens_s": 163.36098369242498,
+      "tpot_ms": 6.025765625
+    },
+    {
+      "iteration": 2,
+      "warmup": false,
+      "ttft_proxy_ms": 413.32643300120253,
+      "request_ms": 413.4048010000697,
+      "prompt_tokens": 9,
+      "prompt_ms": 23.307,
+      "prompt_tokens_s": 386.15008366585147,
+      "decode_tokens": 64,
+      "decode_ms": 387.958,
+      "decode_tokens_s": 162.38871218018443,
+      "tpot_ms": 6.06184375
+    },
+    {
+      "iteration": 3,
+      "warmup": false,
+      "ttft_proxy_ms": 417.9866539998329,
+      "request_ms": 418.0508720000944,
+      "prompt_tokens": 9,
+      "prompt_ms": 19.92,
+      "prompt_tokens_s": 451.8072289156626,
+      "decode_tokens": 64,
+      "decode_ms": 396.231,
+      "decode_tokens_s": 158.9981601641467,
+      "tpot_ms": 6.191109375
+    },
+    {
+      "iteration": 4,
+      "warmup": false,
+      "ttft_proxy_ms": 413.543953000044,
+      "request_ms": 413.66845199991076,
+      "prompt_tokens": 9,
+      "prompt_ms": 21.618,
+      "prompt_tokens_s": 416.31973355537053,
+      "decode_tokens": 64,
+      "decode_ms": 390.111,
+      "decode_tokens_s": 161.49249828894852,
+      "tpot_ms": 6.095484375
+    },
+    {
+      "iteration": 5,
+      "warmup": false,
+      "ttft_proxy_ms": 419.3289790000563,
+      "request_ms": 419.38850299993646,
+      "prompt_tokens": 9,
+      "prompt_ms": 23.875,
+      "prompt_tokens_s": 376.9633507853403,
+      "decode_tokens": 64,
+      "decode_ms": 393.568,
+      "decode_tokens_s": 160.07398975526468,
+      "tpot_ms": 6.1495
+    },
+    {
+      "iteration": 6,
+      "warmup": false,
+      "ttft_proxy_ms": 414.20204200039734,
+      "request_ms": 414.254642000742,
+      "prompt_tokens": 9,
+      "prompt_ms": 21.638,
+      "prompt_tokens_s": 415.934929291062,
+      "decode_tokens": 64,
+      "decode_ms": 391.411,
+      "decode_tokens_s": 160.95613051242813,
+      "tpot_ms": 6.115796875
+    },
+    {
+      "iteration": 7,
+      "warmup": false,
+      "ttft_proxy_ms": 408.80983200077026,
+      "request_ms": 408.8584860000992,
+      "prompt_tokens": 9,
+      "prompt_ms": 20.287,
+      "prompt_tokens_s": 443.6338541923399,
+      "decode_tokens": 64,
+      "decode_ms": 387.337,
+      "decode_tokens_s": 162.64906270250455,
+      "tpot_ms": 6.052140625
+    },
+    {
+      "iteration": 8,
+      "warmup": false,
+      "ttft_proxy_ms": 413.1669430007605,
+      "request_ms": 413.2313879999856,
+      "prompt_tokens": 9,
+      "prompt_ms": 21.069,
+      "prompt_tokens_s": 427.16787697565144,
+      "decode_tokens": 64,
+      "decode_ms": 390.444,
+      "decode_tokens_s": 161.35476534406982,
+      "tpot_ms": 6.1006875
+    },
+    {
+      "iteration": 9,
+      "warmup": false,
+      "ttft_proxy_ms": 422.23088099854067,
+      "request_ms": 422.2842539984413,
+      "prompt_tokens": 9,
+      "prompt_ms": 22.273,
+      "prompt_tokens_s": 404.07668477528847,
+      "decode_tokens": 64,
+      "decode_ms": 398.419,
+      "decode_tokens_s": 158.124989019098,
+      "tpot_ms": 6.225296875
+    },
+    {
+      "iteration": 10,
+      "warmup": false,
+      "ttft_proxy_ms": 415.3550160008308,
+      "request_ms": 415.41526800028805,
+      "prompt_tokens": 9,
+      "prompt_ms": 20.131,
+      "prompt_tokens_s": 447.0716804927724,
+      "decode_tokens": 64,
+      "decode_ms": 393.378,
+      "decode_tokens_s": 160.15130485182192,
+      "tpot_ms": 6.14653125
+    },
+    {
+      "iteration": 11,
+      "warmup": false,
+      "ttft_proxy_ms": 421.3467399986257,
+      "request_ms": 421.4043069987383,
+      "prompt_tokens": 9,
+      "prompt_ms": 21.902,
+      "prompt_tokens_s": 410.9213770431924,
+      "decode_tokens": 64,
+      "decode_ms": 397.686,
+      "decode_tokens_s": 158.41643910019462,
+      "tpot_ms": 6.21384375
+    }
+  ],
+  "resource_samples": [
+    {
+      "timestamp_ns": 1789998957445376151,
+      "gpu": {
+        "utilization_percent": 8.0,
+        "memory_mib": 23134.0,
+        "power_w": 145.23,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116417412,
+        "Cached": 58549768,
+        "Dirty": 1044,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998957581666692,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 153.14,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116409400,
+        "Cached": 58550040,
+        "Dirty": 1048,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998957715046658,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 181.19,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116424864,
+        "Cached": 58549392,
+        "Dirty": 968,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998957847761726,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 198.45,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116424364,
+        "Cached": 58549392,
+        "Dirty": 984,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998957982903570,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 214.68,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116425148,
+        "Cached": 58549392,
+        "Dirty": 984,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998958110785108,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 249.3,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116423888,
+        "Cached": 58549668,
+        "Dirty": 988,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998958242948199,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 266.9,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116407744,
+        "Cached": 58549668,
+        "Dirty": 988,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998958372918913,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 284.24,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116391692,
+        "Cached": 58549668,
+        "Dirty": 988,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998958499154203,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 319.22,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116375060,
+        "Cached": 58549500,
+        "Dirty": 992,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998958631089577,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 328.89,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116372300,
+        "Cached": 58549504,
+        "Dirty": 836,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998958762670111,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 329.08,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116356584,
+        "Cached": 58549504,
+        "Dirty": 928,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998958894757763,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 329.6,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116356080,
+        "Cached": 58549404,
+        "Dirty": 828,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998959023078295,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 330.5,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116341092,
+        "Cached": 58549404,
+        "Dirty": 836,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998959151345841,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 330.7,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116348704,
+        "Cached": 58549408,
+        "Dirty": 844,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998959282751201,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 330.69,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116332660,
+        "Cached": 58549408,
+        "Dirty": 844,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998959414018400,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 331.3,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116320900,
+        "Cached": 58549408,
+        "Dirty": 844,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998959544929824,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 331.27,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116320700,
+        "Cached": 58549296,
+        "Dirty": 868,
+        "Writeback": 108
+      }
+    },
+    {
+      "timestamp_ns": 1789998959671431040,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 330.7,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116320700,
+        "Cached": 58549296,
+        "Dirty": 676,
+        "Writeback": 108
+      }
+    },
+    {
+      "timestamp_ns": 1789998959799759256,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 331.08,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116297988,
+        "Cached": 58549408,
+        "Dirty": 456,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998959932711439,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 330.55,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116300008,
+        "Cached": 58549408,
+        "Dirty": 456,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998960062935916,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 331.12,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116297508,
+        "Cached": 58549512,
+        "Dirty": 488,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998960188254812,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 331.67,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116318176,
+        "Cached": 58549644,
+        "Dirty": 508,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998960320347019,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 332.03,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116240012,
+        "Cached": 58549508,
+        "Dirty": 500,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998960447435189,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 331.96,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116219964,
+        "Cached": 58549508,
+        "Dirty": 524,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998960576534818,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 332.1,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116200812,
+        "Cached": 58549508,
+        "Dirty": 524,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998960706449591,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 333.11,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116256548,
+        "Cached": 58549416,
+        "Dirty": 584,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998960836193566,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 333.73,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116234812,
+        "Cached": 58549416,
+        "Dirty": 584,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998960970852257,
+      "gpu": {
+        "utilization_percent": 47.0,
+        "memory_mib": 23134.0,
+        "power_w": 333.96,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116236156,
+        "Cached": 58549420,
+        "Dirty": 596,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998961103243832,
+      "gpu": {
+        "utilization_percent": 92.0,
+        "memory_mib": 23134.0,
+        "power_w": 334.26,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116232668,
+        "Cached": 58549420,
+        "Dirty": 532,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998961233992776,
+      "gpu": {
+        "utilization_percent": 92.0,
+        "memory_mib": 23134.0,
+        "power_w": 333.97,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116232196,
+        "Cached": 58549360,
+        "Dirty": 536,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998961362842981,
+      "gpu": {
+        "utilization_percent": 92.0,
+        "memory_mib": 23134.0,
+        "power_w": 334.18,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116232196,
+        "Cached": 58549360,
+        "Dirty": 564,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998961490527078,
+      "gpu": {
+        "utilization_percent": 92.0,
+        "memory_mib": 23134.0,
+        "power_w": 333.98,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116240188,
+        "Cached": 58549360,
+        "Dirty": 564,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998961619536654,
+      "gpu": {
+        "utilization_percent": 92.0,
+        "memory_mib": 23134.0,
+        "power_w": 333.0,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116247944,
+        "Cached": 58549360,
+        "Dirty": 556,
+        "Writeback": 36
+      }
+    },
+    {
+      "timestamp_ns": 1789998961749200341,
+      "gpu": {
+        "utilization_percent": 92.0,
+        "memory_mib": 23134.0,
+        "power_w": 333.04,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116266436,
+        "Cached": 58549360,
+        "Dirty": 564,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998961883819533,
+      "gpu": {
+        "utilization_percent": 92.0,
+        "memory_mib": 23134.0,
+        "power_w": 333.09,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116274448,
+        "Cached": 58549360,
+        "Dirty": 564,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998962012120495,
+      "gpu": {
+        "utilization_percent": 92.0,
+        "memory_mib": 23134.0,
+        "power_w": 332.69,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116274448,
+        "Cached": 58549360,
+        "Dirty": 564,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998962138365665,
+      "gpu": {
+        "utilization_percent": 92.0,
+        "memory_mib": 23134.0,
+        "power_w": 332.07,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116258556,
+        "Cached": 58549360,
+        "Dirty": 576,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998962267919148,
+      "gpu": {
+        "utilization_percent": 92.0,
+        "memory_mib": 23134.0,
+        "power_w": 330.67,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116261772,
+        "Cached": 58549424,
+        "Dirty": 580,
+        "Writeback": 0
+      }
+    },
+    {
+      "timestamp_ns": 1789998962400170523,
+      "gpu": {
+        "utilization_percent": 92.0,
+        "memory_mib": 23134.0,
+        "power_w": 330.23,
+        "pcie_generation": 3,
+        "pcie_width": 16
+      },
+      "meminfo_kib": {
+        "MemAvailable": 116268480,
+        "Cached": 58549804,
+        "Dirty": 612,
+        "Writeback": 0
+      }
+    }
+  ],
+  "summary": {
+    "request_ms_p50": 414.254642000742,
+    "request_ms_p95": 422.2842539984413,
+    "request_ms_p99": 422.2842539984413,
+    "decode_tokens_s_mean": 160.46060519186614,
+    "tpot_ms_p50": 6.115796875,
+    "tpot_ms_p95": 6.225296875,
+    "mean_gpu_power_w": 306.8607692307692
+  }
+}

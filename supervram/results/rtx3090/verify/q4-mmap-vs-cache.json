@@ -1,0 +1,20 @@
+{
+  "a": {
+    "mode": "mmap",
+    "ngl": 99,
+    "cpu_moe": false,
+    "cache_mib": 0,
+    "decode_tps": 29.1076
+  },
+  "b": {
+    "mode": "cache",
+    "ngl": 99,
+    "cpu_moe": false,
+    "cache_mib": 8192,
+    "decode_tps": 16.8119
+  },
+  "compared_steps": 8,
+  "tokens_identical": true,
+  "first_divergence_step": null,
+  "logits_hashes_identical": false
+}

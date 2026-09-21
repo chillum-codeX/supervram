@@ -1,0 +1,4 @@
+mode=mmap ngl=99 cpu_moe=0 n_cpu_moe=0 cache_mib=0 prompt_tokens=7 generated=8 load_ms=681 prompt_ms=285.5 decode_tps=29.11
+tokens=10423,86478,11,7407,304,13622,13,11445
+logits_hash_step0=7f25c08b9cd5a49f
+text= Mount Everest, located in Asia. Its

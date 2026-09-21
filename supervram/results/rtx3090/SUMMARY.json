@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "evidence_class": "measured_rtx3090",
+  "timestamp": "2026-09-21T18:37:00+05:30",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 3090 24 GiB",
+    "driver": "595.91.07",
+    "cuda": "12.6",
+    "pcie_idle": "gen2 x16 (max gen3 x16)",
+    "bar1": "256 MiB",
+    "cufile": "compat_mode_host_bounce",
+    "nvme": "WDC SN550 /home ext4",
+    "cpu": "Intel Core i9-9920X 24 threads",
+    "ram_kib": 131575964
+  },
+  "correctness": {
+    "tiny_qwen3moe": {
+      "resident_mmap_cache_tokens_identical": true,
+      "resident_cache_logits_hashes_identical": true
+    },
+    "Qwen3-30B-A3B-Q4_K_M": {
+      "n_predict": 8,
+      "n_ubatch": 8,
+      "tokens": [10423, 86478, 11, 7407, 304, 13622, 13, 11445],
+      "text": " Mount Everest, located in Asia. Its",
+      "resident_mmap_tokens_identical": true,
+      "resident_cache_tokens_identical": true,
+      "resident_cache_logits_hashes_identical": true,
+      "resident_mmap_logits_hashes_identical": false,
+      "cache_hit_rate": 0.538,
+      "cache_slots_total": 8928,
+      "decode_tps": {"resident": 279.44, "mmap": 29.11, "cache": 16.81}
+    },
+    "Qwen3-30B-A3B-Q8_0": {
+      "n_predict": 8,
+      "n_ubatch": 8,
+      "tokens": [10423, 86478, 11, 892, 374, 220, 23, 11],
+      "text": " Mount Everest, which is 8,",
+      "cpu_moe_mmap_cache_tokens_identical": true,
+      "cpu_moe_cache_logits_hashes_identical": false,
+      "cache_hit_rate": 0.534,
+      "cache_slots_total": 7632,
+      "decode_tps": {"cpu_moe": 21.62, "mmap": 20.82, "cache": 11.28}
+    }
+  },
+  "llama_bench": {
+    "reps": 3,
+    "note": "Cache prompt batches fail when distinct experts > n_slots; decode-only used for cache.",
+    "q4_resident_pp512_ts": 4272.58,
+    "q4_resident_tg128_ts": 171.06,
+    "q4_n_cpu_moe_24_pp512_ts": 590.63,
+    "q4_n_cpu_moe_24_tg128_ts": 56.70,
+    "q4_mmap_pp512_ts": 340.53,
+    "q4_mmap_tg128_ts": 33.77,
+    "q4_cache_tg128_ts": 47.09,
+    "q8_cpu_moe_pp64_ts": 64.74,
+    "q8_cpu_moe_tg64_ts": 23.14,
+    "q8_mmap_pp64_ts": 64.87,
+    "q8_mmap_tg64_ts": 23.11,
+    "q8_cache_tg64_ts": 24.63
+  },
+  "cache_layout": {
+    "q4_8giB": "144 tensors, 62 slots/tensor, 8253 MiB device",
+    "q8_12giB": "144 tensors, 53 slots/tensor, 12308 MiB device"
+  }
+}

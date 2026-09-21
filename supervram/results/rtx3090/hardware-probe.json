@@ -1,0 +1,464 @@
+{
+  "schema_version": 1,
+  "evidence_class": "measured_rtx3090",
+  "timestamp": "2026-09-21T17:12:23+0530",
+  "target_path": "/home/truppy/models",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 3090",
+    "driver_version": "595.91.07",
+    "memory.total": "24576",
+    "pcie.link.gen.max": "3",
+    "pcie.link.gen.current": "2",
+    "pcie.link.width.max": "16",
+    "pcie.link.width.current": "16",
+    "compute_cap": "8.6",
+    "power.limit": "370.00",
+    "clocks.max.sm": "2115",
+    "clocks.max.mem": "9751",
+    "bar1_total": "256 MiB"
+  },
+  "nvidia_topology": "\u001b[4mGPU0\tCPU Affinity\tNUMA Affinity\tGPU NUMA ID\u001b[0m\nGPU0\t X \t0-23\t0\t\tN/A\n\nLegend:\n\n  X    = Self\n  SYS  = Connection traversing PCIe as well as the SMP interconnect between NUMA nodes (e.g., QPI/UPI)\n  NODE = Connection traversing PCIe as well as the interconnect between PCIe Host Bridges within a NUMA node\n  PHB  = Connection traversing PCIe as well as a PCIe Host Bridge (typically the CPU)\n  PXB  = Connection traversing multiple PCIe bridges (without traversing the PCIe Host Bridge)\n  PIX  = Connection traversing at most a single PCIe bridge\n  NV#  = Connection traversing a bonded set of # NVLinks",
+  "nvidia_smi_memory_pcie": "Failed to parse --display/-d flags",
+  "resizable_bar_raw": null,
+  "pci_tree": "-+-[0000:b2]-+-05.0  Intel Corporation Sky Lake-E VT-d\n |           +-05.2  Intel Corporation Sky Lake-E RAS Configuration Registers\n |           +-05.4  Intel Corporation Sky Lake-E IOxAPIC Configuration Registers\n |           +-12.0  Intel Corporation Sky Lake-E M3KTI Registers\n |           +-12.1  Intel Corporation Sky Lake-E M3KTI Registers\n |           +-12.2  Intel Corporation Sky Lake-E M3KTI Registers\n |           +-15.0  Intel Corporation Sky Lake-E M2PCI Registers\n |           +-16.0  Intel Corporation Sky Lake-E M2PCI Registers\n |           +-16.4  Intel Corporation Sky Lake-E M2PCI Registers\n |           \\-17.0  Intel Corporation Sky Lake-E M2PCI Registers\n +-[0000:64]-+-00.0-[65]--+-00.0  NVIDIA Corporation GA102 [GeForce RTX 3090]\n |           |            \\-00.1  NVIDIA Corporation GA102 High Definition Audio Controller\n |           +-05.0  Intel Corporation Sky Lake-E VT-d\n |           +-05.2  Intel Corporation Sky Lake-E RAS Configuration Registers\n |           +-05.4  Intel Corporation Sky Lake-E IOxAPIC Configuration Registers\n |           +-08.0  Intel Corporation Sky Lake-E Integrated Memory Controller\n |           +-09.0  Intel Corporation Sky Lake-E Integrated Memory Controller\n |           +-0a.0  Intel Corporation Sky Lake-E Integrated Memory Controller\n |           +-0a.1  Intel Corporation Sky Lake-E Integrated Memory Controller\n |           +-0a.2  Intel Corporation Sky Lake-E Integrated Memory Controller\n |           +-0a.3  Intel Corporation Sky Lake-E Integrated Memory Controller\n |           +-0a.4  Intel Corporation Sky Lake-E Integrated Memory Controller\n |           +-0a.5  Intel Corporation Sky Lake-E LM Channel 1\n |           +-0a.6  Intel Corporation Sky Lake-E LMS Channel 1\n |           +-0a.7  Intel Corporation Sky Lake-E LMDP Channel 1\n |           +-0b.0  Intel Corporation Sky Lake-E DECS Channel 2\n |           +-0b.1  Intel Corporation Sky Lake-E LM Channel 2\n |           +-0b.2  Intel Corporation Sky Lake-E LMS Channel 2\n |           +-0b.3  Intel Corporation Sky Lake-E LMDP Channel 2\n |           +-0c.0  Intel Corporation Sky Lake-E Integrated Memory Controller\n |           +-0c.1  Intel Corporation Sky Lake-E Integrated Memory Controller\n |           +-0c.2  Intel Corporation Sky Lake-E Integrated Memory Controller\n |           +-0c.3  Intel Corporation Sky Lake-E Integrated Memory Controller\n |           +-0c.4  Intel Corporation Sky Lake-E Integrated Memory Controller\n |           +-0c.5  Intel Corporation Sky Lake-E LM Channel 1\n |           +-0c.6  Intel Corporation Sky Lake-E LMS Channel 1\n |           +-0c.7  Intel Corporation Sky Lake-E LMDP Channel 1\n |           +-0d.0  Intel Corporation Sky Lake-E DECS Channel 2\n |           +-0d.1  Intel Corporation Sky Lake-E LM Channel 2\n |           +-0d.2  Intel Corporation Sky Lake-E LMS Channel 2\n |           \\-0d.3  Intel Corporation Sky Lake-E LMDP Channel 2\n +-[0000:16]-+-05.0  Intel Corporation Sky Lake-E VT-d\n |           +-05.2  Intel Corporation Sky Lake-E RAS Configuration Registers\n |           +-05.4  Intel Corporation Sky Lake-E IOxAPIC Configuration Registers\n |           +-08.0  Intel Corporation Sky Lake-E CHA Registers\n |           +-08.1  Intel Corporation Sky Lake-E CHA Registers\n |           +-08.2  Intel Corporation Sky Lake-E CHA Registers\n |           +-08.3  Intel Corporation Sky Lake-E CHA Registers\n |           +-08.4  Intel Corporation Sky Lake-E CHA Registers\n |           +-08.5  Intel Corporation Sky Lake-E CHA Registers\n |           +-08.6  Intel Corporation Sky Lake-E CHA Registers\n |           +-08.7  Intel Corporation Sky Lake-E CHA Registers\n |           +-09.0  Intel Corporation Sky Lake-E CHA Registers\n |           +-09.1  Intel Corporation Sky Lake-E CHA Registers\n |           +-09.2  Intel Corporation Sky Lake-E CHA Registers\n |           +-09.3  Intel Corporation Sky Lake-E CHA Registers\n |           +-09.4  Intel Corporation Sky Lake-E CHA Registers\n |           +-09.5  Intel Corporation Sky Lake-E CHA Registers\n |           +-09.6  Intel Corporation Sky Lake-E CHA Registers\n |           +-09.7  Intel Corporation Sky Lake-E CHA Registers\n |           +-0a.0  Intel Corporation Sky Lake-E CHA Registers\n |           +-0a.1  Intel Corporation Sky Lake-E CHA Registers\n |           +-0e.0  Intel Corporation Sky Lake-E CHA Registers\n |           +-0e.1  Intel Corporation Sky Lake-E CHA Registers\n |           +-0e.2  Intel Corporation Sky Lake-E CHA Registers\n |           +-0e.3  Intel Corporation Sky Lake-E CHA Registers\n |           +-0e.4  Intel Corporation Sky Lake-E CHA Registers\n |           +-0e.5  Intel Corporation Sky Lake-E CHA Registers\n |           +-0e.6  Intel Corporation Sky Lake-E CHA Registers\n |           +-0e.7  Intel Corporation Sky Lake-E CHA Registers\n |           +-0f.0  Intel Corporation Sky Lake-E CHA Registers\n |           +-0f.1  Intel Corporation Sky Lake-E CHA Registers\n |           +-0f.2  Intel Corporation Sky Lake-E CHA Registers\n |           +-0f.3  Intel Corporation Sky Lake-E CHA Registers\n |           +-0f.4  Intel Corporation Sky Lake-E CHA Registers\n |           +-0f.5  Intel Corporation Sky Lake-E CHA Registers\n |           +-0f.6  Intel Corporation Sky Lake-E CHA Registers\n |           +-0f.7  Intel Corporation Sky Lake-E CHA Registers\n |           +-10.0  Intel Corporation Sky Lake-E CHA Registers\n |           +-10.1  Intel Corporation Sky Lake-E CHA Registers\n |           +-1d.0  Intel Corporation Sky Lake-E CHA Registers\n |           +-1d.1  Intel Corporation Sky Lake-E CHA Registers\n |           +-1d.2  Intel Corporation Sky Lake-E CHA Registers\n |           +-1d.3  Intel Corporation Sky Lake-E CHA Registers\n |           +-1e.0  Intel Corporation Sky Lake-E PCU Registers\n |           +-1e.1  Intel Corporation Sky Lake-E PCU Registers\n |           +-1e.2  Intel Corporation Sky Lake-E PCU Registers\n |           +-1e.3  Intel Corporation Sky Lake-E PCU Registers\n |           +-1e.4  Intel Corporation Sky Lake-E PCU Registers\n |           +-1e.5  Intel Corporation Sky Lake-E PCU Registers\n |           \\-1e.6  Intel Corporation Sky Lake-E PCU Registers\n \\-[0000:00]-+-00.0  Intel Corporation Sky Lake-E DMI3 Registers\n             +-04.0  Intel Corporation Sky Lake-E CBDMA Registers\n             +-04.1  Intel Corporation Sky Lake-E CBDMA Registers\n             +-04.2  Intel Corporation Sky Lake-E CBDMA Registers\n             +-04.3  Intel Corporation Sky Lake-E CBDMA Registers\n             +-04.4  Intel Corporation Sky Lake-E CBDMA Registers\n             +-04.5  Intel Corporation Sky Lake-E CBDMA Registers\n             +-04.6  Intel Corporation Sky Lake-E CBDMA Registers\n             +-04.7  Intel Corporation Sky Lake-E CBDMA Registers\n             +-05.0  Intel Corporation Sky Lake-E MM/Vt-d Configuration Registers\n             +-05.2  Intel Corporation Sky Lake-E RAS\n             +-05.4  Intel Corporation Sky Lake-E IOAPIC\n             +-08.0  Intel Corporation Sky Lake-E Ubox Registers\n             +-08.1  Intel Corporation Sky Lake-E Ubox Registers\n             +-08.2  Intel Corporation Sky Lake-E Ubox Registers\n             +-14.0  Intel Corporation 200 Series/Z370 Chipset Family USB 3.0 xHCI Controller\n             +-14.2  Intel Corporation 200 Series PCH Thermal Subsystem\n             +-16.0  Intel Corporation 200 Series PCH CSME HECI #1\n             +-17.0  Intel Corporation 200 Series PCH SATA controller [AHCI mode]\n             +-1b.0-[01]--\n             +-1b.4-[02]----00.0  Sandisk Corp WD Blue SN550 NVMe SSD\n             +-1c.0-[03]----00.0  ASMedia Technology Inc. ASM2142 USB 3.1 Host Controller\n             +-1c.2-[04]----00.0  ASMedia Technology Inc. ASM2142 USB 3.1 Host Controller\n             +-1c.4-[05]----00.0  Qualcomm Atheros Killer E2500 Gigabit Ethernet Controller\n             +-1c.5-[06]----00.0  Qualcomm Atheros QCA6174 802.11ac Wireless Network Adapter\n             +-1d.0-[07]----00.0  Intel Corporation SSD 660P Series\n             +-1f.0  Intel Corporation X299 Chipset LPC/eSPI Controller\n             +-1f.2  Intel Corporation 200 Series/Z370 Chipset Family Power Management Controller\n             +-1f.3  Intel Corporation 200 Series PCH HD Audio\n             \\-1f.4  Intel Corporation 200 Series/Z370 Chipset Family SMBus Controller",
+  "pci_nvme_gpu": "02:00.0 Non-Volatile memory controller [0108]: Sandisk Corp WD Blue SN550 NVMe SSD [15b7:5009] (rev 01)\n07:00.0 Non-Volatile memory controller [0108]: Intel Corporation SSD 660P Series [8086:f1a8] (rev 03)\n65:00.0 VGA compatible controller [0300]: NVIDIA Corporation GA102 [GeForce RTX 3090] [10de:2204] (rev a1)",
+  "iommu": {
+    "enabled": false,
+    "groups": 0
+  },
+  "kernel_cmdline": "BOOT_IMAGE=/vmlinuz-6.8.0-138-generic root=UUID=5f641219-5be8-4578-8b0a-07f1c50d1243 ro quiet splash vt.handoff=7",
+  "nvidia_fs_kernel_module": false,
+  "gdscheck": {
+    "available": false
+  },
+  "block_devices": {
+    "blockdevices": [
+      {
+        "name": "loop0",
+        "mountpoint": "/snap/core20/2922",
+        "fstype": "squashfs",
+        "size": "63.8M",
+        "rota": false,
+        "tran": null,
+        "model": null
+      },
+      {
+        "name": "loop1",
+        "mountpoint": "/snap/core20/2866",
+        "fstype": "squashfs",
+        "size": "63.8M",
+        "rota": false,
+        "tran": null,
+        "model": null
+      },
+      {
+        "name": "loop2",
+        "mountpoint": "/snap/bare/5",
+        "fstype": "squashfs",
+        "size": "4K",
+        "rota": false,
+        "tran": null,
+        "model": null
+      },
+      {
+        "name": "loop3",
+        "mountpoint": "/snap/core22/2133",
+        "fstype": "squashfs",
+        "size": "73.9M",
+        "rota": false,
+        "tran": null,
+        "model": null
+      },
+      {
+        "name": "loop4",
+        "mountpoint": "/snap/core22/2411",
+        "fstype": "squashfs",
+        "size": "74M",
+        "rota": false,
+        "tran": null,
+        "model": null
+      },
+      {
+        "name": "loop5",
+        "mountpoint": "/snap/firefox/8736",
+        "fstype": "squashfs",
+        "size": "257.7M",
+        "rota": false,
+        "tran": null,
+        "model": null
+      },
+      {
+        "name": "loop6",
+        "mountpoint": "/snap/gnome-3-38-2004/119",
+        "fstype": "squashfs",
+        "size": "346.3M",
+        "rota": false,
+        "tran": null,
+        "model": null
+      },
+      {
+        "name": "loop7",
+        "mountpoint": "/snap/gnome-3-38-2004/143",
+        "fstype": "squashfs",
+        "size": "349.7M",
+        "rota": false,
+        "tran": null,
+        "model": null
+      },
+      {
+        "name": "loop8",
+        "mountpoint": "/snap/core24/1643",
+        "fstype": "squashfs",
+        "size": "66.8M",
+        "rota": false,
+        "tran": null,
+        "model": null
+      },
+      {
+        "name": "loop9",
+        "mountpoint": "/snap/gnome-42-2204/226",
+        "fstype": "squashfs",
+        "size": "516.2M",
+        "rota": false,
+        "tran": null,
+        "model": null
+      },
+      {
+        "name": "loop10",
+        "mountpoint": "/snap/gnome-42-2204/263",
+        "fstype": "squashfs",
+        "size": "531.5M",
+        "rota": false,
+        "tran": null,
+        "model": null
+      },
+      {
+        "name": "loop11",
+        "mountpoint": "/snap/gnome-46-2404/164",
+        "fstype": "squashfs",
+        "size": "614.5M",
+        "rota": false,
+        "tran": null,
+        "model": null
+      },
+      {
+        "name": "loop12",
+        "mountpoint": "/snap/gtk-common-themes/1535",
+        "fstype": "squashfs",
+        "size": "91.7M",
+        "rota": false,
+        "tran": null,
+        "model": null
+      },
+      {
+        "name": "loop13",
+        "mountpoint": "/snap/mesa-2404/1839",
+        "fstype": "squashfs",
+        "size": "402M",
+        "rota": false,
+        "tran": null,
+        "model": null
+      },
+      {
+        "name": "loop14",
+        "mountpoint": "/snap/snap-store/638",
+        "fstype": "squashfs",
+        "size": "45.9M",
+        "rota": false,
+        "tran": null,
+        "model": null
+      },
+      {
+        "name": "loop15",
+        "mountpoint": "/snap/snapd/18357",
+        "fstype": "squashfs",
+        "size": "49.8M",
+        "rota": false,
+        "tran": null,
+        "model": null
+      },
+      {
+        "name": "loop16",
+        "mountpoint": "/snap/snapd/25202",
+        "fstype": "squashfs",
+        "size": "50.8M",
+        "rota": false,
+        "tran": null,
+        "model": null
+      },
+      {
+        "name": "loop17",
+        "mountpoint": "/snap/snapd-desktop-integration/391",
+        "fstype": "squashfs",
+        "size": "828K",
+        "rota": false,
+        "tran": null,
+        "model": null
+      },
+      {
+        "name": "sda",
+        "mountpoint": null,
+        "fstype": null,
+        "size": "1.8T",
+        "rota": true,
+        "tran": "sata",
+        "model": "ST2000DM005-2CW102",
+        "children": [
+          {
+            "name": "sda1",
+            "mountpoint": null,
+            "fstype": "ntfs",
+            "size": "931.6G",
+            "rota": true,
+            "tran": null,
+            "model": null
+          },
+          {
+            "name": "sda2",
+            "mountpoint": null,
+            "fstype": "ntfs",
+            "size": "247.8G",
+            "rota": true,
+            "tran": null,
+            "model": null
+          },
+          {
+            "name": "sda3",
+            "mountpoint": null,
+            "fstype": "ntfs",
+            "size": "683.6G",
+            "rota": true,
+            "tran": null,
+            "model": null
+          }
+        ]
+      },
+      {
+        "name": "nvme1n1",
+        "mountpoint": null,
+        "fstype": null,
+        "size": "953.9G",
+        "rota": false,
+        "tran": "nvme",
+        "model": "INTEL SSDPEKNW010T8",
+        "children": [
+          {
+            "name": "nvme1n1p1",
+            "mountpoint": null,
+            "fstype": "ntfs",
+            "size": "529M",
+            "rota": false,
+            "tran": "nvme",
+            "model": null
+          },
+          {
+            "name": "nvme1n1p2",
+            "mountpoint": null,
+            "fstype": "vfat",
+            "size": "100M",
+            "rota": false,
+            "tran": "nvme",
+            "model": null
+          },
+          {
+            "name": "nvme1n1p3",
+            "mountpoint": null,
+            "fstype": null,
+            "size": "16M",
+            "rota": false,
+            "tran": "nvme",
+            "model": null
+          },
+          {
+            "name": "nvme1n1p4",
+            "mountpoint": null,
+            "fstype": "ntfs",
+            "size": "952.7G",
+            "rota": false,
+            "tran": "nvme",
+            "model": null
+          },
+          {
+            "name": "nvme1n1p5",
+            "mountpoint": null,
+            "fstype": "ntfs",
+            "size": "544M",
+            "rota": false,
+            "tran": "nvme",
+            "model": null
+          }
+        ]
+      },
+      {
+        "name": "nvme0n1",
+        "mountpoint": null,
+        "fstype": null,
+        "size": "931.5G",
+        "rota": false,
+        "tran": "nvme",
+        "model": "WDC WDS100T2B0C-00PXH0",
+        "children": [
+          {
+            "name": "nvme0n1p1",
+            "mountpoint": "[SWAP]",
+            "fstype": "swap",
+            "size": "119.2G",
+            "rota": false,
+            "tran": "nvme",
+            "model": null
+          },
+          {
+            "name": "nvme0n1p2",
+            "mountpoint": null,
+            "fstype": null,
+            "size": "1K",
+            "rota": false,
+            "tran": "nvme",
+            "model": null
+          },
+          {
+            "name": "nvme0n1p5",
+            "mountpoint": "/boot",
+            "fstype": "ext4",
+            "size": "1.9G",
+            "rota": false,
+            "tran": "nvme",
+            "model": null
+          },
+          {
+            "name": "nvme0n1p6",
+            "mountpoint": "/home",
+            "fstype": "ext4",
+            "size": "663.7G",
+            "rota": false,
+            "tran": "nvme",
+            "model": null
+          },
+          {
+            "name": "nvme0n1p7",
+            "mountpoint": "/",
+            "fstype": "ext4",
+            "size": "146.7G",
+            "rota": false,
+            "tran": "nvme",
+            "model": null
+          }
+        ]
+      }
+    ]
+  },
+  "cpu": "CPU(s):                                  24\nModel name:                              Intel(R) Core(TM) i9-9920X CPU @ 3.50GHz\nThread(s) per core:                      2\nL3 cache:                                19.3 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-23",
+  "memory": "MemTotal:       131575964 kB\nMemAvailable:   118983428 kB\nHugePages_Total:       0",
+  "cpu_governor": "powersave",
+  "transparent_hugepages": "always [madvise] never",
+  "storage_bandwidth": {
+    "size_mib": 2048,
+    "pread_4m_single_thread_mbps": 1991.0181902927768,
+    "pread_o_direct": true
+  },
+  "cufile_probe": {
+    "schema_version": 1,
+    "evidence_class": "measured_environment_probe",
+    "file": "/home/truppy/models/.supervram-cufile-bq5r8bst",
+    "bytes": 1073741824,
+    "chunk_bytes": 4194304,
+    "nvidia_fs_kernel_module": false,
+    "cuda_device_count": 1,
+    "cuda_device_name": "NVIDIA GeForce RTX 3090",
+    "cufile_driver_open_ok": true,
+    "nvfs_major": 0,
+    "nvfs_minor": 0,
+    "nvfs_dstatusflags": 0,
+    "nvfs_dcontrolflags": 2,
+    "nvfs_max_direct_io_size_kb": 16384,
+    "nvfs_nvme_supported": false,
+    "nvfs_compat_mode_allowed": true,
+    "max_device_cache_size_kb": 131072,
+    "max_device_pinned_mem_size_kb": 33554432,
+    "cufile_compat_mode_inferred": true,
+    "baseline_o_direct": true,
+    "baseline_pread_h2d_ok": true,
+    "baseline_pread_h2d_gbps": 1.75556,
+    "cufile_buf_register_ok": true,
+    "cufile_read_ok": true,
+    "cufile_read_gbps": 1.80082,
+    "cufile_data_matches_pread": true,
+    "verdict": "cufile_compat_mode_host_bounce"
+  },
+  "generic_probe": {
+    "schema_version": 1,
+    "evidence_class": "measured_environment_probe",
+    "host": {
+      "node": "truppy-MS-7A90",
+      "kernel": "6.8.0-138-generic",
+      "machine": "x86_64"
+    },
+    "target_path": "/home/truppy/models",
+    "mount": {
+      "mountpoint": "/home",
+      "mount_options": "rw,relatime",
+      "filesystem": "ext4",
+      "source": "/dev/nvme0n1p6"
+    },
+    "nvidia_smi": {
+      "available": true,
+      "returncode": 2,
+      "stdout": "Field \"bar1.memory.total\" is not a valid field to query.",
+      "stderr": ""
+    },
+    "nvidia_topology": {
+      "available": true,
+      "returncode": 0,
+      "stdout": "\u001b[4mGPU0\tCPU Affinity\tNUMA Affinity\tGPU NUMA ID\u001b[0m\nGPU0\t X \t0-23\t0\t\tN/A\n\nLegend:\n\n  X    = Self\n  SYS  = Connection traversing PCIe as well as the SMP interconnect between NUMA nodes (e.g., QPI/UPI)\n  NODE = Connection traversing PCIe as well as the interconnect between PCIe Host Bridges within a NUMA node\n  PHB  = Connection traversing PCIe as well as a PCIe Host Bridge (typically the CPU)\n  PXB  = Connection traversing multiple PCIe bridges (without traversing the PCIe Host Bridge)\n  PIX  = Connection traversing at most a single PCIe bridge\n  NV#  = Connection traversing a bonded set of # NVLinks",
+      "stderr": ""
+    },
+    "libcufile": "libcufile.so.0",
+    "gdscheck": null,
+    "iommu_enabled": false,
+    "pci_devices": [
+      {
+        "bdf": "0000:02:00.0",
+        "class": "0x010802",
+        "vendor": "0x15b7",
+        "device": "0x5009",
+        "numa_node": "0",
+        "iommu_group": null
+      },
+      {
+        "bdf": "0000:07:00.0",
+        "class": "0x010802",
+        "vendor": "0x8086",
+        "device": "0xf1a8",
+        "numa_node": "0",
+        "iommu_group": null
+      },
+      {
+        "bdf": "0000:65:00.0",
+        "class": "0x030000",
+        "vendor": "0x10de",
+        "device": "0x2204",
+        "numa_node": "0",
+        "iommu_group": null
+      }
+    ],
+    "direct_io_open_test": {
+      "supported": true,
+      "error": null,
+      "note": "O_DIRECT open succeeded; aligned data I/O was not validated"
+    },
+    "gds_candidate": false,
+    "gds_rejection_reasons": [
+      "no NVIDIA GPU/driver visible"
+    ],
+    "recommended_backend": "pread",
+    "notes": [
+      "A candidate result is not proof that cuFile device DMA works; run gdscheck and the transfer microbenchmark on the target host.",
+      "Resizable BAR and BAR1 size do not independently establish GDS support.",
+      "ACS/IOMMU and PCIe root-complex topology must be checked on the target host."
+    ]
+  },
+  "notes": [
+    "cuFile in compatibility mode bounces through host memory; it is not SSD-to-VRAM DMA.",
+    "Bandwidth numbers are short single-file tests and may be affected by concurrent I/O."
+  ]
+}

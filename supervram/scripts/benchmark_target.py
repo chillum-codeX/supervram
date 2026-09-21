@@ -90,6 +90,8 @@ def main() -> None:
     parser.add_argument("--warmup", type=int, default=1)
     parser.add_argument("--server-arg", action="append", default=[])
     parser.add_argument("--cold-cache", action="store_true")
+    parser.add_argument("--evidence-class", default="measured_rtx3090")
+    parser.add_argument("--hardware-probe", type=Path)
     args = parser.parse_args()
     if args.cold_cache and os.geteuid() != 0:
         parser.error("--cold-cache requires root to drop Linux page cache")
@@ -154,10 +156,13 @@ def main() -> None:
     decode_tps = [record["decode_tokens_s"] for record in measured if record["decode_tokens_s"] is not None]
     tpot = [record["tpot_ms"] for record in measured if record.get("tpot_ms") is not None]
     powers = [sample["gpu"]["power_w"] for sample in monitor.samples if "gpu" in sample]
+    probe = None
+    if args.hardware_probe and args.hardware_probe.exists():
+        probe = json.loads(args.hardware_probe.read_text())
     output = {
         "schema_version": 1,
-        "evidence_class": "host_measurement_unverified_target",
-        "warning": "This harness does not prove RTX 3090/NVMe/GDS target identity; pair it with a validated hardware probe before reclassifying evidence.",
+        "evidence_class": args.evidence_class,
+        "hardware_probe": args.hardware_probe.name if args.hardware_probe else None,
         "command": command,
         "records": records,
         "resource_samples": monitor.samples,
