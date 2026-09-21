@@ -1,0 +1,8 @@
+Write a Python function that parses a CSV file and returns the average of each numeric column, handling missing values gracefully.
+Explain how photosynthesis works, step by step, and why it matters for the global carbon cycle.
+Once upon a time in a small village by the sea, an old lighthouse keeper discovered something strange washed up on the shore.
+Translate the following sentence into French, German and Spanish and explain the grammar differences: The quick brown fox jumps over the lazy dog.
+Solve this problem carefully: A train leaves a station at 3 pm traveling 60 km/h. A second train leaves the same station at 4 pm traveling 90 km/h. When does the second train catch up?
+List the main causes of the French Revolution and discuss how they compare with the causes of the American Revolution.
+Compare the advantages and disadvantages of microservice architecture versus a monolith for a startup with five engineers.
+Summarize the plot of Hamlet in a paragraph, then explain what the ghost represents.
