@@ -19,11 +19,14 @@ SuperVRAM is an experimental SSD-backed heterogeneous tensor-storage project for
 ## Local validation
 
 ```bash
-cd /home/novix/workspace/project
-./entrypoint.sh
+cd project
+./entrypoint.sh                 # CPU checks only
+SUPERVRAM_CUDA=1 ./entrypoint.sh  # also builds third_party/llama.cpp/build-3090 with CUDA
 ```
 
-This environment has no NVIDIA GPU and is backed by NFS, so generated performance files are explicitly marked as synthetic replay or analytical projection. They are not RTX 3090/NVMe results.
+Overrides: `SUPERVRAM_PYTHON`, `CC`, `CXX`, `SUPERVRAM_JOBS`, `SUPERVRAM_CUDA_ARCH`, `SUPERVRAM_RESULTS`.
+
+Files under `results/reproduced/` and `results/*.json` from the simulator and roofline are synthetic replay or analytical projection. Target measurements live under `results/rtx3090/` and carry `evidence_class: measured_rtx3090`.
 
 ## Core policy smoke test
 
@@ -50,6 +53,14 @@ The patch is in `patches/0001-qwen3-moe-mmap-expert-storage.patch`. The working 
 cmake -S third_party/llama.cpp -B third_party/llama.cpp/build-supervram -G Ninja \
   -DGGML_CUDA=OFF -DLLAMA_BUILD_TESTS=ON -DLLAMA_BUILD_EXAMPLES=OFF
 cmake --build third_party/llama.cpp/build-supervram --target test-arg-parser test-llama-archs llama-bench
+```
+
+CUDA build for the RTX 3090 (UI assets disabled to avoid the network fetch):
+
+```bash
+cmake -S third_party/llama.cpp -B third_party/llama.cpp/build-3090 -G Ninja \
+  -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=86 -DLLAMA_BUILD_TESTS=ON -DLLAMA_BUILD_SERVER=ON -DLLAMA_BUILD_UI=OFF
+cmake --build third_party/llama.cpp/build-3090 --target llama-server llama-bench llama-cli llama-perplexity test-backend-ops
 ```
 
 The library API uses:
