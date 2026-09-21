@@ -7,7 +7,7 @@ Everything lives under `/home/truppy/Downloads/workspace/project/supervram/`. Mo
 
 | What | Where |
 |---|---|
-| Patches to llama.cpp (apply 0001 to 0005 in order to `ce8caa6`) | `patches/` |
+| Patches to llama.cpp (apply 0001 to 0006 in order to `ce8caa6`) | `patches/` |
 | The same 23 modified/added llama.cpp files, readable and tracked | `llama_cpp_modified/` (refresh: `scripts/sync_llama_cpp_modified.sh`) |
 | The working llama.cpp checkout and CUDA build | `third_party/llama.cpp/`, `third_party/llama.cpp/build-3090/` |
 | Test/measurement tool (`svram-verify`) | `src/svram_verify.cpp`, built to `build/svram-verify` |

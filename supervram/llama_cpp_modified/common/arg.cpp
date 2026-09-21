@@ -259,6 +259,9 @@ static void parse_tensor_buffer_overrides(const std::string & value, std::vector
         if (buft) {
             buft_list[ggml_backend_buft_name(buft)] = buft;
         }
+        if (auto * hbuft = ggml_backend_dev_host_buffer_type(dev)) {
+            buft_list[ggml_backend_buft_name(hbuft)] = hbuft; // pinned host memory, e.g. CUDA_Host
+        }
     }
 
     for (const auto & override : string_split<std::string>(value, ',')) {

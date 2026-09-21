@@ -50,3 +50,7 @@
 # patches/0005-prompt-batches-bypass-cache-and-stream-direct.patch (applies on top of 0004)
  ggml/src/ggml-backend.cpp | 160 +++++++++++++++++++++++++++++++++++++++-------
  1 file changed, 138 insertions(+), 22 deletions(-)
+
+# patches/0006-override-tensor-pinned-host-buffer.patch (applies on top of 0005)
+ common/arg.cpp | 3 +++
+ 1 file changed, 3 insertions(+)
