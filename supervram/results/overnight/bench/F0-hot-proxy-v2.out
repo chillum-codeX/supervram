@@ -1,0 +1,519 @@
+warm_start_ms=1793 (before prefill)
+mode=resident ngl=999 cpu_moe=0 n_cpu_moe=0 cache_mib=14336 prompt_tokens=32000 generated=4096 load_ms=2364 prompt_ms=22969.4 decode_tps=67.08
+cache_stats accesses=1572544 hits=1556871 misses=15673 evictions=11493 hit_rate=99.0 bytes_h2d=57620201472 n_slots=8928 host_ms=389.9
+direct_io_stats bytes_ssd=0 io_ms=0.0
+tokens=279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270,279,3250,5036,323,279,2750,525,279,48820,382,32313,11,358,1184,311,3270
+logits_hash_step0=bc1e08d6d84ab05d
+text= the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write the column names and the values are the averages.
+
+Okay, I need to write

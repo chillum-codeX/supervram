@@ -1,0 +1,193 @@
+warm_start_ms=1791
+mode=resident ngl=999 cpu_moe=0 n_cpu_moe=0 cache_mib=14336 prompt_tokens=32000 generated=4096 load_ms=2406 prompt_ms=33811.4 decode_tps=32.79
+cache_stats accesses=1572544 hits=1521112 misses=51432 evictions=22598 hit_rate=96.7 bytes_h2d=113460609024 n_slots=8928 host_ms=14101.2
+direct_io_stats bytes_ssd=0 io_ms=0.0
+tokens=16141,1447,785,9705,5707,15817,18821,389,60317,3070,654,3029,7208,334,3941,5248,15409,2670,8514,7611,4566,17519,2200,476,12235,7375,1075,3070,61871,55419,13474,8819,97219,438,1632,438,389,14340,5942,1667,5257,1182,1412,1741,438,3070,5002,3140,97219,3070,18416,3140,334,320,49099,701,323,1008,11773,18906,38337,2670,24311,31789,35,9745,323,15611,594,825,7082,5980,5942,382,565,5309,52200,510,16,30543,158,225,96,8514,40069,198,12,66446,4752,4566,17519,2200,304,1196,3550,624,12,36617,19502,369,5312,62150,13455,24132,6773,21,19,8273,23,64,17646,448,10101,26349,12278,15469,30803,1824,624,12,25954,10295,315,4303,39277,8357,4766,23853,1667,362,3506,12528,11293,382,17,30543,158,225,96,11261,54025,6841,1412,198,12,70425,16807,19163,38337,25,715,256,481,5264,3140,369,2410,54883,70403,715,256,481,16079,3140,320,603,7082,8,448,15611,22670,1824,198,256,481,85864,609,19206,1526,3151,5392,58358,2303,256,481,24311,31789,35,9745,25262,6733,18611,18,30543,158,225,96,10816,609,7854,18626,59445,510,257,7288,62665,11221,311,6505,21737,3941,2155,10085,288,13,2303,257,7288,28262,1936,8042,11,4573,7332,11,323,81178,40791,311,1817,5339,13,2303,257,7288,356,8078,6546,2606,448,40841,911,862,5421,389,5068,14,18331,3147,382,19,30543,158,225,96,20651,57739,55519,510,414,82706,97,36765,65004,41338,12538,3118,389,3671,16928,624,414,82706,97,5443,315,27076,20186,1075,825,35,9745,476,65269,5066,422,12567,369,33340,6172,7525,624,414,82706,97,17439,12010,6325,3183,7068,11250,6325,11320,19777,429,16417,975,32685,13444,3941,2500,4963,382,20,30543,158,225,96,41682,65,50240,609,11091,3173,45765,510,981,51414,245,7718,80975,10820,3156,448,65760,14830,320,68,1302,2572,11589,4938,13388,4292,981,51414,245,81561,2163,13295,18422,323,27362,13694,2550,504,5257,6813,2670,279,5579,13617,5577,382,21,30543,158,225,96,9785,1506,44465,59037,29734,1447,565,1752,8886,55260,271,14374,11162,100,254,3070,13253,36620,37843,334,508,2461,12853,19264,921,12,3874,55136,1246,19911,525,29139,1667,40164,12313,25185,198,12,70425,2213,22314,23783,2670,4718,17984,11,11134,21892,715,12,18006,1735,1246,32711,10010,525,16507,3118,389,3811,14389,198,12,12309,279,43893,2884,49445,6358,1119,12460,1186,24594,271,14374,63039,94,3070,4086,44,6841,1412,34807,1019,16,13,5264,3140,481,1752,2410,54883,70403,198,17,13,16079,3140,481,15611,5980,5942,715,18,13,85864,10270,21323,481,8162,15409,320,19552,3126,340,19,13,24311,31789,35,9745,220,481,30097,8040,369,19072,92844,65475,2303,20,13,356,12003,1365,39560,408,451,6325,1824,1526,50607,594,65894,2303,21,13,17768,6222,7612,1365,431,27629,19625,17646,3151,81178,18611,4854,19163,3772,5610,13713,11221,11,7248,4119,14,30448,8040,11,5068,62019,323,10431,10295,382,565,2806,480,19710,57137,95109,1447,14374,25521,227,8514,28262,82,510,256,7288,17519,2200,1936,16928,448,9867,14340,4573,624,256,7288,362,3506,17590,369,60317,10500,311,7611,624,256,7288,9186,369,2176,39277,11320,4566,17519,2200,12528,476,46137,62486,82,1667,8514,18563,35700,382,14374,2858,248,247,30543,14340,67118,510,262,7288,28811,1182,1412,2670,13940,1172,22111,448,10101,22670,30803,624,262,7288,739,24472,5579,13713,8502,320,68,1302,2572,5264,3140,11788,4292,262,7288,5443,315,40549,23853,311,39721,6505,3941,2155,1582,3630,382,565,5309,44465,59037,36146,55994,287,1447,91,11113,760,7662,9248,91,513,91,19528,7360,91,1565,654,3029,7208,63,760,9518,6733,9705,18202,678,6200,4419,323,92080,9248,91,1565,5834,21324,63,760,62665,1936,15966,3941,5257,15409,2670,356,8078,2606,323,5312,62150,13455,27193,9248,91,1565,14120,70020,14,30933,3140,21324,7808,4992,56270,17458,18906,1182,1412,9705,44193,8129,3565,9248,62827,23,21,12,21,19,17646,48349,198,17911,5980,3671,37764,198,49,27629,19625,1824,4566,17768,6222,7612,271,785,2197,17045,438,264,15817,5785,11376,429,14521,537,1101,279,10916,13566,714,1083,5646,14976,990,5048,11,68671,10414,13,1084,374,32930,304,264,1616,429,6147,13402,311,6157,1477,9760,1995,3118,389,862,3151,5339,8502,1393,8241,5538,10916,25709,1119,1817,19163,8129,382,27489,11,419,374,458,16376,8474,18202,4558,1449,12893,315,24931,3070,654,3029,7208,334,389,6481,24231,77235,504,6371,7611,705,1526,1550,13068,975,74628,12613,15235,23583,11373,9079,29720,624,151668,271,2,66863,21517,315,444,80001,7208,66292,12712,271,1986,11682,9705,5707,835,4686,13068,18821,369,60317,3070,654,3029,7208,97219,458,11050,356,1027,2635,315,279,444,8747,4835,1614,11,3941,5248,15409,2670,8514,7611,1667,17519,2200,476,27076,7375,1075,279,82055,13474,8819,11,438,1632,438,14340,5942,34888,5257,1182,1412,1741,438,5264,3140,320,1958,2410,54883,70403,701,16079,3140,320,49099,701,85864,10270,21323,320,26567,8,448,24311,31789,35,9745,81178,369,19072,92844,65475,382,44364,565,11162,241,234,5309,52200,1447,14374,220,16,30543,158,225,96,3070,21831,40069,1019,12,51318,5413,311,1936,323,1598,93676,7208,5961,2878,17519,2200,553,76482,1181,9867,14340,4573,624,12,36617,19502,40791,369,5312,62150,13455,24132,6773,21,19,8273,23,64,17646,448,10101,26349,12278,15469,30803,1824,8970,4566,1565,22254,2668,10102,867,915,5863,40,28,711,18639,12,85401,973,4303,39277,8357,4766,23853,1667,362,3506,12528,11293,323,70749,10295,15860,62486,82,5798,4566,8514,18563,35700,892,16282,308,7887,448,3671,4963,13,4710,14374,220,17,30543,158,225,96,3070,28501,54025,6841,1412,9186,1019,785,8474,14521,16807,19163,38337,510,256,481,25521,227,353,5002,3140,9,1365,1752,2410,54883,70403,198,256,481,2858,248,247,30543,353,18416,3140,9,1365,15611,5980,5942,715,256,481,95069,98,353,53,60538,10270,21323,9,1365,8162,15409,2303,256,481,63039,94,353,57705,31789,35,9745,9,4142,30097,8040,11689,6188,369,19072,92844,65475,18611,4854,3772,5646,13713,11221,11,7248,4119,14,30448,8040,11,5068,62019,3156,448,10431,10295,429,525,16587,304,73042,1614,44378,389,1846,77235,382,44364,565,11162,100,254,8979,36620,37843,508,2461,12853,19264,921,1986,374,264,12235,3772,429,14758,1246,19911,525,29139,1667,40164,12313,25185,311,11140,23962,1741,438,4718,14389,476,11874,12681,9492,2163,729,6738,476,32711,10010,382,1592,13566,2924,1447,14374,9518,27801,13664,510,12,3070,35,68657,42451,95518,38823,1565,35597,15850,17052,63,311,10542,4185,62576,2687,13554,288,1948,2155,3811,10795,624,12,3070,20613,18320,95518,33287,82,5916,323,13391,23962,1483,553,279,6236,3749,320,68,1302,2572,30586,91,2468,91,29,7808,30586,91,408,91,43626,4292,12,3070,2762,74789,334,549,70050,2213,2878,1493,10820,22711,624,12,84848,2884,61749,6358,1119,12460,1186,24594,1075,1565,93221,38229,287,7808,1565,93221,7495,7808,323,1565,93221,39723,62338,14374,14355,57353,609,55713,198,2132,1083,5707,458,23251,315,5257,5392,8098,19856,2670,1447,16,13,4718,55575,25,5712,829,7952,4766,264,4718,5944,198,17,13,21494,23929,25356,25,5712,829,4889,4718,714,5977,4994,304,432,715,18,13,21494,23929,16592,45522,25,11733,729,5036,323,5693,5036,4994,438,11874,11297,9492,4710,785,3233,36620,5711,39221,3005,17646,1380,1817,3692,374,8480,369,1181,1828,6358,323,6729,8086,3118,389,16507,12624,504,279,1946,19911,382,44364,565,95069,100,10816,609,7854,18626,59445,271,1986,949,6081,15817,11221,40791,369,2155,10085,21737,11,18202,5871,19543,11,356,8078,32383,11,1936,8042,448,40841,911,862,5421,389,5068,14,18331,3147,382,1592,3501,26366,1588,525,510,256,7288,62665,6505,15966,3941,5248,15409,1741,438,34960,476,5515,220,16,15,1667,40549,23853,476,9867,7375,624,256,7288,28262,4573,7332,429,7802,1246,4119,525,6661,518,15592,384,1302,2572,6243,705,5264,3140,7102,8194,14876,12440,11649,5193,1849,6546,624,256,7288,9785,25262,12538,1075,27362,3151,10001,26012,28654,22254,2668,920,12003,39637,50,32881,892,1231,7269,5068,11941,1212,3654,11773,4682,320,4803,979,1667,12990,5980,451,6325,3593,44364,565,11162,241,230,20651,57739,55519,271,785,9705,65059,73042,44378,4628,1526,3807,5413,510,12,3070,66862,6691,1664,27456,287,95518,64944,13289,553,3671,943,26,384,1302,2572,76482,825,7082,594,33340,20186,320,68,1302,2572,825,35,9745,8,369,15611,65475,6165,24311,18906,81178,4566,31789,35,9745,198,12,3070,20358,12010,6325,10270,7068,11250,6325,30928,81689,95518,89006,7982,315,975,32685,3941,2500,4963,304,25283,15860,3460,12934,1614,71542,198,12,3070,10642,9551,25704,334,549,81561,2163,11589,4938,16982,5310,2989,979,14550,448,8131,4119,311,5358,506,1898,5975,2337,11320,34430,4710,14374,13383,30097,8040,85148,291,29734,510,73594,46216,198,2,1752,16079,3140,54192,22111,24132,15611,70403,715,1533,56698,2668,11399,3140,1400,16,21,28,711,671,76316,33551,16,21,16052,369,4650,4628,454,271,2,2925,18768,8217,6529,16953,311,7949,4938,10431,323,10767,5263,63762,11649,389,279,1614,17646,1483,198,13874,19324,9485,8042,14,18616,2138,13402,311,51043,32383,3118,389,862,3151,990,1142,8502,1393,22573,22823,49449,315,16533,11773,16928,382,44364,565,51414,245,41682,65,50240,609,11091,3173,45765,271,1986,3772,14230,4185,80975,23057,2337,23172,1447,14374,7718,36443,96337,609,21766,343,804,510,256,481,81857,13713,476,7402,11788,6388,311,4641,17465,624,256,481,77995,4714,1948,2155,10795,315,19543,1741,438,5264,3140,26623,82,14381,15592,27850,624,256,481,20651,10936,34191,14553,4152,311,39986,6546,5003,27887,44378,4628,382,785,8474,5707,91078,7354,2670,13295,18422,504,5257,13617,320,12521,11,6733,11,3766,701,27362,13694,16275,1526,4573,7332,1075,1565,22254,2668,8419,17415,7808,323,1667,55086,7375,18250,2878,7248,1182,1412,320,68,1302,2572,1565,313,17308,24194,63,2999,369,27228,6113,451,6325,3593,44364,565,11162,241,99,9785,1506,44465,59037,36146,55994,287,271,91,11113,760,7662,9248,91,513,91,19528,7360,91,3070,654,3029,7208,334,760,9518,6733,9705,18202,678,6200,4419,2670,3210,8447,3749,2606,11,2500,4119,19856,1824,4992,13,9248,91,3070,5834,21324,334,760,62665,1936,15966,3941,5257,15409,448,356,8078,2606,40841,13,1096,374,7565,369,5489,3330,1119,54220,2526,22111,40791,6974,3151,3880,13,9248,91,3070,14120,70020,23540,2277,334,760,17458,18906,19163,9705,44193,8129,3565,16587,369,8660,1246,1817,19163,83161,448,279,3468,1849,748,4963,29720,35721,49574,1052,525,14158,21080,389,856,23,21,12,21,19,17646,48349,323,30486,5980,3671,37764,3156,448,431,27629,19625,1824,4566,17768,6222,7612,892,2578,387,9760,11649,5193,2169,23172,11773,16928,382,44364,565,25521,227,73877,271,1986,15817,8474,17045,537,1172,438,264,10916,11376,714,1083,6081,14976,990,5048,25283,3259,432,55093,5101,5310,12831,429,432,14521,4558,1449,12893,315,24931,93676,7208,389,6481,24231,77235,23994,504,6371,7611,311,1550,13068,975,74628,12613,15235,23583,11373,9079,29720,382,785,2197,594,32930,5486,6147,13402,6157,1477,9760,1995,3118,389,862,5339,8502,1393,8241,5538,25709,1119,1817,19163,8129,22573,10876,17590,11364,75553,315,16533,11773,11799,3941,2155,60851,1741,438,8514,6165,14340,476,5515,21737,34888,16807,22670,14310,320,45,29352,11,24311,11,15611,568,4710,2132,13444,38973,6540,32151,1948,31787,13566,315,1614,23172,323,1931,30084,8357,553,10004,2176,88228,6540,16263,91078,9904,27020,14260,11513,16601,2337,5042,71542,27362,10596,4401,24484,323,803,14720,44378,19554,304,5670,5003,13,11162,248,222,144232,1,0,50994,2428,1110,3642,86562,905,51392,12,16,20,15,22,16,18,24,17,22,18,23,24,18,1455,69,17,15,65,19,66,22,65,24,64,20,30,3902,91662,5,6276,19535,887,62047,28,16,20,15,62735,28,23,15,8,330,8958,0,50994,2428,1110,3642,86562,905,51392,12,16,21,19,19,21,23,19,21,23,24,18,21,17,1737,69,4385,638,1859,5305,823,30,3902,91662,5,6276,19535,887,62047,28,16,20,15,62735,28,23,15,8,330,8958,0,50994,2428,1110,3642,86562,905,51392,12,16,20,22,17,23,24,24,22,19,18,20,17,21,1455,67,370,3632,68,22,90749,18,30,941,2740,28,10681,12,19,13,15,13,18,5,941,307,49682,89,32,4360,39,41,85,56,76,37,73,43,54,57,82,81756,53,86,6226,87,273,48,5,3902,91662,7672,6276,19535,887,62047,25353,71,25353,80,7846,36,17,4,1706,4,9548,39798,17,4,1706,52585,22,39798,1867,36,4,6029,54643,840,88,34,70,44,75,33,79,45,77,42,83,73,46,80,35,74,35,79,41,81,52,74,49,76,40,72,56,77,45,66,38,89,50,67,55,78,47234,47,40955,85,51,75,39,71,49,86,42,84,51,12125,83589,52,64,33,74,44,70,53,9770,82,48,75,37,70,46,78,55,71,53,14377,72,34,86749,80,54,83,47,71872,88,43,69265,68,11475,38,88,2304,79759,22493,24765,36096,1359,65,4416,2124,45,66,18846,50,65,2679,10611,42799,37,76,48,81,50730,31541,11908,57,90363,15764,85,2324,46788,38872,52793,5066,81856,1654,45421,1427,11578,20291,68205,7994,54,87,64725,61073,22373,8747,6639,623,91059,3357,19462,11654,21634,8847,35544,2753,44819,10673,22715,42327,1143,2589,45351,25612,3326,693,2120,55999,21999,5404,56494,22571,31874,3533,1249,6406,1925,55999,41887,22560,6582,7339,16193,45351,1514,32904,2195,52279,70630,2016,7125,2101,1001,693,21685,82968,91879,59808,55535,45421,8813,80788,4262,46841,56715,58028,22715,4416,47978,7823,29535,764,10850,66308,2082,30416,6828,46,86,1514,8,330,8958,0,50994,2428,1110,3642,86562,905,51392,12,16,21,19,23,15,18,19,24,20,24,21,15,18,1737,346,2577,6066,69,22,68,19,17,30,941,2740,28,10681,12,19,13,15,13,18,5,941,307,49682,89,32,4360,39,41,85,56,76,37,73,43,54,57,82,81756,53,86,6226,87,273,48,5,3902,91662,7672,6276,19535,887,62047,25353,71,25353,80,7846,36,17,4,1706,4,9548,39798,17,4,1706,52585,22,39798,1867,36,4,6029,54643,840,88,34,70,44,75,33,79,45,77,42,83,73,46,80,35,74,35,79,41,81,52,74,49,76,40,72,56,77,45,66,38,89,50,67,55,78,47234,47,40955,85,51,75,39,71,49,86,42,84,51,12125,83589,52,64,33,74,44,70,53,9770,82,48,75,37,70,46,78,55,71,53,14377,72,34,86749,80,54,83,47,71872,88,43,69265,68,11475,38,88,2304,79759,22493,24765,36096,1359,65,4416,2124,45,66,18846,50,65,2679,10611,42799,37,76,48,81,50730,31541,11908,57,90363,15764,85,2324,46788,38872,52793,5066,81856,1654,45421,1427,11578,20291,68205,7994,54,87,64725,61073,22373,8747,6639,623,91059,3357,19462,11654,21634,8847,35544,2753,44819,10673,22715,42327,1143,2589,45351,25612,3326,693,2120,55999,21999,5404,56494,22571,31874,3533,1249,6406,1925,55999,41887,22560,6582,7339,16193,45351,1514,32904,2195,52279,70630,2016,7125,2101,1001,693,21685,82968,91879,59808,55535,45421,8813,80788,4262,46841,56715,58028,22715,4416,47978,7823,29535,764,10850,66308,2082,30416,6828,46,86,1514,8,330,8958,0,50994,2428,1110,3642,86562,905,51392,12,16,21,15,18,23,23,19,22,24,24,20,20,19,5655,18,69,18,15,542,21,2577,8904,30,941,2740,28,10681,12,19,13,15,13,18,5,941,307,49682,89,32,4360,39,41,85,56,76,37,73,43,54,57,82,81756,53,86,6226,87,273,48,5,3902,91662,7672,6276,19535,887,62047,25353,71,25353,80,7846,36,17,4,1706,4,9548,39798,17,4,1706,52585,22,39798,1867,36,4,6029,54643,840,88,34,70,44,75,33,79,45,77,42,83,73,46,80,35,74,35,79,41,81,52,74,49,76,40,72,56,77,45,66,38,89,50,67,55,78,47234,47,40955,85,51,75,39,71,49,86,42,84,51,12125,83589,52,64,33,74,44,70,53,9770,82,48,75,37,70,46,78,55,71,53,14377,72,34,86749,80,54,83,47,71872,88,43,69265,68,11475,38,88,2304,79759,22493,24765,36096,1359,65,4416,2124,45,66,18846,50,65,2679,10611,42799,37,76,48,81,50730,31541,11908,57,90363,15764,85,2324,46788,38872,52793,5066,81856,1654,45421,1427,11578,20291,68205,7994,54,87,64725,61073,22373,8747,6639,623,91059,3357,19462,11654,21634,8847,35544,2753,44819,10673,22715,42327,1143,2589,45351,25612,3326,693,2120,55999,21999,5404,56494,22571,31874,3533,1249,6406,1925,55999,41887,22560,6582,7339,16193,45351,1514,32904,2195,52279,70630,2016,7125,2101,1001,693,21685,82968,91879,59808,55535,45421,8813,80788,4262,46841,56715,58028,22715,4416,47978,7823,29535,764,10850,66308,2082,30416,6828,46,86,1514,8,330,8958,0,50994,2428,1110,3642,86562,905,51392,12,16,21,15,18,23,23,19,22,24,24,20,20,19,5655,18,69,18,15,542,21,2577,8904,30,941,2740,28,10681,12,19,13,15,13,18,5,941,307,49682,89,32,4360,39,41,85,56,76,37,73,43,54,57,82,81756,53,86,6226,87,273,48,5,3902,91662,7672,6276,19535,887,62047,25353,71,25353,80,7846,36,17,4,1706,4,9548,39798,17,4,1706,52585,22,39798,1867,36,4,6029,54643,840,88,34,70,44,75,33,79,45,77,42,83,73,46,80,35,74,35,79,41,81,52,74,49,76,40,72,56,77,45,66,38,89,50,67,55,78,47234,47,40955,85,51,75,39,71,49,86,42,84,51,12125,83589,52,64,33,74,44,70,53,9770,82,48,75,37,70,46,78,55,71,53,14377,72,34,86749,80,54,83,47,71872,88,43,69265,68,11475,38,88,2304,79759,22493,24765,36096,1359,65,4416,2124,45,66,18846,50,65,2679,10611,42799,37,76,48,81,50730,31541,11908,57,90363,15764,85,2324,46788,38872,52793,5066,81856,1654,45421,1427,11578,20291,68205,7994,54,87,64725,61073,22373,8747,6639,623,91059,3357,19462,11654,21634,8847,35544,2753,44819,10673,22715,42327,1143,2589,45351,25612,3326,693,2120,55999,21999,5404,56494,22571,31874,3533,1249,6406,1925,55999,41887,22560,6582,7339,16193,45351,1514,32904,2195,52279,70630,2016,7125,2101,1001,693,21685,82968,91879,59808,55535,45421,8813,80788,4262,46841,56715,58028,22715,4416,47978,7823,29535,764,10850,66308,2082,30416,6828,46,86,1514,8,330,8958,0,50994,2428,1110,3642,86562,905,51392,12,16,21,19,23,15,18,19,24,20,24,21,15,18,1737,346,2577,6066,69,22,68,19,17,30,941,2740,28,10681,12,19,13,15,13,18,5,941,307,49682,89,32,4360,39,41,85,56,76,37,73,43,54,57,82,81756,53,86,6226,87,273,48,5,3902,91662,7672,6276,19535,887,62047,25353,71,25353,80,7846,36,17,4,1706,4,9548,39798,17,4,1706,52585,22,39798,1867,36,4,6029,54643,840,88,34,70,44,75,33,79,45,77,42,83,73,46,80,35,74,35,79,41,81,52,74,49,76,40,72,56,77,45,66,38,89,50,67,55,78,47234,47,40955,85,51,75,39,71,49,86,42,84,51,12125,83589,52,64,33,74,44,70,53,9770,82,48,75,37,70,46,78,55,71,53,14377,72,34,86749,80,54,83,47,71872,88,43,69265,68,11475,38,88,2304,79759,22493,24765,36096,1359,65,4416,2124,45,66,18846,50,65,2679,10611,42799,37,76,48,81,50730,31541,11908,57,90363,15764,85,2324,46788,38872,52793,5066,81856,1654,45421,1427,11578,20291,68205,7994,54,87,64725,61073,22373,8747,6639,623,91059,3357,19462,11654,21634,8847,35544,2753,44819,10673,22715,42327,1143,2589,45351,25612,3326,693,2120,55999,21999,5404,56494,22571,31874,3533,1249,6406,1925,55999,41887,22560,6582,7339,16193,45351,1514,32904,2195,52279,70630,2016,7125,2101,1001,693,21685,82968,91879,59808,55535,45421,8813,80788,4262,46841,56715,58028,22715,4416,47978,7823,29535,764,10850,66308,2082,30416,6828,46,86,1514,8,330,8958,0,50994,2428,1110,3642,86562,905,51392,12,16,21,19,23,15,18,19,24,20,24,21,15,18,1737,346,2577,6066,69,22,68,19,17,30,941,2740,28,10681,12,19,13,15,13,18,5,941,307,49682,89,32,4360,39,41,85,56,76,37,73,43,54,57,82,81756,53,86,6226,87,273,48,5,3902,91662,7672,6276,19535,887,62047,25353,71,25353,80,7846,36,17,4,1706,4,9548,39798,17,4,1706,52585,22,39798,1867,36,4,6029,54643,840,88,34,70,44,75,33,79,45,77,42,83,73,46,80,35,74,35,79,41,81,52,74,49,76,40,72,56,77,45,66,38,89,50,67,55,78,47234,47,40955,85,51,75,39,71,49,86,42,84,51,12125,83589,52,64,33,74,44,70,53,9770,82,48,75,37,70,46,78,55,71,53,14377,72,34,86749,80,54,83,47,71872,88,43,69265,68,11475,38,88,2304,79759,22493,24765,36096,1359,65,4416,2124,45,66,18846,50,65,2679,10611,42799,37,76,48,81,50730,31541,11908,57,90363,15764,85,2324,46788,38872,52793,5066,81856,1654,45421,1427,11578,20291,68205,7994,54,87,64725,61073,22373,8747,6639,623,91059,3357,19462,11654,21634,8847,35544,2753,44819,10673,22715,42327,1143,2589,45351,25612,3326,693,2120,55999,21999,5404
+logits_hash_step0=e07f99fd8d2fd90e
+text=Answer:
+
+The documentation provides comprehensive guidance on deploying **llama.cpp** across multiple platforms including Android devices via Termux or dedicated tools like **Snapdragon Toolchain**, as well as on Linux systems using various backends such as **OpenCL**, **SYCL** (Intel), and other hardware-specific implementations including AMD ZenDNN and Intel's oneAPI-based systems.
+
+## Key Highlights:
+1️⃣ Android Integration
+- Supports building via Termux in user space.
+- Provides scripts for cross-compilation targeting arm64-v8a architecture with optional KleidiAI acceleration support.
+- Includes examples of running CLI applications inside containers using ADB shell commands.
+
+2️⃣ Cross-platform Backends
+- Covers diverse backend implementations: 
+   - OpenCL for Adreno GPUs 
+   - SYCL (oneAPI) with Intel GPU support
+   - Vulkan & Metal through specific toolchains  
+   - AMD ZenDNN optimization library  
+
+3️⃣ Development & Build Setup Guides:
+     • Detailed instructions to setup environments across different OSes.  
+     • Specific build flags, environment variables, and optimizations tailored to each platform.  
+     • CMake configuration options with explanations about their impact on performance/compatibility.
+
+4️⃣ Performance Optimization Strategies:
+      ➤ Hardware-aware tuning techniques based on device capabilities.
+      ➤ Use of specialized libraries like oneDNN or AOCl DLP for optimized matrix operations.
+      ➤ Multi-GPU/multi-NPU execution modes that distribute workloads effectively across available resources.
+
+5️⃣ Troubleshooting & Debugging Assistance:
+       ❗ Common pitfalls identified along with mitigation strategies (e.g., handling memory limits).
+       ❗ Guidance around checking logs and enabling verbose output from various components including the driver layers themselves.
+
+6️⃣ Specialized Documentation Sections Include:
+
+## For Each Backend
+
+### 🧠 **Auto-parser Architecture** [For Chat Templates]
+- Describes how templates are analyzed using differential comparison algorithms
+- Covers content parsing mechanisms including JSON detection, marker identification 
+- Explains how reasoning blocks are detected based on template structures
+- Details the modular design separating analysis into distinct sub-components
+
+### 💡 **LLM Backends Overview**
+1. OpenCL - For Adreno GPUs
+2. SYCL - Intel-based systems 
+3. Vulkan/Metal - Apple platforms (MacOS)
+4. AMD ZenDNN  - Optimizations for EPYC CPUs  
+5. CANN – Ascend NPU support through Huawei's toolkit  
+6. ET-SOC – RISC-V architecture specific optimizations  
+
+Each backend section contains installation instructions, supported models/quantizations, performance benchmarks and usage examples.
+
+## Notable Features Across Platforms:
+
+### ✅ Android Specifics:
+   • Termux build capabilities with native Linux environment.
+   • ADB integration for deploying apps to devices.
+   • Support for both CLI execution via Termux shell or packaged APKs using Android Studio bindings.
+
+### ⚙️ Linux Builds:
+    • Multiple backends including CPU only builds with optional GPU acceleration.
+    • System-wide driver installation requirements (e.g., OpenCL drivers).
+    • Use of Docker containers to simplify setup across different distros.
+
+## Key Documentation Sections Worth Highlighting:
+
+| Section | Description |
+|--------|-------------|
+| `llama.cpp` | Core library documentation covering all core features and functionalities |
+| `build.md` | Detailed build procedures across various platforms including CMake options and cross-compilation guides |
+| `docs/backend/OPENCL.md`, etc.| Platform-specific backends documentation detailing implementation details |
+|x86-64 architecture specifics
+ARM-based device considerations
+RISC-V support via ET-SOC
+
+The document serves as a comprehensive reference manual that covers not just the technical aspects but also includes practical use cases, troubleshooting tips. It is structured in a way that allows developers to quickly find relevant information based on their specific platform requirements while providing deep technical insights into each backend implementation.
+
+Overall, this is an extensive guide covering almost every aspect of implementing **llama.cpp** on modern computing architectures from mobile devices up through high-end workstations supporting AI inferencing tasks efficiently.
+</think>
+
+# Comprehensive Summary of Llama.cpp Deployment Guide
+
+This detailed documentation provides end-to-end guidance for deploying **llama.cpp**, an efficient C++ port of the LLaMA model, across multiple platforms including Android devices using Termux or specialized tools like the Snapdragon Toolchain, as well as Linux systems utilizing various backends such as OpenCL (for Adreno GPUs), SYCL (Intel), Vulkan/Metal (Apple) with AMD ZenDNN optimizations for EPYC CPUs.
+
+---
+
+## 📌 Key Highlights:
+
+### 1️⃣ **Android Integration**
+- Offers methods to build and run llama.cpp directly within Termux by leveraging its native Linux environment.
+- Provides scripts tailored for cross-compilation targeting arm64-v8a architecture with optional KleidiAI acceleration support enabled via `GGML_KLEIDIAI=ON`.
+- Demonstrates running CLI applications inside containers using ADB shell commands and showcases examples involving APKs built via Android Studio bindings which interact natively with device resources. 
+
+### 2️⃣ **Cross-platform Backends Support**
+The guide covers diverse backend implementations:
+   - ✅ *OpenCL* – For Adreno GPUs
+   - ⚙️ *SYCL* – Intel-based systems 
+   - 🔥 *Vulkan/Metal* – Apple platforms  
+   - 💡 *AMD ZenDNN*– Optimizations specifically designed for EPYC CPUs  
+
+Each section includes installation instructions, supported models/quantizations, performance benchmarks along with usage examples that are crucial in optimizing model inference on those architectures.
+
+---
+
+## 🧠 Auto-parser Architecture [For Chat Templates]
+This is a dedicated section that explains how templates are analyzed using differential comparison algorithms to detect markers such as JSON structures or XML-like tags around function calls or reasoning blocks.
+
+Key aspects include:
+
+### Core Mechanisms:
+- **Differential Comparison**: Uses `calculate_diff_split` to identify common prefixes/suffixes between different template versions.
+- **Marker Analysis**: Detects starting and ending markers used by the chat interface (e.g., `<|start|>`, `<|end|>`).
+- **Content Parsing** : Structures content within these identified boundaries.
+- Modular design separates analysis into distinct sub-components like `analyze_reasoning`, `analyze_content`, and `analyze_tools`.
+
+### Template Detection & Handling
+It also provides an overview of various tool calling formats including:
+
+1. JSON_NATIVE: Function name appears inside a JSON structure
+2. TAG_WITH_JSON: Function name outside JSON but arguments appear in it 
+3. TAG_WITH_TAGGED: Both function names and argument names appear as XML-style tags 
+
+The auto-parser uses compositional architecture where each component is responsible for its own analysis and parser construction based on detected patterns from the input templates.
+
+---
+
+## 🔧 Development & Build Setup Guides
+
+This part offers comprehensive instructions tailored for different OS environments, covering necessary dependencies, CMake configurations, build flags with explanations about their impact on performance/compatibility.
+
+Key points highlighted here are:
+   • Detailed setup procedures across multiple platforms such as Ubuntu or Windows 10 using Docker containers or native tools.
+   • Specific environment variables that affect how models are loaded at runtime e.g., setting up OpenCL headers/libraries correctly depending upon system configuration.
+   • Special optimization techniques like enabling specific kernel variants (`GGML_CANN_KERNELS`) which may improve performance significantly under certain hardware conditions (like when using Arm-based NPU).
+
+---
+
+## 📈 Performance Optimization Strategies
+
+The documentation emphasizes optimizing inference speed through several methods:
+- **Hardware-Aware Tuning**: Techniques vary by device type; e.g., leveraging oneAPI's optimized libraries (e.g., oneDNN) for Intel CPUs vs AMD-specific optimizations via ZenDNN
+- **Multi-GPU/Multi-NPU Execution Modes**: Efficient distribution of workloads across available resources in scenarios involving large-scale model deployments
+- **Memory Management Tips** : Guidance around handling memory constraints especially important when dealing with larger models to prevent OOM errors during execution phases 
+
+### Example Optimizations Mentioned Include:
+```bash
+# For SYCL-enabled builds targeting Intel GPUs 
+export GGML_SYCL_F16=ON # Enables FP16 precision for potential speedup
+
+# Enabling flash attention mechanism to reduce memory usage and possibly increase throughput depending on the model architecture used
+```
+
+These flags/variables allow developers to tweak configurations based on their specific use case requirements while ensuring optimal utilization of underlying hardware capabilities.
+
+---
+
+## ❗ Troubleshooting & Debugging Assistance
+
+This section addresses common pitfalls encountered during deployment:
+
+### Common Issues Identified & Mitigations:
+   - Incorrect installation or missing drivers leading to failed initialization.
+   - Compatibility issues between different versions of dependencies such as OpenCL SDKs causing runtime failures.
+   - Performance bottlenecks due to improper configuration settings affecting inference speed.
+
+The guide provides actionable steps including checking logs from various layers (driver, library, application), enabling verbose outputs through environment variables like `GGML_LOG_LEVEL`, and using profiling tools integrated within supported backends (e.g., `--hex-profile` option for Hexagon NPU).
+
+---
+
+## 📦 Specialized Documentation Sections Worth Highlighting
+
+| Section | Description |
+|--------|-------------|
+| **llama.cpp** | Core library documentation covering all core features including command-line interface options, available models formats support etc. |
+| **build.md** | Detailed build procedures across various platforms with CMake options explanations. This is essential for anyone looking into compiling custom builds tailored towards specific needs. |
+| **docs/backend/*.md** | Platform-specific backend documentation detailing implementation details crucial for understanding how each backend interacts with the host system’s resources efficiently |
+
+Additionally there are sections focusing on x86-64 architecture specifics and ARM-based device considerations along with RISC-V support via ET-SOC which might be relevant depending upon target deployment hardware capabilities.
+
+---
+
+## ✅ Conclusion
+
+This comprehensive guide serves not only as a technical manual but also offers practical use cases scenarios making it invaluable resource especially considering that it covers almost every aspect of implementing llama.cpp on modern computing architectures ranging from mobile devices to high-end workstations supporting AI inferencing tasks efficiently.
+
+The document's structured approach allows developers quickly find relevant information based on their platform requirements while providing deep insights into each backend implementation ensuring smooth integration processes irrespective of underlying hardware differences across different ecosystems such as Android vs Linux or Windows environments utilizing diverse GPU technologies (NVIDIA, AMD, Intel). 
+
+It effectively bridges knowledge gaps between theoretical aspects of model deployment and real-world applications by offering both foundational knowledge alongside actionable solutions addressing typical challenges faced during actual deployments enabling faster development cycles and more reliable inference outcomes in production settings. 🚀✨"![](https://images.unsplash.com/photo-1507139273893-bf20b4c7b9a5?auto=format&fit=crop&w=150&q=80) "!"![](https://images.unsplash.com/photo-1644684689362-dfcdccfeaaef?auto=format&fit=crop&w=150&q=80) "!"![](https://images.unsplash.com/photo-1572899743526-bdabfae7cbd3?ixlib=rb-4.0.3&ixid=MzAzaHJvYmFjLWZsZWVwcmxleQ&auto=format&&fit=crop&w=&h=&q=%E2%AC%BD%E2%AC%A7%EABE%AA%DExyCgMlBpNnKtjOqDkDpJrUkRmIiYnNcGzSdXoFaPdBvTlHhRwKuTxCiTUaBkMgVxFsQlFgOoXhVxBiCnPqWtPuDyLmAeHzGyLeNhJoAhBiBybSoOfNcQtSbIfApIoFmQrEcGlOhZdTxDvUpKhRoTsClFxWeLiImOkPaNmDbWxYoAjEpLaTeStUlPhErAcMsDrViNoCuSmFiRsChAdTiMoScRePlTaSiDoNiCaTyPrToSpOnTaMiFrElCoNaTiSePoOrSaXiShOpAlThReDiKaFoBuRaLiNeGaLoGiCyWiFiSoHoMeMaIdGoOdAnDaBrOwSe) "!"![](https://images.unsplash.com/photo-1648034959603-dceafbbf7e42?ixlib=rb-4.0.3&ixid=MzAzaHJvYmFjLWZsZWVwcmxleQ&auto=format&&fit=crop&w=&h=&q=%E2%AC%BD%E2%AC%A7%EABE%AA%DExyCgMlBpNnKtjOqDkDpJrUkRmIiYnNcGzSdXoFaPdBvTlHhRwKuTxCiTUaBkMgVxFsQlFgOoXhVxBiCnPqWtPuDyLmAeHzGyLeNhJoAhBiBybSoOfNcQtSbIfApIoFmQrEcGlOhZdTxDvUpKhRoTsClFxWeLiImOkPaNmDbWxYoAjEpLaTeStUlPhErAcMsDrViNoCuSmFiRsChAdTiMoScRePlTaSiDoNiCaTyPrToSpOnTaMiFrElCoNaTiSePoOrSaXiShOpAlThReDiKaFoBuRaLiNeGaLoGiCyWiFiSoHoMeMaIdGoOdAnDaBrOwSe) "!"![](https://images.unsplash.com/photo-1603884799554-e3f30ff6afbc?ixlib=rb-4.0.3&ixid=MzAzaHJvYmFjLWZsZWVwcmxleQ&auto=format&&fit=crop&w=&h=&q=%E2%AC%BD%E2%AC%A7%EABE%AA%DExyCgMlBpNnKtjOqDkDpJrUkRmIiYnNcGzSdXoFaPdBvTlHhRwKuTxCiTUaBkMgVxFsQlFgOoXhVxBiCnPqWtPuDyLmAeHzGyLeNhJoAhBiBybSoOfNcQtSbIfApIoFmQrEcGlOhZdTxDvUpKhRoTsClFxWeLiImOkPaNmDbWxYoAjEpLaTeStUlPhErAcMsDrViNoCuSmFiRsChAdTiMoScRePlTaSiDoNiCaTyPrToSpOnTaMiFrElCoNaTiSePoOrSaXiShOpAlThReDiKaFoBuRaLiNeGaLoGiCyWiFiSoHoMeMaIdGoOdAnDaBrOwSe) "!"![](https://images.unsplash.com/photo-1603884799554-e3f30ff6afbc?ixlib=rb-4.0.3&ixid=MzAzaHJvYmFjLWZsZWVwcmxleQ&auto=format&&fit=crop&w=&h=&q=%E2%AC%BD%E2%AC%A7%EABE%AA%DExyCgMlBpNnKtjOqDkDpJrUkRmIiYnNcGzSdXoFaPdBvTlHhRwKuTxCiTUaBkMgVxFsQlFgOoXhVxBiCnPqWtPuDyLmAeHzGyLeNhJoAhBiBybSoOfNcQtSbIfApIoFmQrEcGlOhZdTxDvUpKhRoTsClFxWeLiImOkPaNmDbWxYoAjEpLaTeStUlPhErAcMsDrViNoCuSmFiRsChAdTiMoScRePlTaSiDoNiCaTyPrToSpOnTaMiFrElCoNaTiSePoOrSaXiShOpAlThReDiKaFoBuRaLiNeGaLoGiCyWiFiSoHoMeMaIdGoOdAnDaBrOwSe) "!"![](https://images.unsplash.com/photo-1648034959603-dceafbbf7e42?ixlib=rb-4.0.3&ixid=MzAzaHJvYmFjLWZsZWVwcmxleQ&auto=format&&fit=crop&w=&h=&q=%E2%AC%BD%E2%AC%A7%EABE%AA%DExyCgMlBpNnKtjOqDkDpJrUkRmIiYnNcGzSdXoFaPdBvTlHhRwKuTxCiTUaBkMgVxFsQlFgOoXhVxBiCnPqWtPuDyLmAeHzGyLeNhJoAhBiBybSoOfNcQtSbIfApIoFmQrEcGlOhZdTxDvUpKhRoTsClFxWeLiImOkPaNmDbWxYoAjEpLaTeStUlPhErAcMsDrViNoCuSmFiRsChAdTiMoScRePlTaSiDoNiCaTyPrToSpOnTaMiFrElCoNaTiSePoOrSaXiShOpAlThReDiKaFoBuRaLiNeGaLoGiCyWiFiSoHoMeMaIdGoOdAnDaBrOwSe) "!"![](https://images.unsplash.com/photo-1648034959603-dceafbbf7e42?ixlib=rb-4.0.3&ixid=MzAzaHJvYmFjLWZsZWVwcmxleQ&auto=format&&fit=crop&w=&h=&q=%E2%AC%BD%E2%AC%A7%EABE%AA%DExyCgMlBpNnKtjOqDkDpJrUkRmIiYnNcGzSdXoFaPdBvTlHhRwKuTxCiTUaBkMgVxFsQlFgOoXhVxBiCnPqWtPuDyLmAeHzGyLeNhJoAhBiBybSoOfNcQtSbIfApIoFmQrEcGlOhZdTxDvUpKhRoTsClFxWeLiImOkPaNmDbWxYoAjEpLaTeStUlPhErAcMsDrViNoCuSmFiRsChAdTiMoScRePlTaSiDo

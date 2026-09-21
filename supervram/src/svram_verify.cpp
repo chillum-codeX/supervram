@@ -69,6 +69,7 @@ struct options {
     bool ignore_eos = false;   // --ignore-eos: never stop at an end-of-generation token (throughput tests)
     std::string progress;      // --progress FILE: append a line per prefill chunk
     float bias = 0.0f;         // --bias F: cache-aware routing (lossy)
+    std::string dump_prompt;   // --dump-prompt-tokens FILE: write the tokenized prompt (ids, space separated)
     std::string warm;          // --warm FILE: fill the VRAM expert slots from a usage profile after the prompt, before decoding
     float temp = 0.0f;         // --temp F (0 = greedy); with --top-k/--top-p/--repeat-penalty/--seed: sampled output that does not loop
     int top_k = 40;
@@ -114,6 +115,7 @@ bool parse(int argc, char ** argv, options & o) {
         else if (a == "--ignore-eos") { o.ignore_eos = true; }
         else if (a == "--progress") { if (!next(o.progress)) return false; }
         else if (a == "--bias") { if (!next(v)) return false; o.bias = (float) std::atof(v.c_str()); }
+        else if (a == "--dump-prompt-tokens") { if (!next(o.dump_prompt)) return false; }
         else if (a == "--warm") { if (!next(o.warm)) return false; }
         else if (a == "--temp") { if (!next(v)) return false; o.temp = (float) std::atof(v.c_str()); }
         else if (a == "--top-k") { if (!next(v)) return false; o.top_k = std::atoi(v.c_str()); }
@@ -250,6 +252,10 @@ int main(int argc, char ** argv) {
         tokens = tokenize(o.prompt, true, true);
     }
     const int n_prompt = (int) tokens.size();
+    if (!o.dump_prompt.empty()) {
+        std::ofstream dp(o.dump_prompt);
+        for (size_t i = 0; i < tokens.size(); ++i) dp << (i ? " " : "") << tokens[i];
+    }
     if (n_prompt + o.n_predict > o.n_ctx) {
         std::fprintf(stderr, "warning: prompt (%d) + n_predict (%d) exceeds n_ctx (%d)\n", n_prompt, o.n_predict, o.n_ctx);
     }
@@ -263,6 +269,13 @@ int main(int argc, char ** argv) {
         dump.open(o.dump_logits, std::ios::binary);
     }
 
+    double warm_ms = -1.0;
+#ifdef SVRAM_HAVE_EXPERT_CACHE
+    if (!o.warm.empty()) {
+        warm_ms = llama_moe_expert_cache_warm(ctx, o.warm.c_str()); // before the prompt: prompt batches then reuse the resident experts
+        std::printf("warm_start_ms=%.0f (before prefill)\n", warm_ms);
+    }
+#endif
     std::vector<llama_token> forced;
     if (!o.force_tokens.empty()) {
         std::ifstream f(o.force_tokens);
@@ -296,11 +309,10 @@ int main(int argc, char ** argv) {
         }
     }
     const double prompt_ms = now_ms() - t_pp0;
-    double warm_ms = -1.0;
 #ifdef SVRAM_HAVE_EXPERT_CACHE
-    if (!o.warm.empty()) {
-        warm_ms = llama_moe_expert_cache_warm(ctx, o.warm.c_str());
-        std::printf("warm_start_ms=%.0f\n", warm_ms);
+    if (!o.warm.empty() && warm_ms < 0.0) {
+        warm_ms = llama_moe_expert_cache_warm(ctx, o.warm.c_str()); // the layout only exists after the first graph: retry after the prompt
+        std::printf("warm_start_ms=%.0f (after prefill)\n", warm_ms);
     }
 #endif
 
