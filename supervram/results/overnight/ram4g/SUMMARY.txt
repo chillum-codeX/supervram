@@ -1,0 +1,8 @@
+ram4g-ssd-bias0	prefill_s=122.8	decode_tps=14.5	n_out=2048	by_pos(0-512,512-1024,1024-2048,2048-4096)=15.2,13.4,14.7,nan	total_s=264
+ram4g-ssd-bias0.01	prefill_s=122.8	decode_tps=29.5	n_out=2048	by_pos(0-512,512-1024,1024-2048,2048-4096)=25.9,29.4,31.8,nan	total_s=192
+ram4g-ssd-bias0.02	prefill_s=122.8	decode_tps=38.7	n_out=2048	by_pos(0-512,512-1024,1024-2048,2048-4096)=30.3,41.5,43.1,nan	total_s=176
+ram4g-ssd-bias0.02-ub8192-c11264	prefill_s=66.8	decode_tps=28.0	n_out=2048	by_pos(0-512,512-1024,1024-2048,2048-4096)=25.2,27.4,30.0,nan	total_s=140
+ram4g-warm-bias0.02-ub4096-c14336	prefill_s=80.2	decode_tps=42.6	n_out=2048	by_pos(0-512,512-1024,1024-2048,2048-4096)=42.3,41.5,43.3,nan	total_s=128
+ram4g-warm-bias0.02-ub8192-c11264	prefill_s=52.1	decode_tps=29.5	n_out=2048	by_pos(0-512,512-1024,1024-2048,2048-4096)=30.4,27.5,30.2,nan	total_s=122
+ram4g-warm-bias0-ub4096-c14336	prefill_s=79.9	decode_tps=14.9	n_out=2048	by_pos(0-512,512-1024,1024-2048,2048-4096)=17.3,13.4,14.7,nan	total_s=217
+ram4g-warm-bias0.01-ub4096-c14336	prefill_s=80.2	decode_tps=31.5	n_out=2048	by_pos(0-512,512-1024,1024-2048,2048-4096)=33.7,29.2,31.6,nan	total_s=145

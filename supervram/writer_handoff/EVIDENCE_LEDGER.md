@@ -31,6 +31,12 @@
 
 `results/roofline-projection.json` is not measured data.
 
+## Overnight results (2026-09-22)
+
+Source: `results/overnight/FINAL_RESULTS.md`, `bench/SUMMARY.tsv`, `ram4g/SUMMARY.txt`. Measured on the RTX 3090 host; forced identical 4,096-token
+output for all systems. Exactness gates: Q4_K_M tokens + logits hashes identical to full-GPU. Bias mode is approximate (perplexity checked, no task benchmark).
+The "48 GB-class" row is an all-hot proxy, not a real card.
+
 ## Still pending
 
 - Prefetch and double-buffered staging (a single pinned staging buffer exists), GDS device DMA, llama-server `/metrics` cache stats.

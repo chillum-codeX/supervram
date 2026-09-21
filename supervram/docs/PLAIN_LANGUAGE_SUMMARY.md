@@ -64,6 +64,23 @@ therefore a legitimate tier; "RAM must not hold the model" only defines the low-
 
 So the honest value of the project is the last row and models bigger than VRAM + RAM, not beating llama.cpp when RAM is plentiful.
 
+## 4c. Overnight update: getting close to a 48 GB-class card (32,000 in / 4,096 out, Q8_0)
+
+Every system decodes the *same* 4,096-token text after the same prompt, so the comparison is fair. Full table and caveats:
+`results/overnight/FINAL_RESULTS.md`.
+
+| Machine budget | Total time | Note |
+|---|---|---|
+| 24 GB GPU + RAM, plain llama.cpp (best split) | 142 s | baseline |
+| 24 GB GPU + RAM, new zero-copy tier, exact | 123 s | 1.15x faster, bit-exact outputs (checked on Q4) |
+| same + cache-aware routing 0.01 | 95 s | 1.49x; approximate, no perplexity change, no visible diversity change |
+| same + cache-aware routing 0.02 | 87 s | 1.63x; approximate, some extra repetition in free generation |
+| all experts hot (proxy for a 48 GB-class card, not a real one) | 84 s | |
+| 24 GB GPU + 4 GB RAM + SSD, routing 0.02 (2,048 out) | 128 s | before tonight 176 s; exact mode 217 s |
+
+Three ideas did it: keep the most used experts in VRAM from the start (warm start), let the GPU read the rest straight from pinned RAM
+without stopping, and (optionally) nudge the router toward experts that are already in VRAM.
+
 ## 4. Results in order
 
 Q8_0 (30 GiB, does not fit in VRAM), 16 GiB cache, cold start unless noted:

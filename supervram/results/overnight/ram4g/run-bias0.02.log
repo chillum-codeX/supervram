@@ -1,0 +1,24 @@
+{
+ "name": "ram4g-ssd-bias0.02",
+ "evidence_class": "measured_rtx3090",
+ "returncode": 0,
+ "disk": "nvme0n1",
+ "ram_cap": "4G",
+ "evicted_before": true,
+ "model_page_cache_resident_gib_before": 0.0,
+ "model_page_cache_resident_gib_after": 1.45,
+ "ssd_read_gib": 242.11,
+ "wall_s": 186.2,
+ "peak_rss_anon_gib": 0.28,
+ "peak_rss_file_gib": 1.22,
+ "peak_cgroup_gib": 2.22,
+ "cache_stats": [
+  "cache_stats accesses=2359488 hits=2335053 misses=24435 evictions=15636 hit_rate=99.0 bytes_h2d=40834990080 n_slots=8928 host_ms=21647.2",
+  "direct_io_stats bytes_ssd=258403467264 io_ms=115338.3"
+ ],
+ "env": {},
+ "stderr_tail": [],
+ "decode_tps_all": 38.6522,
+ "decode_tps_second_half": 43.1,
+ "tokens_generated": 2048
+}

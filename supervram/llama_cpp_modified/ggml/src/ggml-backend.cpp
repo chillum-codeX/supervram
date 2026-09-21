@@ -1175,6 +1175,10 @@ static void ggml_backend_sched_expert_cache_free_buffers(struct ggml_backend_sch
         cache->ctl_ctx = nullptr;
     }
     cache->ctl_ptr_view = cache->ctl_cnt_view = nullptr;
+    cache->xfer_src = cache->xfer_dst = nullptr;
+    for (auto & it : cache->tensors) {
+        it.second.slots_persist = nullptr;
+    }
     cache->layers.clear();
     cache->pending.clear();
 }
@@ -1218,6 +1222,28 @@ static void ggml_backend_sched_expert_cache_resolve_sources(struct ggml_backend_
 #endif
 }
 
+// graph-independent descriptors of the slot buffers (promotion, warm start and device-to-device prompt copies), both modes
+static void ggml_backend_sched_expert_cache_desc_init(ggml_backend_sched_t sched) {
+    struct ggml_backend_sched_expert_cache * cache = sched->expert_cache;
+    if (cache->tensors.empty()) {
+        return;
+    }
+    if (cache->ctl_ctx != nullptr) {
+        ggml_free(cache->ctl_ctx);
+    }
+    struct ggml_init_params ip = { ggml_tensor_overhead() * (8 + cache->tensors.size()), NULL, true };
+    cache->ctl_ctx = ggml_init(ip);
+    cache->xfer_src = ggml_new_tensor_1d(cache->ctl_ctx, GGML_TYPE_I8, 1);
+    cache->xfer_dst = ggml_new_tensor_1d(cache->ctl_ctx, GGML_TYPE_I8, 1);
+    for (auto & it : cache->tensors) {
+        ggml_backend_sched_expert_tensor & et = it.second;
+        et.slots_persist = ggml_new_tensor_3d(cache->ctl_ctx, et.weight->type, et.weight->ne[0], et.weight->ne[1], et.n_slots);
+        if (ggml_backend_tensor_alloc(et.buffer, et.slots_persist, ggml_backend_buffer_get_base(et.buffer)) != GGML_STATUS_SUCCESS) {
+            GGML_ABORT("%s: failed to bind the slot descriptor for %s\n", __func__, et.weight->name);
+        }
+    }
+}
+
 // zero-copy tier: allocate the control block and point every expert at its pinned host copy
 static void ggml_backend_sched_expert_cache_ctl_init(ggml_backend_sched_t sched) {
     struct ggml_backend_sched_expert_cache * cache = sched->expert_cache;
@@ -1241,12 +1267,8 @@ static void ggml_backend_sched_expert_cache_ctl_init(ggml_backend_sched_t sched)
     }
     ggml_backend_buffer_set_usage(cache->ctl_buffer, GGML_BACKEND_BUFFER_USAGE_COMPUTE);
     ggml_backend_buffer_clear(cache->ctl_buffer, 0);
-    struct ggml_init_params ip = { ggml_tensor_overhead() * (6 + n_t), NULL, true };
-    cache->ctl_ctx = ggml_init(ip);
     char * base = (char *) ggml_backend_buffer_get_base(cache->ctl_buffer);
     cache->ctl_ptr_view = ggml_new_tensor_1d(cache->ctl_ctx, GGML_TYPE_I8, (int64_t) ptr_bytes);
-    cache->xfer_src = ggml_new_tensor_1d(cache->ctl_ctx, GGML_TYPE_I8, 1);
-    cache->xfer_dst = ggml_new_tensor_1d(cache->ctl_ctx, GGML_TYPE_I8, 1);
     cache->ctl_cnt_view = ggml_new_tensor_1d(cache->ctl_ctx, GGML_TYPE_I8, (int64_t) cnt_bytes);
     if (ggml_backend_tensor_alloc(cache->ctl_buffer, cache->ctl_ptr_view, base) != GGML_STATUS_SUCCESS ||
         ggml_backend_tensor_alloc(cache->ctl_buffer, cache->ctl_cnt_view, base + ptr_bytes) != GGML_STATUS_SUCCESS) {
@@ -1267,10 +1289,6 @@ static void ggml_backend_sched_expert_cache_ctl_init(ggml_backend_sched_t sched)
         for (int64_t e = 0; e < et.n_expert; e++) {
             cache->shadow[(size_t) et.ctl_index * (size_t) stride + (size_t) e] = (int64_t) (uintptr_t) ((const uint8_t *) et.weight->data + (size_t) e * et.expert_size);
         }
-        et.slots_persist = ggml_new_tensor_3d(cache->ctl_ctx, et.weight->type, et.weight->ne[0], et.weight->ne[1], et.n_slots);
-        if (ggml_backend_tensor_alloc(et.buffer, et.slots_persist, ggml_backend_buffer_get_base(et.buffer)) != GGML_STATUS_SUCCESS) {
-            GGML_ABORT("%s: failed to bind the slot descriptor for %s\n", __func__, et.weight->name);
-        }
         if (et.layer >= 0 && et.kind >= 0) {
             auto & L = cache->layers[et.layer];
             L[et.kind] = &et;
@@ -1286,12 +1304,16 @@ static void ggml_backend_sched_expert_cache_ctl_init(ggml_backend_sched_t sched)
 }
 
 static void ggml_backend_sched_expert_cache_wait_idle(struct ggml_backend_sched_expert_cache * cache);
+static double ggml_backend_sched_expert_cache_warm_classic(ggml_backend_sched_t sched, const char * path);
 
 // zero-copy tier warm start: fill the VRAM slots from a usage profile ("<layer> <expert> <weight>" per line) so the first
 // tokens already hit. Returns the time in ms, or -1 on failure.
 double ggml_backend_sched_expert_cache_warm(ggml_backend_sched_t sched, const char * path) {
     GGML_ASSERT(sched);
     struct ggml_backend_sched_expert_cache * cache = sched->expert_cache;
+    if (cache != nullptr && !cache->zero_copy) {
+        return ggml_backend_sched_expert_cache_warm_classic(sched, path);
+    }
     if (cache == nullptr || !cache->zero_copy || cache->ctl_buffer == nullptr || cache->layers.empty()) {
         return -1.0;
     }
@@ -1487,6 +1509,7 @@ static void ggml_backend_sched_expert_cache_layout(ggml_backend_sched_t sched) {
         cache->stats.slot_bytes_total += total;
     }
 
+    ggml_backend_sched_expert_cache_desc_init(sched);
     ggml_backend_sched_expert_cache_ctl_init(sched);
 
     GGML_LOG_INFO("%s: expert cache: %zu tensors, %d slots/tensor (budget %zu MiB, %.2f MiB per expert), %.2f MiB on device\n", __func__,
@@ -1784,7 +1807,7 @@ static bool ggml_backend_sched_expert_cache_read_direct(
 
         for (size_t k = 0; k < n; k++) {
             const ggml_expert_miss & m = misses[i0 + k];
-            ggml_backend_tensor_set_async(split_backend, m.et->slots_view,
+            ggml_backend_tensor_set_async(split_backend, m.et->slots_persist ? m.et->slots_persist : m.et->slots_view,
                 cache->staging + pos[k] + head[k], (size_t) m.slot * m.et->expert_size, m.et->expert_size);
         }
         cache->staging_busy = true;
@@ -1795,6 +1818,95 @@ static bool ggml_backend_sched_expert_cache_read_direct(
     GGML_UNUSED(cache); GGML_UNUSED(split_backend); GGML_UNUSED(misses);
     return false;
 #endif
+}
+
+// classic slot cache (misses read from RAM or the SSD): fill the slots from a usage profile before the first prompt, reading the
+// experts from the model file with the direct-I/O path (or from the host mapping), so prompt batches can reuse them
+static double ggml_backend_sched_expert_cache_warm_classic(ggml_backend_sched_t sched, const char * path) {
+    struct ggml_backend_sched_expert_cache * cache = sched->expert_cache;
+    if (cache == nullptr || cache->tensors.empty()) {
+        return -1.0;
+    }
+    FILE * f = fopen(path, "r");
+    if (f == nullptr) {
+        GGML_LOG_WARN("%s: expert cache: cannot open warm profile %s\n", __func__, path);
+        return -1.0;
+    }
+    const int64_t t0 = ggml_time_us();
+    std::map<int, std::vector<float>> prof;
+    int layer, expert; float w;
+    while (fscanf(f, "%d %d %f", &layer, &expert, &w) == 3) {
+        auto & v = prof[layer];
+        if (v.size() <= (size_t) expert) {
+            v.resize((size_t) expert + 1, 0.0f);
+        }
+        v[expert] = w;
+    }
+    fclose(f);
+    std::vector<ggml_expert_miss> misses;
+    struct host_item { ggml_backend_sched_expert_tensor * et; int64_t expert; int slot; };
+    std::vector<host_item> host_items;
+    ggml_backend_t backend = nullptr;
+    int64_t n_loaded = 0;
+    for (auto & it : cache->tensors) {
+        ggml_backend_sched_expert_tensor & et = it.second;
+        if (et.slots_persist == nullptr) {
+            continue;
+        }
+        if (backend == nullptr) {
+            backend = sched->backends[et.backend_id];
+        }
+        int lay = -1;
+        sscanf(et.weight->name, "blk.%d.", &lay);
+        auto pv = prof.find(lay);
+        et.slot_of_expert.assign(et.n_expert, -1);
+        et.expert_of_slot.assign(et.n_slots, -1);
+        et.last_use.assign(et.n_slots, 0);
+        et.use_count.assign(et.n_slots, 0);
+        if (pv == prof.end()) {
+            continue;
+        }
+        std::vector<int> order(et.n_expert);
+        for (int e = 0; e < (int) et.n_expert; e++) {
+            order[e] = e;
+        }
+        std::sort(order.begin(), order.end(), [&](int a, int b) {
+            const float wa = (size_t) a < pv->second.size() ? pv->second[a] : 0.0f;
+            const float wb = (size_t) b < pv->second.size() ? pv->second[b] : 0.0f;
+            return wa > wb;
+        });
+        for (int i = 0; i < et.n_slots && i < (int) order.size(); i++) {
+            const int e = order[i];
+            if ((size_t) e >= pv->second.size() || pv->second[e] <= 0.0f) {
+                break;
+            }
+            et.slot_of_expert[e] = i;
+            et.expert_of_slot[i] = e;
+            et.use_count[i] = 1;
+            if (et.src_fd >= 0 && cache->direct_io) {
+                misses.push_back({ &et, e, i });
+            } else {
+                host_items.push_back({ &et, e, i });
+            }
+            n_loaded++;
+        }
+    }
+    if (backend == nullptr) {
+        return -1.0;
+    }
+    if (!misses.empty() && !ggml_backend_sched_expert_cache_read_direct(cache, backend, misses)) {
+        return -1.0;
+    }
+    for (const auto & h : host_items) {
+        ggml_backend_tensor_set_async(backend, h.et->slots_persist, (const uint8_t *) h.et->weight->data + (size_t) h.expert * h.et->expert_size,
+            (size_t) h.slot * h.et->expert_size, h.et->expert_size);
+    }
+    ggml_backend_synchronize(backend);
+    cache->staging_busy = false;
+    const double ms = (ggml_time_us() - t0) / 1000.0;
+    GGML_LOG_INFO("%s: expert cache warm start (slot cache): %lld expert slots from %s in %.0f ms (%zu direct reads)\n", __func__,
+        (long long) n_loaded, path, ms, misses.size());
+    return ms;
 }
 
 // compute time: make the experts selected by `ids` resident in the slots and upload the remapped ids
@@ -2783,17 +2895,23 @@ static bool ggml_backend_sched_alloc_splits(ggml_backend_sched_t sched) {
 static bool ggml_backend_sched_expert_cache_copy_resident(ggml_backend_sched_t sched, const struct ggml_tensor * input,
         struct ggml_tensor * input_cpy, ggml_backend_t backend, int32_t first_id, int32_t last_id, size_t expert_size, size_t padding_end) {
     struct ggml_backend_sched_expert_cache * cache = sched->expert_cache;
-    if (cache == nullptr || !cache->zero_copy || cache->ctl_buffer == nullptr || cache->xfer_src == nullptr) {
+    if (cache == nullptr || cache->xfer_src == nullptr) {
         return false;
     }
     auto it = cache->tensors.find(const_cast<struct ggml_tensor *>(input));
-    if (it == cache->tensors.end() || it->second.buffer == nullptr || it->second.layer < 0) {
+    if (it == cache->tensors.end() || it->second.buffer == nullptr || it->second.slots_persist == nullptr || it->second.expert_size != expert_size) {
         return false;
     }
     ggml_backend_sched_expert_tensor & et = it->second;
-    auto & L = cache->layers[et.layer];
-    ggml_backend_sched_expert_tensor * m = L[2] ? L[2] : (L[1] ? L[1] : L[0]);
-    if (m == nullptr || m->slot_of_expert.empty() || et.expert_size != expert_size) {
+    ggml_backend_sched_expert_tensor * m = &et; // classic cache: every weight tracks its own slots
+    if (cache->zero_copy) {
+        if (cache->ctl_buffer == nullptr || et.layer < 0) {
+            return false;
+        }
+        auto & L = cache->layers[et.layer];
+        m = L[2] ? L[2] : (L[1] ? L[1] : L[0]); // zero-copy tier: the down weight of the layer carries the residency
+    }
+    if (m == nullptr || m->slot_of_expert.empty()) {
         return false;
     }
     bool any = false;
@@ -2815,6 +2933,9 @@ static bool ggml_backend_sched_expert_cache_copy_resident(ggml_backend_sched_t s
     cache->xfer_src->buffer = et.buffer;
     cache->xfer_dst->buffer = input_cpy->buffer;
     char * slot_base = (char *) ggml_backend_buffer_get_base(et.buffer);
+    int src_fd = -1;
+    uint64_t src_off = 0;
+    const bool have_source = ggml_backend_sched_expert_cache_source(cache, input, &src_fd, &src_off);
     int32_t e = first_id;
     while (e <= last_id) {
         const int32_t sl = m->slot_of_expert[e];
@@ -2828,8 +2949,12 @@ static bool ggml_backend_sched_expert_cache_copy_resident(ggml_backend_sched_t s
             while (e2 + 1 <= last_id && m->slot_of_expert[e2 + 1] < 0) {
                 e2++;
             }
-            ggml_backend_tensor_set_async(backend, input_cpy, (const uint8_t *) input->data + (size_t) e * expert_size,
-                (size_t) e * expert_size, (size_t) (e2 - e + 1) * expert_size);
+            const size_t run_bytes = (size_t) (e2 - e + 1) * expert_size;
+            if (!(have_source && ggml_backend_sched_expert_cache_stream_range(cache, backend, input_cpy, (size_t) e * expert_size,
+                    src_fd, src_off + (size_t) e * expert_size, run_bytes))) {
+                ggml_backend_tensor_set_async(backend, input_cpy, (const uint8_t *) input->data + (size_t) e * expert_size,
+                    (size_t) e * expert_size, run_bytes);
+            }
             e = e2 + 1;
         }
     }

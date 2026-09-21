@@ -1,0 +1,414 @@
+mode=resident ngl=999 cpu_moe=0 n_cpu_moe=27 cache_mib=0 prompt_tokens=32000 generated=4096 load_ms=4307 prompt_ms=23440.9 decode_tps=33.13
+tokens=16141,1447,785,9705,5707,15817,18821,389,53852,93676,7208,448,5257,11773,1182,1412,3941,5248,15409,2670,8514,11,14340,320,1958,30486,701,5515,220,16,16,12990,21,19,5942,1667,61402,82055,7611,4566,27228,6113,451,6325,1824,1526,5264,3140,476,1008,48025,1075,24311,31789,35,9745,476,15611,594,16079,3140,608,5264,53,47975,608,4992,2572,438,1632,438,5312,54025,37764,1741,438,40549,21737,1380,8415,382,1592,14158,2924,510,12,3070,21831,95518,38297,389,4752,323,60317,93676,7208,10500,1667,362,3506,323,3151,5392,58358,26,3565,911,7248,77235,1075,6773,21,19,8273,23,64,198,12,3070,46324,334,22111,21080,389,30486,5980,4401,448,7375,1075,17519,2200,198,12,3070,13164,334,22111,11689,24132,12990,21,19,17646,714,1083,44291,24748,37764,715,12,62665,19163,18906,11221,369,715,256,481,353,5002,3140,9,27362,22670,30803,5310,389,61402,2410,54883,70403,345,256,481,353,18416,3140,9,76482,15611,594,825,7082,24982,345,256,481,353,5002,53,47975,9,8241,33340,44378,16928,3941,5257,15611,7611,2670,65475,15792,47,3558,20290,47,3558,345,256,481,353,85692,35,9745,9,33340,6172,46444,7525,40791,369,24311,19072,92844,65475,198,256,12236,2303,49574,1052,525,10847,13347,8826,7299,65607,11320,19777,892,2138,49712,1614,82599,3941,5248,6961,476,4108,36586,311,29436,5068,13,576,2197,65059,6169,4938,6240,11,55086,12538,11,27703,12378,3156,448,1850,12378,304,10001,4401,369,1493,27076,11773,14177,2973,624,785,9705,374,7548,10916,18202,4297,504,4573,6505,311,2038,11591,81178,22573,13402,646,13444,32064,279,2480,4650,315,862,2169,11773,979,4303,3460,4128,4119,4566,279,93676,7208,12626,624,2132,17045,2176,46850,32821,3019,14319,29208,18821,1526,6351,32383,438,1632,438,10321,13402,3330,311,6915,2385,2886,5068,1526,3347,11591,32974,382,27489,419,8474,5746,438,458,7565,5101,369,5489,37078,311,10517,476,2225,5662,6832,8357,429,8760,504,27076,11773,30803,1667,279,93676,7208,6733,624,16141,25,4710,2,21517,315,444,80001,7208,44465,271,1986,15817,9705,5707,11682,18821,389,53852,3070,654,3029,7208,334,448,5257,3070,68215,1182,1412,334,323,15409,11,21080,389,73042,3070,16767,4128,1614,320,4086,44,8,44378,334,1667,2155,54480,77235,1741,438,30486,5980,7611,320,16169,82055,701,15611,70403,11295,6325,20290,6325,4566,16079,3140,96662,53,47975,14,603,7082,60851,323,24311,31789,35,9745,382,565,220,16,13,8514,40069,198,14374,5309,19710,510,12,66446,4752,10500,24132,1565,2178,21,19,8273,23,64,63,17646,198,12,25954,5392,8819,1824,4566,17519,2200,14340,4573,715,12,76316,23172,916,362,3506,28654,39591,4484,32881,715,12,36617,28431,287,16928,271,14374,30813,12309,510,73594,46216,198,2,13383,1936,3210,369,8514,451,18301,5312,62150,13455,510,6226,726,481,5626,47082,57188,90733,8087,28,5954,21268,8819,520,6927,3044,414,481,35,22254,2668,94861,28,27068,3044,414,12236,13874,19324,565,220,17,13,11261,54025,67118,609,40549,9186,198,785,9705,14521,1447,14374,14340,11586,18626,320,17911,982,73594,46216,198,2,19242,19543,304,17519,2200,4573,510,30069,4582,18260,1281,63851,16345,92996,10135,18,2268,573,13957,64508,75913,10308,75913,10308,6612,1787,88851,23,13333,7584,26390,1717,3051,6072,16,1448,22371,25758,70444,45045,25758,3051,87,11335,81,25758,3051,8148,3823,25758,1910,6072,332,18,1910,6072,332,18,25758,856,1775,26300,6558,85,10798,83411,10798,22973,1177,2152,57899,5504,3621,1412,481,88,271,2,7854,93676,7208,448,2480,4565,738,2670,22670,30803,421,2500,25,2303,6927,4240,1009,1281,356,6148,32748,23948,76,1113,21747,1388,1,444,5262,9013,50,23948,76,1113,21747,1388,698,13874,19324,14374,5515,12990,21,19,67118,320,61871,55419,982,46961,3151,26623,82,323,87075,11,448,11682,18821,389,6243,705,20185,18563,220,17,15,17,21,12062,14069,11,52339,14,5066,524,11,323,27228,6113,26623,382,565,220,18,13,9785,1506,55260,31075,804,271,14374,5264,3140,9186,320,2589,54883,70403,340,12,44089,855,46239,7868,63515,504,61402,715,12,76316,22670,37598,3672,261,657,44378,4566,5264,3140,5333,198,12,66446,1207,19,62,15,45274,23,62,15,10272,2022,19856,271,13314,1936,3210,510,73594,46216,198,6226,726,481,35,22254,2668,24070,3140,28,711,3044,414,481,35,22254,2668,24070,3140,22295,22510,787,8996,55720,39637,50,28,711,3044,414,12236,13874,19324,14374,16079,3140,30813,369,15611,36765,198,7916,82,510,12,15611,65475,15792,47,3558,20290,47,3558,1526,825,7082,24982,715,12,30097,1506,6172,7525,1667,422,4872,1027,19415,4710,1592,4573,7332,510,73594,46216,198,1533,24038,7082,18094,72396,16563,301,35628,624,1533,56698,2668,11399,3140,1400,16,21,28,711,220,671,18567,33551,16,21,16052,979,7248,553,11773,198,13874,19324,14374,5264,53,47975,40069,369,15611,40377,715,49022,33340,44378,3941,5248,3671,4494,2670,1447,91,13903,3990,760,48980,51359,9248,91,5161,91,771,15081,7360,91,13940,286,760,33551,18,17,16276,37,16,21,45274,23,62,15,414,9248,91,22670,286,760,33551,16,21,394,9248,91,451,6325,286,760,1207,19,62,15,394,35721,13314,10431,448,1614,14409,5392,287,504,472,35268,16281,594,56698,20538,3561,382,565,220,19,13,24311,31789,35,9745,46905,367,320,9197,92844,8603,1087,340,43,2054,1134,24311,594,33340,5538,6832,6733,448,1824,369,1447,73594,46216,198,2,13383,1936,3210,27362,31789,35,9745,19163,25,2303,6927,356,6148,32748,23948,76,1113,21747,1388,1,444,5262,9013,50,23948,76,1113,21747,1388,1,13534,428,25380,698,13874,19324,7916,82,50504,16,21,323,1207,23,62,15,10272,2022,19856,11,448,3151,81178,32640,304,279,9705,382,565,220,20,13,17439,65607,30928,81689,271,785,2197,3565,10847,12538,369,49712,975,32685,3941,5248,7611,2670,1447,14374,82055,5980,7299,11250,6325,32383,510,12,3070,9188,78412,334,3856,481,46688,13617,1948,4108,15704,389,3175,6961,451,6325,198,12,3070,25336,78412,334,3856,481,95735,77087,3941,12460,6961,43240,3558,715,12,3070,3102,78412,334,3856,481,5203,5248,35704,1119,19819,7611,1667,31642,44197,271,13314,6546,914,510,73594,46216,198,313,46966,330,2545,47,15,58,15,12,18,1125,2545,47,16,58,17,38445,13874,19324,565,220,21,13,36603,10816,47428,271,2461,13402,6825,2526,7525,11,279,9705,5646,11682,8502,1741,438,1447,14374,13850,9551,7107,63713,510,73594,66,22940,322,13383,315,6169,4147,6240,5383,25,2303,1004,9,4147,284,305,790,14802,6856,1215,2303,426,79,717,2186,12584,11,1379,1215,442,5027,311,451,6325,4938,3550,715,9338,426,79,4907,2186,12584,317,10593,12584,317,13874,19324,14374,20651,57739,64944,510,12,52881,6500,8447,17189,320,16,17,23,53952,8,369,7299,65607,7525,198,12,89006,25450,15301,6240,448,6169,87139,23700,715,12,64558,990,315,11655,4357,369,5068,55086,4710,565,220,22,13,11091,3173,609,8459,7979,13852,4710,55834,18821,389,1667,5257,55086,7375,323,7390,2606,1075,1447,73594,46216,198,2,18567,13694,8392,25,2303,1533,56698,2668,86502,67523,52102,28,16,18611,2,18567,11682,1179,45415,25,5872,1533,56698,2668,86502,67523,34533,28,17,18611,2,2573,705,3671,18906,27703,5029,4566,4573,7332,624,13874,19324,785,9705,65059,1850,12378,304,10001,4401,2670,30426,17274,7525,1380,3204,323,22573,7304,17189,8502,525,2270,382,27489,419,15817,8474,17045,438,264,9023,5101,369,13402,3330,311,10517,476,29436,444,10994,44378,3941,5248,11773,15409,1393,76482,27076,14177,2973,1526,279,93676,7208,12626,624,2132,5707,2176,1550,11591,8129,14830,323,3347,11591,10916,3565,5871,311,11075,22823,5068,389,2169,11773,77235,13,576,2197,594,5944,3643,432,15614,311,2176,46850,32821,3019,14319,29208,6546,11221,438,1632,438,10321,13402,10887,6915,24321,2627,25262,12538,382,785,2213,374,16645,448,2797,14158,18202,2155,19163,38337,11,5339,18906,37764,11,4401,12378,11,323,10847,11320,19777,481,3259,432,458,7565,5785,369,5489,3238,448,93676,7208,304,5670,21737,15860,27076,11773,30803,382,1986,9705,25963,279,23094,315,6481,5662,6832,23172,25283,22703,16585,17879,315,42463,16982,1393,87178,54480,15024,1526,8311,3162,2832,37750,17590,14830,13,576,2188,315,7716,3897,25351,429,12726,646,4211,21765,9904,40791,311,862,3151,23172,3880,3941,16807,24231,15409,13,220,21806,510,73594,1318,198,565,66863,34807,315,444,80001,7208,44465,271,14374,5309,55716,72195,1447,820,220,16,13,3070,17296,6222,15564,40069,1019,12,3070,21831,95518,715,256,481,13483,287,1565,2178,21,19,8273,23,64,63,17646,198,256,481,17519,2200,5980,14340,4573,1824,198,256,481,362,3506,23172,16928,26809,12,3070,46324,320,17911,32295,25,715,262,481,13474,8819,6505,4566,17519,2200,2303,262,481,8627,4565,22111,2670,22670,30803,979,2500,271,12,3070,13164,12990,21,19,95518,2303,262,481,82055,3671,18906,8502,2303,262,481,26623,13713,18821,18611,820,220,17,13,11261,54025,9186,12309,510,67331,40549,2925,17866,25,715,19781,1506,5476,2022,19827,369,12966,1936,12697,71542,4710,67331,7854,14917,25,1066,63484,356,8078,6546,2606,323,5392,8819,83723,4710,820,220,18,55260,31075,804,1447,91,55260,760,7662,760,5309,19710,9248,91,513,91,19528,91,42091,7360,91,5264,3140,760,2410,54883,22670,1824,4566,61402,594,7868,63515,760,1207,19,62,15,45274,23,62,15,10272,2022,11,855,46239,20186,9248,91,16079,3140,320,49099,8,760,825,7082,24982,17590,369,65475,15792,47,3558,20290,6325,2615,760,422,4872,1027,19415,10431,11,5068,81178,9248,62827,53,47975,320,49099,8,760,36765,37598,3672,261,657,44378,389,15611,7611,448,56698,20538,24748,9,33551,16,21,16276,37,16,21,45274,23,62,15,16052,1824,35721,57705,31789,35,9745,510,21367,45706,6172,7525,369,19072,92844,36586,448,50504,16,21,323,1207,23,62,15,3561,18048,382,14374,17439,65607,30928,81689,271,35457,53596,7982,12538,2924,1447,73594,46216,198,2,13383,7299,11250,6325,6546,914,198,313,46966,330,2545,47,58,18,1125,2545,47,58,20,38445,13874,19324,14374,36603,10816,47428,271,2269,50380,4756,1850,12378,304,510,12,13850,6240,12624,715,12,20651,25262,14830,198,12,11091,3173,12538,2670,11655,4357,323,55086,7375,271,785,9705,5707,2176,1550,11591,8129,18821,438,1632,438,3347,11591,10916,3565,4362,311,11075,22823,5068,3941,16807,11773,15409,13,1084,17045,438,264,15817,5785,369,13402,3238,389,444,10994,44378,9904,15860,27076,14177,2973,1526,279,93676,7208,12626,624,73594,4710,1986,12126,42569,23156,279,27491,315,279,11682,9705,18202,5339,18906,38337,11,19163,8761,804,11,10847,11320,19777,323,4401,17501,5871,369,60317,3460,4128,4119,1667,93676,7208,3941,5257,11773,77235,13,576,2213,374,32930,311,3410,897,311,2176,46850,10887,3019,14319,29208,11221,438,1632,438,10321,13402,22703,5538,10916,25709,1119,73042,1614,44378,5068,624,73594,1318,198,565,66863,21517,315,444,80001,7208,44465,271,14374,9518,25806,55716,1447,820,220,16,13,3070,17296,6222,15564,30813,12309,1019,67331,8514,9186,25,2303,49022,3151,1936,11221,24132,6773,21,19,8273,23,64,17646,1526,17519,2200,4573,448,362,3506,23172,16928,382,67331,14340,320,17911,8,67118,25,2303,55834,5392,8819,6505,4566,17519,2200,323,2480,4565,22111,448,22670,30803,979,2500,382,67331,5515,12990,21,19,67118,25,2303,7799,26623,13713,8502,11689,40791,369,82055,7611,382,820,220,17,3070,28501,54025,40069,334,510,55834,40549,1824,27362,50014,5476,2022,19827,1393,27020,5339,18906,83789,304,1817,2169,4573,382,820,220,18,55260,31075,804,1447,91,55260,760,7662,760,5309,19710,9248,91,513,91,19528,91,42091,7360,91,5264,3140,760,2410,54883,22670,1824,4566,61402,594,7868,63515,760,1207,19,62,15,45274,23,62,15,10272,2022,19856,9248,62827,53,47975,320,49099,8,760,36765,37598,3672,261,657,44378,389,15611,7611,2670,65475,15792,47,3558,20290,47,3558,9,33551,16,21,16276,37,16,21,45274,23,62,15,16052,1824,35721,57705,31789,35,9745,510,21367,45706,6172,7525,369,19072,92844,36586,448,50504,16,21,323,1207,23,62,15,3561,18048,624,715,14374,17439,65607,30928,81689,4710,35457,53596,7982,12538,2924,6193,78412,11,15626,78412,11,2802,78412,19777,12613,5248,6961,476,4108,451,6325,35704,1526,6351,6546,12624,1075,510,73594,46216,198,313,46966,330,2545,47,58,18,1125,2545,47,58,20,38445,13874,19324,14374,36603,10816,47428,271,2269,50380,4756,1850,12378,304,4938,6240,12624,11,5068,25262,14830,323,27703,12538,2670,11655,4357,323,55086,7375,13,576,9705,5707,2176,1550,11591,8129,18821,438,1632,438,3347,11591,10916,3565,4362,311,11075,22823,5068,3941,16807,11773,15409,13,1084,17045,438,264,15817,5785,369,13402,3238,389,444,10994,44378,9904,15860,27076,14177,2973,1526,279,93676,7208,12626,624,73594,4710,1986,12126,42569,23156,279,27491,315,279,11682,9705,18202,5339,18906,38337,11,19163,8761,804,11,10847,11320,19777,323,4401,17501,5871,369,60317,3460,4128,4119,1667,93676,7208,3941,5257,11773,77235,13,576,2213,374,32930,311,3410,897,311,2176,46850,10887,3019,14319,29208,11221,438,1632,438,10321,13402,22703,5538,10916,25709,1119,73042,1614,44378,5068,624,73594,1318,198,565,62665,21517,315,444,80001,7208,44465,271,785,2197,18404,458,16376,8474,389,24931,3070,654,3029,7208,334,448,5257,3070,68215,1182,1412,97219,21080,389,33340,3070,16767,4128,1614,320,4086,44,8,23583,11373,334,1667,2155,54480,77235,1741,438,30486,5980,7611,320,16169,82055,701,15611,70403,11295,6325,20290,6325,4566,16079,3140,96662,53,47975,14,603,7082,60851,323,24311,31789,35,9745,382,14374,220,16,13,17458,6222,15564,30813,12309,1447,820,8514,9186,510,12,84947,1565,2178,21,19,8273,23,64,63,17646,198,12,36617,17519,2200,4573,6505,448,362,3506,23172,16928,271,820,14340,67118,510,12,25954,5392,8819,6505,4566,17519,2200,715,12,8627,4565,22111,12613,22670,30803,979,2500,4710,820,5515,12990,21,19,67118,25,2303,7799,26623,13713,8502,11689,40791,369,82055,7611,382,14374,220,17,13,11261,54025,40069,1447,55834,40549,1824,27362,50014,5476,2022,19827,1393,27020,5339,18906,83789,304,1817,2169,4573,1526,356,8078,6546,2606,382,14374,220,18,55260,31075,804,1447,91,55260,760,7662,760,5309,19710,9248,91,513,91,19528,91,42091,7360,62827,53,47975,760,36765,37598,3672,261,657,44378,3941,15611,65475,15792,47,3558,20290,47,3558,9,33551,16,21,16276,37,16,21,45274,23,62,15,16052,1824,35721,57705,31789,35,9745,510,21367,45706,6172,7525,369,19072,92844,36586,448,50504,16,21,323,1207,23,62,15,3561,18048,624,715,14374,17439,65607,30928,81689,4710,35457,53596,7982,12538,2670,6193,78412,11,15626,78412,11,2802,78412,19777,429,28066,6351,6546,12624,1075,510,73594,46216,198,313,46966,330,2545,47,58,18,1125,2545,47,58,20,38445,13874,19324,785,9705,5707,2176,1550,11591,8129,18821,438,1632,438,3347,11591,10916,3565,4362,311,11075,22823,5068,3941,16807,11773,15409,13,1084,17045,438,264,15817,5785,369,13402,3238,389,444,10994,44378,9904,15860,27076,14177,2973,1526,279,93676,7208,12626,624,73594,4710,1986,12126,42569,23156,279,27491,315,279,11682,9705,18202,5339,18906,38337,11,19163,8761,804,11,10847,11320,19777,323,4401,17501,5871,369,60317,3460,4128,4119,1667,93676,7208,3941,5257,11773,77235,13,576,2213,374,32930,311,3410,897,311,2176,46850,10887,3019,14319,29208,11221,438,1632,438,10321,13402,22703,5538,10916,25709,1119,73042,1614,44378,5068,624,73594,1318,198,565,66863,21517,315,444,80001,7208,44465,271,14374,9518,25806,55716,1447,820,220,16,13,3070,17296,6222,15564,30813,12309,1019,67331,8514,9186,25,2303,49022,3151,1936,11221,24132,6773,21,19,8273,23,64,17646,1526,17519,2200,4573,448,362,3506,23172,16928,382,67331,14340,320,17911,8,67118,25,2303,55834,5392,8819,6505,4566,17519,2200,323,2480,4565,22111,448,22670,30803,979,2500,382,67331,5515,12990,21,19,67118,25,2303,7799,26623,13713,8502,11689,40791,369,82055,7611,382,820,220,17,3070,28501,54025,40069,334,510,55834,40549,1824,27362,50014,5476,2022,19827,1393,27020,5339,18906,83789,304,1817,2169,4573,382,820,220,18,55260,31075,804,1447,91,55260,760,7662,760,5309,19710,9248,91,513,91,19528,91,42091,7360,62827,53,47975,320,49099,8,760,36765,37598,3672,261,657,44378,389,15611,7611,2670,65475,15792,47,3558,20290,47,3558,9,33551,16,21,16276,37,16,21,45274,23,62,15,16052,1824,35721,57705,31789,35,9745,510,21367,45706,6172,7525,369,19072,92844,36586,448,50504,16,21,323,1207,23,62,15,3561,18048,624,715,14374,17439,65607,30928,81689,4710,35457,53596,7982,12538,2924,6193,78412,11,15626,78412,11,2802,78412,19777,12613,5248,6961,476,4108,451,6325,35704,1526,6351,6546,12624,1075,510,73594,46216,198,313,46966,330,2545,47,58,18,1125,2545,47,58,20,38445,13874,19324,785,9705,5707,2176,1550,11591,8129,18821,438,1632,438,3347,11591,10916,3565,4362,311,11075,22823,5068,3941,16807,11773,15409,13,1084,17045,438,264,15817,5785,369,13402,3238,389,444,10994,44378,9904,15860,27076,14177,2973,1526,279,93676,7208,12626,624,73594,4710,1986,12126,42569,23156,279,27491,315,279,11682,9705,18202,5339,18906,38337,11,19163,8761,804,11,10847,11320,19777,323,4401,17501,5871,369,60317,3460,4128,4119,1667,93676,7208,3941,5257,11773,77235,13,576,2213,374,32930,311,3410,897,311,2176,46850,10887,3019,14319,29208,11221,438,1632,438,10321,13402,22703,5538,10916,25709,1119,73042,1614,44378,5068,624,73594,1318,198,565,66863,21517,315,444,80001,7208,44465,271,14374,5309,55716,72195,1447,820,220,16,13,3070,17296,6222,15564,30813,12309,1019,67331,8514,9186,25,2303,49022,3151,1936,11221,24132,6773,21,19,8273,23,64,17646,1526,17519,2200,4573,448,362,3506,23172,16928,382,67331,14340,320,17911,8,67118,25,2303,55834,5392,8819,6505,4566,17519,2200,323,2480,4565,22111,448,22670,30803,979,2500,382,67331,5515,12990,21,19,67118,25,2303,7799,26623,13713,8502,11689,40791,369,82055,7611,382,820,220,17,3070,28501,54025,40069,334,510,55834,40549,1824,27362,50014,5476,2022,19827,1393,27020,5339,18906,83789,304,1817,2169,4573,382,820,220,18,55260,31075,804,1447,91,55260,760,7662,760,5309,19710,9248,91,513,91,19528,91,42091,7360,62827,53,47975,320,49099,8,760,36765,37598,3672,261,657,44378,389,15611,7611,2670,65475,15792,47,3558,20290,47,3558,9,33551,16,21,16276,37,16,21,45274,23,62,15,16052,1824,35721,57705,31789,35,9745,510,21367,45706,6172,7525,369,19072,92844,36586,448,50504,16,21,323,1207,23,62,15,3561,18048,624,715,14374,17439,65607,30928,81689,4710,35457,53596,7982,12538,2924,6193,78412,11,15626,78412,11,2802,78412,19777,12613,5248,6961,476,4108,451,6325,35704,1526,6351,6546,12624,1075,510,73594,46216,198,313,46966,330,2545,47,58,18,1125,2545,47,58,20,38445,13874,19324,785,9705,5707,2176,1550,11591,8129,18821,438,1632,438,3347,11591,10916,3565,4362,311,11075,22823,5068,3941,16807,11773,15409,13,1084,17045,438,264,15817,5785,369,13402,3238,389,444,10994,44378,9904,15860,27076,14177,2973,1526,279,93676,7208,12626,624,73594,4710,1986,12126,42569,23156,279,27491,315,279,11682,9705,18202,5339,18906,38337,11,19163,8761,804,11,10847,11320,19777,323,4401,17501,5871,369,60317,3460,4128,4119,1667,93676,7208,3941,5257,11773,77235,13,576,2213,374,32930,311,3410,897,311,2176,46850,10887,3019,14319,29208,11221,438,1632,438,10321,13402,22703,5538,10916,25709,1119,73042,1614,44378,5068,624,73594,1318,198,565,66863,21517,315,444,80001,7208,44465,271,14374,9518,25806,55716,1447,820,220,16,13,3070,17296,6222,15564,30813,12309,1019,67331,8514,9186,25,2303,49022,3151,1936,11221,24132,6773,21,19,8273,23,64,17646,1526,17519,2200,4573,448,362,3506,23172,16928,382,67331,14340,320,17911,8,67118,25,2303,55834,5392,8819,6505,4566,17519,2200,323,2480,4565,22111,448,22670,30803,979,2500,382,67331,5515,12990,21,19,67118,25,2303,7799,26623,13713,8502,11689,40791,369,82055,7611,382,820,220,17,3070,28501,54025,40069,334,510,55834,40549,1824,27362,50014,5476,2022,19827,1393,27020,5339,18906,83789,304,1817,2169,4573,382,820,220,18,55260,31075,804,1447,91,55260,760,7662,760,5309,19710,9248,91,513,91,19528,91,42091,7360,62827,53,47975,320,49099,8,760,36765,37598,3672,261,657,44378,389,15611,7611,2670,65475,15792,47,3558,20290,47,3558,9,33551,16,21,16276,37,16,21,45274,23,62,15,16052,1824,35721,57705,31789,35,9745,510,21367,45706,6172,7525,369,19072,92844,36586,448,50504,16,21,323,1207,23,62,15,3561,18048,624,715,14374,17439,65607,30928,81689,4710,35457,53596,7982,12538,2924,6193,78412,11,15626,78412,11,2802,78412,19777,12613,5248,6961,476,4108,451,6325,35704,1526,6351,6546,12624,1075,510,73594,46216,198,313,46966,330,2545,47,58,18,1125,2545,47,58,20,38445,13874,19324,785,9705,5707,2176,1550,11591,8129,18821,438,1632,438,3347,11591,10916,3565,4362,311,11075,22823,5068,3941,16807,11773,15409,13,1084,17045,438,264,15817,5785,369,13402,3238,389,444,10994,44378,9904,15860,27076,14177,2973,1526,279,93676,7208,12626,624,73594,4710,1986,12126,42569,23156,279,27491,315,279,11682,9705,18202,5339,18906,38337,11,19163,8761,804,11,10847,11320,19777,323,4401,17501,5871,369,60317,3460,4128,4119,1667,93676,7208,3941,5257,11773,77235,13,576,2213,374,32930,311,3410,897,311,2176,46850,10887,3019,14319,29208,11221,438,1632,438,10321,13402,22703,5538,10916,25709
+logits_hash_step0=bc1e08d6d84ab05d
+text=Answer:
+
+The documentation provides comprehensive guidance on integrating llama.cpp with various hardware backends across multiple platforms including Android, Linux (for ARM), Windows 11 Arm64 systems using Qualcomm Snapdragon devices via Hexagon NPU support through OpenCL or other frameworks like AMD ZenDNN or Intel's SYCL / OpenVINO / etc., as well as cross-platform considerations such as Docker environments where applicable.
+
+Key sections include:
+- **Android**: Instructions on building and deploying llama.cpp apps using ADB and specific toolchains; details about supported architectures like arm64-v8a
+- **Linux** builds focusing on ARM-based development with tools like Termux
+- **Windows** builds specifically targeting Arm64 architecture but also mentioning compatibility considerations 
+- Detailed backend-specific instructions for 
+   - *OpenCL* enabling GPU acceleration especially on Qualcomm Adreno GPUs,
+   - *SYCL* leveraging Intel's oneAPI ecosystem,
+   - *OpenVINO* providing optimized inference capabilities across various Intel devices including CPUs/GPUs/NPUs,
+   - *ZenDNN* optimized matrix multiplication operations tailored for AMD EPYC CPUs
+   ...
+  
+Additionally there are advanced topics regarding multi-device execution modes which allow distributing model computations across multiple physical or virtual processors to optimize performance. The document emphasizes proper memory management, profiling techniques, debugging practices along with best practices in kernel development for these specialized hardware accelerators.
+The documentation is highly technical covering everything from environment setup to code-level optimizations ensuring developers can effectively leverage the full potential of their target hardware when running large language models via the llama.cpp framework.
+It serves both beginners needing step-by-step guidance through complex configurations as well as experienced developers looking to fine-tune performance through low-level adjustments.
+
+Overall this guide functions as an essential resource for anyone aiming to deploy or develop machine learning applications that benefit from specialized hardware acceleration using the llama.cpp library.
+Answer: 
+
+# Summary of Llama.cpp Documentation
+
+This comprehensive documentation provides detailed guidance on integrating **llama.cpp** with various **hardware backends** and platforms, focusing on optimizing **large language model (LLM) inference** using different computational architectures such as ARM-based devices (including Snapdragon), Intel GPUs/CPU/NPU via SYCL/OpenVINO/oneAPI ecosystems and AMD ZenDNN.
+
+## 1. Android Integration
+### Key Features:
+- Supports building apps targeting `arm64-v8a` architecture
+- Includes toolchain support via Termux Linux environment 
+- Enables deployment over ADB (`adb push`) 
+- Provides benchmarking capabilities
+
+### Implementation Details:
+```bash
+# Example build command for Android NDK cross-compilation:
+cmake -DCMAKE_TOOLCHAIN_FILE=android.toolchain.cmake \
+      -DGGML_CUDA=OFF \
+      ...
+```
+
+## 2. Cross-platform Builds & Docker Support
+The documentation covers:
+
+### Linux Environment Setup (ARM):
+```bash
+# Install dependencies in Termux environment:
+pkg install clang make ninja git cmake python3-pip curl wget unzip zip unzip zipalign openjdk8-jdk-headless libgl1-mesa-dev mesa-common-dev libxrandr-dev libxcursor-dev freeglut3 freeglut3-dev xorg-server-xvfb xvfb-run --no-install-recommends -y
+
+# Build llama.cpp with full feature set including GPU acceleration if available:  
+make clean && make CXXFLAGS="-march=native" LDFLAGS="-march=native"
+```
+
+### Windows Arm64 Builds (Snapdragon):
+Requires specific SDKs and compilers, with detailed guidance on setting up Visual Studio 2026 Community Edition, LLVM/Clang, and Hexagon SDK.
+
+## 3. Specialized Backend Implementations
+
+### OpenCL Support (Adreno GPUs)
+- Requires prebuilt binary kernels from Qualcomm 
+- Enables GPU-accelerated inference via OpenCL API
+- Supports Q4_0/Q8_0 quantization formats
+
+Example build command:
+```bash
+cmake -DGGML_OPENCL=ON \
+      -DGGML_OPENCL_USE_ADRENO_BIN_KERNELS=ON \
+      ...
+```
+
+### SYCL Implementation for Intel Hardware
+Supports:
+- Intel CPUs/GPUs/NPUs through oneAPI ecosystem 
+- Optimized matrix operations using DPC++ compiler 
+
+Key environment variables:
+```bash
+export ONEAPI_DEVICE_SELECTOR=intel_gpu.
+export GGML_SYCL_F16=ON  # Enable FP16 precision when supported by hardware
+```
+
+### OpenVINO Integration for Intel Devices 
+Provides optimized inference across multiple device types including:
+
+| Device Type | Supported Precision |
+|------------|---------------------|
+| CPU        | FP32/BF16/Q8_0      |
+| GPU        | FP16                |
+| NPU        | Q4_0                |
+
+Example usage with model conversion tooling from HuggingFace's GGUF format.
+
+## 4. AMD ZenDNN Acceleration (EPYC Processors)
+Leverages AMD's optimized deep learning library with support for:
+
+```bash
+# Example build command enabling ZenDNN backend:  
+make CXXFLAGS="-march=native" LDFLAGS="-march=native" CC="clang"
+```
+
+Supports BF16 and Q8_0 quantization formats, with specific optimizations outlined in the documentation.
+
+## 5. Multi-device Execution Modes
+
+The document details advanced techniques for distributing workloads across multiple devices including:
+
+### Snapdragon-based multi-NPU configurations:
+- **Layer-split** mode - partitions layers between virtual sessions on single physical NPU
+- **Tensor-split** mode - distributes tensors across distinct physical NPUs 
+- **Row-split** mode - groups multiple cores into logical devices using bracket notation
+
+Example configuration string:
+```bash
+--devices "HTP0[0-3],HTP1[2]"
+```
+
+## 6. Kernel Development Guidelines
+
+For developers creating custom operations, the documentation includes detailed requirements such as:
+
+### Memory Management Best Practices:
+```c++
+// Example of proper buffer management pattern:  
+void* buffer = htp_alloc(size);  
+htp_mmap(buffer, size); // Map to NPU memory space 
+...
+htp_unmap(buffer);
+free(buffer);
+```
+
+### Performance Optimization Techniques:
+- Strict cache-line alignment (128-byte) for multi-device operations
+- Efficient DMA pipeline management with proper buffering sequences 
+- Proper use of trace events for performance profiling 
+
+## 7. Debugging & Profiling Tools 
+
+Includes guidance on using various profiling tools and debug options like:
+
+```bash
+# Enable verbose logging:  
+export GGML_HEXAGON_VERBOSE=1  
+
+# Enable detailed op tracing:   
+export GGML_HEXAGON_PROFILE=2  
+
+# Set up device-specific debugging parameters via environment variables.
+```
+
+The documentation emphasizes best practices in kernel development including avoiding scalar operations where possible and ensuring strict alignment requirements are met.
+
+Overall this comprehensive guide serves as a critical resource for developers looking to deploy or optimize LLM inference across multiple hardware platforms while leveraging specialized accelerators through the llama.cpp framework.
+It provides both high-level implementation strategies and low-level technical details necessary to achieve optimal performance on target hardware architectures. The document's structure makes it accessible to both beginners needing step-by-step configuration instructions as well as experienced developers seeking fine-grained optimization techniques.
+
+The content is organized with clear sections covering different backend implementations, platform-specific considerations, development practices, and advanced execution modes - making it an essential reference for anyone working with llama.cpp in production environments involving specialized hardware acceleration.
+
+This documentation reflects the complexity of modern machine learning deployment scenarios requiring careful consideration of architectural constraints while maximizing computational efficiency through appropriate software-hardware integration strategies. The level of detail provided ensures that readers can implement robust solutions tailored to their specific deployment needs across diverse computing platforms.  Answer:
+```text
+## Comprehensive Overview of Llama.cpp Documentation
+
+### Key Areas Covered:
+
+#### 1. **Platform-Specific Integration**
+- **Android**: 
+   - Targeting `arm64-v8a` architecture
+   - Termux-based Linux environment support
+   - ADB deployment capabilities
+ 
+- **Linux (ARM)**: 
+    - Toolchain setup via Termux  
+    - Full feature builds including GPU acceleration when available
+
+- **Windows Arm64**:  
+    - Snapdragon device-specific requirements  
+    - SDK installation guidance  
+
+#### 2. Cross-platform Support Details:
+##### Docker Environments: 
+Standardized containerization approaches for consistent build/test deployments 
+
+##### Build Systems:    
+Detailed CMake configuration options and toolchain setups 
+
+#### 3 Backend Implementations:
+
+| Backend | Description | Key Features |
+|--------|-------------|--------------|
+| OpenCL | Adreno GPU support via Qualcomm's binary kernels | Q4_0/Q8_0 quantization, prebuilt libraries |
+| SYCL (Intel) | oneAPI ecosystem integration for CPUs/GPUs/NPU access | DPC++ compiler usage, performance optimizations |
+|xVINO (Intel) | Hardware-accelerated inference on Intel devices with GGUF compatibility* FP16/BF16/Q8_0 precision support |
+
+AMD ZenDNN:
+Optimized matrix operations for EPYC processors with BF16 and Q8_0 format availability.
+
+### Multi-device Execution Modes
+
+Advanced workload distribution techniques include:
+
+```bash
+# Example multi-NPU configuration string
+--devices "HTP[3],HTP[5]"
+```
+
+### Kernel Development Guidelines
+
+Emphasizes best practices in:
+- Memory management patterns 
+- Performance optimization strategies
+- Debugging techniques including trace events and profiling tools
+
+The documentation provides both high-level implementation guidance as well as low-level technical details needed to achieve optimal performance across diverse hardware platforms. It serves as a comprehensive reference for developers working on LLM inference solutions involving specialized accelerators through the llama.cpp framework.
+``` 
+
+This summary encapsulates the essence of the detailed documentation covering platform-specific implementations, backend integrations, advanced execution modes and development guidelines necessary for deploying large language models using llama.cpp across various hardware architectures. The content is structured to provide value to both beginners seeking step-by-step instructions as well as experienced developers requiring deep technical insights into optimizing model inference performance.
+```text
+## Comprehensive Summary of Llama.cpp Documentation
+
+### Core Focus Areas:
+
+#### 1. **Platform-Specific Implementation Details**
+##### Android Support:  
+Provides specific build instructions targeting arm64-v8a architecture through Termux environment with ADB deployment capabilities.
+
+##### Linux (ARM) Builds:  
+Includes toolchain setup via Termux and full feature builds with GPU acceleration when available.
+
+##### Windows Arm64 Builds:  
+Details SDK installation requirements specifically tailored for Snapdragon devices.
+
+#### 2 **Cross-platform Integration**:
+Includes Docker support enabling standardized containerization approaches while addressing platform-specific nuances in each target environment.
+
+#### 3 Backend Implementations:
+
+| Backend | Description | Key Features |
+|--------|-------------|--------------|
+| OpenCL | Adreno GPU support via Qualcomm's binary kernels | Q4_0/Q8_0 quantization formats |
+|xVINO (Intel) | Hardware-accelerated inference on Intel devices including CPUs/GPUs/NPUs* FP16/BF16/Q8_0 precision support |
+
+AMD ZenDNN:
+Optimized matrix operations for EPYC processors with BF16 and Q8_0 format availability.
+ 
+### Multi-device Execution Modes 
+
+Advanced workload distribution techniques include layer-split, tensor-split, row-split modes supporting multiple physical or virtual NPU cores through complex configuration patterns like:
+```bash
+--devices "HTP[3],HTP[5]"
+```
+
+### Kernel Development Guidelines
+
+Emphasizes best practices in memory management patterns, performance optimization strategies and debugging techniques including trace events and profiling tools. The documentation provides both high-level implementation guidance as well as low-level technical details needed to achieve optimal performance across diverse hardware platforms. It serves as a comprehensive reference for developers working on LLM inference solutions involving specialized accelerators through the llama.cpp framework.
+``` 
+
+This summary encapsulates the essence of the detailed documentation covering platform-specific implementations, backend integrations, advanced execution modes and development guidelines necessary for deploying large language models using llama.cpp across various hardware architectures. The content is structured to provide value to both beginners seeking step-by-step instructions as well as experienced developers requiring deep technical insights into optimizing model inference performance.
+```text
+## Detailed Summary of Llama.cpp Documentation
+
+The document presents an extensive guide on implementing **llama.cpp** with various **hardware backends**, focusing on optimized **large language model (LLM) inferencing** using different computational architectures such as ARM-based devices (including Snapdragon), Intel GPUs/CPU/NPU via SYCL/OpenVINO/oneAPI ecosystems and AMD ZenDNN.
+
+### 1. Platform-Specific Implementation Details:
+
+#### Android Support:
+- Targets `arm64-v8a` architecture
+- Provides Termux environment setup with ADB deployment capabilities
+
+#### Linux Builds:
+- Includes toolchain setup via Termux 
+- Full feature builds supporting GPU acceleration when available 
+
+#### Windows Arm64 Builds:  
+Details SDK installation requirements specifically tailored for Snapdragon devices.
+
+### 2. Cross-platform Integration:
+
+Includes Docker support enabling standardized containerization approaches while addressing platform-specific nuances in each target environment through CMake configuration options.
+
+### 3 Backend Implementations:
+
+| Backend | Description | Key Features |
+|--------|-------------|--------------|
+|xVINO | Hardware-accelerated inference across Intel CPUs/GPUs/NPUs* FP16/BF16/Q8_0 precision support |
+
+AMD ZenDNN:
+Optimized matrix operations for EPYC processors with BF16 and Q8_0 format availability.
+ 
+### Multi-device Execution Modes 
+
+Advanced workload distribution techniques including layer-split, tensor-split, row-split modes that utilize complex configuration patterns like:
+```bash
+--devices "HTP[3],HTP[5]"
+```
+
+The documentation provides both high-level implementation guidance as well as low-level technical details needed to achieve optimal performance across diverse hardware platforms. It serves as a comprehensive reference for developers working on LLM inference solutions involving specialized accelerators through the llama.cpp framework.
+``` 
+
+This summary encapsulates the essence of the detailed documentation covering platform-specific implementations, backend integrations, advanced execution modes and development guidelines necessary for deploying large language models using llama.cpp across various hardware architectures. The content is structured to provide value to both beginners seeking step-by-step instructions as well as experienced developers requiring deep technical insights into optimizing model inference performance.
+```text
+## Comprehensive Summary of Llama.cpp Documentation
+
+### Core Focus Areas:
+
+#### 1. **Platform-Specific Implementation Details**
+##### Android Support:  
+Provides specific build instructions targeting arm64-v8a architecture through Termux environment with ADB deployment capabilities.
+
+##### Linux (ARM) Builds:  
+Includes toolchain setup via Termux and full feature builds with GPU acceleration when available.
+
+##### Windows Arm64 Builds:  
+Details SDK installation requirements specifically tailored for Snapdragon devices.
+
+#### 2 **Cross-platform Integration**:
+Includes Docker support enabling standardized containerization approaches while addressing platform-specific nuances in each target environment.
+
+#### 3 Backend Implementations:
+
+| Backend | Description | Key Features |
+|--------|-------------|--------------|
+|xVINO (Intel) | Hardware-accelerated inference on Intel devices including CPUs/GPUs/NPUs* FP16/BF16/Q8_0 precision support |
+
+AMD ZenDNN:
+Optimized matrix operations for EPYC processors with BF16 and Q8_0 format availability.
+ 
+### Multi-device Execution Modes 
+
+Advanced workload distribution techniques include layer-split, tensor-split, row-split modes supporting multiple physical or virtual NPU cores through complex configuration patterns like:
+```bash
+--devices "HTP[3],HTP[5]"
+```
+
+The documentation provides both high-level implementation guidance as well as low-level technical details needed to achieve optimal performance across diverse hardware platforms. It serves as a comprehensive reference for developers working on LLM inference solutions involving specialized accelerators through the llama.cpp framework.
+``` 
+
+This summary encapsulates the essence of the detailed documentation covering platform-specific implementations, backend integrations, advanced execution modes and development guidelines necessary for deploying large language models using llama.cpp across various hardware architectures. The content is structured to provide value to both beginners seeking step-by-step instructions as well as experienced developers requiring deep technical insights into optimizing model inference performance.
+```text
+## Comprehensive Summary of Llama.cpp Documentation
+
+### Key Areas Covered:
+
+#### 1. **Platform-Specific Implementation Details**
+##### Android Support:  
+Provides specific build instructions targeting arm64-v8a architecture through Termux environment with ADB deployment capabilities.
+
+##### Linux (ARM) Builds:  
+Includes toolchain setup via Termux and full feature builds with GPU acceleration when available.
+
+##### Windows Arm64 Builds:  
+Details SDK installation requirements specifically tailored for Snapdragon devices.
+
+#### 2 **Cross-platform Integration**:
+Includes Docker support enabling standardized containerization approaches while addressing platform-specific nuances in each target environment.
+
+#### 3 Backend Implementations:
+
+| Backend | Description | Key Features |
+|--------|-------------|--------------|
+|xVINO (Intel) | Hardware-accelerated inference on Intel devices including CPUs/GPUs/NPUs* FP16/BF16/Q8_0 precision support |
+
+AMD ZenDNN:
+Optimized matrix operations for EPYC processors with BF16 and Q8_0 format availability.
+ 
+### Multi-device Execution Modes 
+
+Advanced workload distribution techniques include layer-split, tensor-split, row-split modes supporting multiple physical or virtual NPU cores through complex configuration patterns like:
+```bash
+--devices "HTP[3],HTP[5]"
+```
+
+The documentation provides both high-level implementation guidance as well as low-level technical details needed to achieve optimal performance across diverse hardware platforms. It serves as a comprehensive reference for developers working on LLM inference solutions involving specialized accelerators through the llama.cpp framework.
+``` 
+
+This summary encapsulates the essence of the detailed documentation covering platform-specific implementations, backend integrations, advanced execution modes and development guidelines necessary for deploying large language models using llama.cpp across various hardware architectures. The content is structured to provide value to both beginners seeking step-by-step instructions as well as experienced developers requiring deep technical insights into optimizing model inference performance.
+```text
+## Comprehensive Summary of Llama.cpp Documentation
+
+### Core Focus Areas:
+
+#### 1. **Platform-Specific Implementation Details**
+##### Android Support:  
+Provides specific build instructions targeting arm64-v8a architecture through Termux environment with ADB deployment capabilities.
+
+##### Linux (ARM) Builds:  
+Includes toolchain setup via Termux and full feature builds with GPU acceleration when available.
+
+##### Windows Arm64 Builds:  
+Details SDK installation requirements specifically tailored for Snapdragon devices.
+
+#### 2 **Cross-platform Integration**:
+Includes Docker support enabling standardized containerization approaches while addressing platform-specific nuances in each target environment.
+
+#### 3 Backend Implementations:
+
+| Backend | Description | Key Features |
+|--------|-------------|--------------|
+|xVINO (Intel) | Hardware-accelerated inference on Intel devices including CPUs/GPUs/NPUs* FP16/BF16/Q8_0 precision support |
+
+AMD ZenDNN:
+Optimized matrix operations for EPYC processors with BF16 and Q8_0 format availability.
+ 
+### Multi-device Execution Modes 
+
+Advanced workload distribution techniques include layer-split, tensor-split, row-split modes supporting multiple physical or virtual NPU cores through complex configuration patterns like:
+```bash
+--devices "HTP[3],HTP[5]"
+```
+
+The documentation provides both high-level implementation guidance as well as low-level technical details needed to achieve optimal performance across diverse hardware platforms. It serves as a comprehensive reference for developers working on LLM inference solutions involving specialized accelerators through the llama.cpp framework.
+``` 
+
+This summary encapsulates the essence of the detailed documentation covering platform-specific implementations, backend integrations, advanced execution modes and development guidelines necessary for deploying large language models using llama.cpp across various hardware architectures. The content is structured to provide value to both beginners seeking step-by-step instructions as well as experienced developers requiring deep technical insights

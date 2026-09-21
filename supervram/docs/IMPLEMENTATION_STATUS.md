@@ -235,6 +235,20 @@ Goal (clarified): run the same weights at the maximum context using any combinat
 - Identified next steps, none built: (1) take the promotion step off the critical path (helper thread; the blocking counter read and commit sync are its cost), (2) warm start (populate the cache from a usage profile before the first token), (3) a higher admission threshold to cut copy traffic, (4) a wider-load kernel variant to lift in-place reads from 7.8 toward 11 GB/s.
 - Single run, one prompt, Q8_0.
 
+## Overnight: warm start, helper thread, prefetch, cache-aware routing (patch 0009) - measured on this machine
+
+Details, methodology and every number: `results/overnight/FINAL_RESULTS.md` and `results/overnight/LOG.md`; raw rows in
+`results/overnight/bench/SUMMARY.tsv` and `results/overnight/ram4g/SUMMARY.txt`.
+
+- Warm start (`--warm FILE`, `llama_moe_expert_cache_warm`): fills VRAM slots from a routing-usage profile before the prompt; prompt batches then
+  reuse resident experts device-to-device. Works for the zero-copy tier and the classic slot cache. A real bug (warm start racing the prompt's
+  own pending promotions) was found with `SVRAM_PROMOTE_CHECK` and fixed; Q4 outputs are bit-identical to full-GPU execution
+  (tokens and logits hashes), for the zero-copy tier and for the classic cache with and without direct I/O.
+- Helper-thread promotion: the per-token promotion step fell from 6.1 to 0.01 ms. Kernel L2 prefetch for pinned-RAM reads: 7.8 -> about 10.6 GB/s.
+- Cache-aware routing (`--moe-expert-bias F`): approximate. Perplexity unchanged up to F = 0.02; free-generation repetition rises at 0.02.
+- Benchmark (Q8_0, 32k in, 4,096 forced out, identical text): plain llama.cpp 142 s; exact tier 123 s; bias 0.01 95 s; bias 0.02 87 s; all-hot proxy 84 s.
+- RAM-poor (4 GB cap, SSD, 2,048 out): 264 s -> 217 s exact, 176 s -> 128 s with bias 0.02 (prefill 122.8 -> 80.2 s).
+
 ## Remaining gaps
 
 - Prompt ubatches that route more distinct experts than `n_slots` return a hard error (observed as llama-bench warmup `res = -3` at `-ub 16`). Use `-ub 1` or a larger cache for decode; prompt processing is not a v1 win.

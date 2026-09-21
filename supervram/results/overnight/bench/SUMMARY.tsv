@@ -11,3 +11,9 @@ F3-prev-cache14g-mmap-forced	prefill_s=34.6	decode_tps=37.8	n_out=4096	by_pos(0-
 S-bias0.01-zc-14g	prefill_s=23.0	decode_tps=55.9	n_out=4096	by_pos(0-512,512-1024,1024-2048,2048-4096)=44.1,49.8,56.1,61.7	total_s=96
 S-bias0.02-zc-14g	prefill_s=23.2	decode_tps=62.8	n_out=4096	by_pos(0-512,512-1024,1024-2048,2048-4096)=50.3,56.0,62.3,69.6	total_s=88
 S-bias0.03-zc-14g	prefill_s=23.2	decode_tps=65.6	n_out=4096	by_pos(0-512,512-1024,1024-2048,2048-4096)=54.1,58.4,65.0,71.9	total_s=86
+G-stock-ncpumoe27-forced	prefill_s=23.4	decode_tps=33.1	n_out=4096	by_pos(0-512,512-1024,1024-2048,2048-4096)=33.5,33.2,33.0,33.1	total_s=147
+G-exact-run2	prefill_s=22.7	decode_tps=40.9	n_out=4096	by_pos(0-512,512-1024,1024-2048,2048-4096)=33.5,39.3,43.4,42.4	total_s=123
+G-bias0.01-run2	prefill_s=22.7	decode_tps=56.9	n_out=4096	by_pos(0-512,512-1024,1024-2048,2048-4096)=44.6,50.4,56.9,63.2	total_s=95
+G-bias0.02-run2	prefill_s=22.8	decode_tps=63.6	n_out=4096	by_pos(0-512,512-1024,1024-2048,2048-4096)=51.1,56.4,63.3,70.3	total_s=87
+G-stock-ncpumoe24-forced	prefill_s=21.8	decode_tps=33.5	n_out=4096	by_pos(0-512,512-1024,1024-2048,2048-4096)=33.9,33.6,33.3,33.6	total_s=144
+G-stock-ncpumoe25-forced	prefill_s=22.4	decode_tps=34.4	n_out=4096	by_pos(0-512,512-1024,1024-2048,2048-4096)=34.9,34.2,34.6,34.2	total_s=142
