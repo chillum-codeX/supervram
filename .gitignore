@@ -6,5 +6,11 @@ supervram/results/arch-test/
 supervram/results/reproduced/
 supervram/results/*.svram
 supervram/results/*.svram.json
+supervram/results/*.svram.pack.json
+supervram/results/*.stdout.json
+supervram/results/*trace.jsonl
+supervram/results/determinism-*.json
+supervram/results/determinism-*.jsonl
+supervram/results/*.log
 supervram/*.log
 supervram/*.stdout.json
