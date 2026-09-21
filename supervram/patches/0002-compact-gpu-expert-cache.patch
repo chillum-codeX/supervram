@@ -1,0 +1,1664 @@
+diff --git a/common/arg.cpp b/common/arg.cpp
+index 8b5000a..6b38de2 100644
+--- a/common/arg.cpp
++++ b/common/arg.cpp
+@@ -2716,20 +2716,46 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
+         }
+     ).set_env("LLAMA_ARG_LAZY_MODE"));
+     add_opt(common_arg(
+-        {"--moe-expert-storage"}, "{resident,mmap}",
++        {"--moe-expert-storage"}, "{resident,mmap,cache}",
+         "storage for supported MoE expert weights (default: resident)\n"
+         "- resident: load expert weights normally\n"
+-        "- mmap: demand-page Qwen3 MoE expert weights from the model file and execute them on CPU",
++        "- mmap: demand-page Qwen3 MoE expert weights from the model file and execute them on CPU\n"
++        "- cache: demand-page experts from the file and execute MUL_MAT_ID on GPU via a bounded slot cache",
+         [](common_params & params, const std::string & value) {
+             if (value == "resident") {
+                 params.moe_expert_storage = LLAMA_MOE_EXPERT_STORAGE_RESIDENT;
+             } else if (value == "mmap") {
+                 params.moe_expert_storage = LLAMA_MOE_EXPERT_STORAGE_MMAP;
++            } else if (value == "cache") {
++                params.moe_expert_storage = LLAMA_MOE_EXPERT_STORAGE_CACHE;
+             } else {
+                 throw std::invalid_argument("invalid value");
+             }
+         }
+     ).set_env("LLAMA_ARG_MOE_EXPERT_STORAGE"));
++    add_opt(common_arg(
++        {"--moe-expert-cache-size"}, "N",
++        "device memory in MiB for the MoE expert slot cache (default: 8192 when --moe-expert-storage cache)",
++        [](common_params & params, int value) {
++            if (value < 0) {
++                throw std::invalid_argument("invalid value");
++            }
++            params.moe_expert_cache_mib = (size_t) value;
++        }
++    ).set_env("LLAMA_ARG_MOE_EXPERT_CACHE_SIZE"));
++    add_opt(common_arg(
++        {"--moe-expert-cache-policy"}, "{lru,lfu}",
++        "eviction policy for the MoE expert slot cache (default: lru)",
++        [](common_params & params, const std::string & value) {
++            if (value == "lru") {
++                params.moe_expert_cache_policy = LLAMA_MOE_EXPERT_CACHE_POLICY_LRU;
++            } else if (value == "lfu") {
++                params.moe_expert_cache_policy = LLAMA_MOE_EXPERT_CACHE_POLICY_LFU;
++            } else {
++                throw std::invalid_argument("invalid value");
++            }
++        }
++    ).set_env("LLAMA_ARG_MOE_EXPERT_CACHE_POLICY"));
+     add_opt(common_arg(
+         {"--numa"}, "TYPE",
+         "attempt optimizations that help on some NUMA systems\n"
+diff --git a/common/common.cpp b/common/common.cpp
+index f113c19..73beca5 100644
+--- a/common/common.cpp
++++ b/common/common.cpp
+@@ -1748,6 +1748,11 @@ struct llama_context_params common_context_params_to_llama(const common_params &
+     cparams.op_offload        = !params.no_op_offload;
+     cparams.swa_full          = params.swa_full;
+     cparams.kv_unified        = params.kv_unified;
++    cparams.moe_expert_cache_bytes  = params.moe_expert_cache_mib << 20;
++    cparams.moe_expert_cache_policy = params.moe_expert_cache_policy;
++    if (params.moe_expert_storage == LLAMA_MOE_EXPERT_STORAGE_CACHE && cparams.moe_expert_cache_bytes == 0) {
++        cparams.moe_expert_cache_bytes = 8ull << 30;
++    }
+ 
+     cparams.type_k = params.cache_type_k;
+     cparams.type_v = params.cache_type_v;
+diff --git a/common/common.h b/common/common.h
+index 2b96e8c..22e1f87 100644
+--- a/common/common.h
++++ b/common/common.h
+@@ -485,6 +485,8 @@ struct common_params {
+ 
+     enum llama_lazy_mode lazy_mode = LLAMA_LAZY_MODE_AUTO; // on-demand reading of tensors marked by the arch
+     enum llama_moe_expert_storage moe_expert_storage = LLAMA_MOE_EXPERT_STORAGE_RESIDENT;
++    size_t moe_expert_cache_mib = 0; // 0 = llama.cpp default when storage=cache
++    enum llama_moe_expert_cache_policy moe_expert_cache_policy = LLAMA_MOE_EXPERT_CACHE_POLICY_LRU;
+ 
+     common_cpu_params cpuparams;
+     common_cpu_params cpuparams_batch;
+diff --git a/ggml/include/ggml-backend.h b/ggml/include/ggml-backend.h
+index cc3f8cd..26f0488 100644
+--- a/ggml/include/ggml-backend.h
++++ b/ggml/include/ggml-backend.h
+@@ -353,6 +353,49 @@ extern "C" {
+     // Set a callback to be called for each resulting node during graph compute
+     GGML_API void                 ggml_backend_sched_set_eval_callback(ggml_backend_sched_t sched, ggml_backend_sched_eval_callback callback, void * user_data);
+ 
++    //
++    // Expert cache (SuperVRAM)
++    //
++    // Bounded device-resident cache for MoE expert weights that live in host memory (e.g. mmap-ed GGUF).
++    // When enabled, every GGML_OP_MUL_MAT_ID whose weight (src[0]) is a host weight tensor is executed on the
++    // highest-priority backend that supports it. Instead of copying the full expert stack to the device, the
++    // scheduler keeps a compact per-tensor slot buffer {ne0, ne1, n_slots} on the device, copies only missing
++    // experts into free/evicted slots and rewrites the routing ids (src[2]) to slot indices for that node only.
++    //
++
++    enum ggml_backend_sched_expert_cache_policy {
++        GGML_SCHED_EXPERT_CACHE_LRU = 0,
++        GGML_SCHED_EXPERT_CACHE_LFU = 1,
++    };
++
++    struct ggml_backend_sched_expert_cache_params {
++        size_t capacity_bytes;                              // device bytes for expert slots, shared by all cached tensors
++        enum ggml_backend_sched_expert_cache_policy policy; // eviction policy
++        int    n_slots_min;                                 // lower bound on slots per tensor (0 -> 8)
++    };
++
++    struct ggml_backend_sched_expert_cache_stats {
++        uint64_t n_steps;          // number of (tensor, graph) load events
++        uint64_t accesses;         // distinct experts required, summed over load events
++        uint64_t hits;             // experts already resident
++        uint64_t misses;           // experts copied host -> device
++        uint64_t evictions;        // resident experts replaced
++        uint64_t bytes_h2d;        // expert bytes copied host -> device
++        uint64_t ids_uploads;      // remapped id uploads
++        uint64_t n_tensors;        // cached weight tensors
++        uint64_t n_slots_total;    // slots across all cached tensors
++        uint64_t slot_bytes_total; // device bytes reserved for slots (+padding, ids)
++        uint64_t max_used_per_step;// max distinct experts required by a single load event
++        double   host_ms;          // host time spent in the load path (ids download, policy, copy issue)
++    };
++
++    // Enable (params != NULL) or disable (params == NULL) the expert cache. Must be called before the first
++    // reserve/alloc of a graph that uses host expert weights. Requires a scheduler without pipeline copies.
++    GGML_API void ggml_backend_sched_set_expert_cache(ggml_backend_sched_t sched, const struct ggml_backend_sched_expert_cache_params * params);
++    GGML_API bool ggml_backend_sched_expert_cache_enabled(ggml_backend_sched_t sched);
++    GGML_API void ggml_backend_sched_get_expert_cache_stats(ggml_backend_sched_t sched, struct ggml_backend_sched_expert_cache_stats * stats);
++    GGML_API void ggml_backend_sched_reset_expert_cache_stats(ggml_backend_sched_t sched);
++
+     //
+     // Meta backend
+     //
+diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
+index 20bf965..ac91277 100644
+--- a/ggml/src/ggml-backend.cpp
++++ b/ggml/src/ggml-backend.cpp
+@@ -783,6 +783,44 @@ struct ggml_backend_sched_split {
+     struct ggml_cgraph graph;
+ };
+ 
++// expert cache (SuperVRAM): compact device slots for host-resident MoE expert weights
++#define GGML_SCHED_EXPERT_CACHE_PAD 512 // extra zeroed bytes after the last slot (MMQ reads a little past the end)
++
++struct ggml_backend_sched_expert_tensor {
++    struct ggml_tensor *  weight     = nullptr; // host weight {ne0, ne1, n_expert}
++    int                   backend_id = -1;      // device backend that executes the consuming MUL_MAT_ID
++    ggml_backend_buffer_t buffer     = nullptr; // device buffer: [slots | pad | ids remap]
++    size_t                slots_nbytes = 0;
++    size_t                ids_offset   = 0;
++    size_t                ids_nbytes   = 0;     // capacity for the remapped ids
++    int64_t               n_expert    = 0;
++    size_t                expert_size = 0;      // nb[2]
++    int                   n_slots     = 0;
++
++    std::vector<int32_t>  slot_of_expert;       // [n_expert]  -1 when not resident
++    std::vector<int32_t>  expert_of_slot;       // [n_slots]   -1 when empty
++    std::vector<uint64_t> last_use;             // [n_slots]   tick of last use
++    std::vector<uint32_t> use_count;            // [n_slots]
++    uint64_t              tick = 0;
++
++    // per-graph tensors, live in sched->ctx and are rebuilt by ggml_backend_sched_split_graph
++    struct ggml_tensor * slots_view = nullptr;  // {ne0, ne1, n_slots} on the device, pre-allocated in `buffer`
++    struct ggml_tensor * ids_remap  = nullptr;  // same layout as the node's ids tensor, pre-allocated in `buffer`
++    struct ggml_tensor * ids_orig   = nullptr;  // the node's original ids tensor (logical expert ids)
++};
++
++struct ggml_backend_sched_expert_cache {
++    struct ggml_backend_sched_expert_cache_params params;
++    struct ggml_backend_sched_expert_cache_stats  stats;
++    std::unordered_map<struct ggml_tensor *, ggml_backend_sched_expert_tensor> tensors;
++    bool layout_dirty = true;
++
++    // scratch
++    std::vector<int32_t> ids_host;
++    std::vector<int32_t> remap_host;
++    std::vector<uint8_t> used;
++};
++
+ struct ggml_backend_sched {
+     bool is_reset; // true if the scheduler has been reset since the last graph split
+     bool is_alloc;
+@@ -831,6 +869,8 @@ struct ggml_backend_sched {
+ 
+     bool op_offload;
+ 
++    struct ggml_backend_sched_expert_cache * expert_cache; // NULL when disabled
++
+     int debug;
+ 
+     // used for debugging graph reallocations [GGML_SCHED_DEBUG_REALLOC]
+@@ -875,6 +915,312 @@ static void ggml_backend_sched_graph_inputs_grow(ggml_backend_sched_t sched) {
+     sched->graph_inputs_capacity = new_cap;
+ }
+ 
++//
++// expert cache helpers
++//
++
++// returns the host expert weight of `node` if the expert cache should handle it, NULL otherwise
++static struct ggml_tensor * ggml_backend_sched_expert_cache_weight(ggml_backend_sched_t sched, const struct ggml_tensor * node) {
++    if (sched->expert_cache == NULL || node->op != GGML_OP_MUL_MAT_ID) {
++        return NULL;
++    }
++    struct ggml_tensor * w = node->src[0];
++    if (w == NULL || w->view_src != NULL || w->buffer == NULL) {
++        return NULL;
++    }
++    if (ggml_backend_buffer_get_usage(w->buffer) != GGML_BACKEND_BUFFER_USAGE_WEIGHTS || !ggml_backend_buffer_is_host(w->buffer)) {
++        return NULL;
++    }
++    if (w->ne[2] <= 1 || w->ne[3] != 1 || !ggml_is_contiguous(w)) {
++        return NULL;
++    }
++    return w;
++}
++
++// device backend that will execute cached MUL_MAT_ID nodes: highest priority non-CPU backend that supports the op
++static int ggml_backend_sched_expert_cache_backend(ggml_backend_sched_t sched, const struct ggml_tensor * node) {
++    for (int b = 0; b < sched->n_backends - 1; b++) {
++        if (ggml_backend_supports_op(sched->backends[b], node)) {
++            return b;
++        }
++    }
++    return -1;
++}
++
++static void ggml_backend_sched_expert_cache_free_buffers(struct ggml_backend_sched_expert_cache * cache) {
++    for (auto & it : cache->tensors) {
++        ggml_backend_buffer_free(it.second.buffer);
++        it.second.buffer = nullptr;
++    }
++}
++
++// (re)allocate the slot buffers for all registered tensors; called at the start of split_graph when the set of
++// cached tensors or the ids capacity changed
++static void ggml_backend_sched_expert_cache_layout(ggml_backend_sched_t sched) {
++    struct ggml_backend_sched_expert_cache * cache = sched->expert_cache;
++    if (!cache->layout_dirty) {
++        return;
++    }
++    cache->layout_dirty = false;
++
++    // all backends must be idle: the previous graph may still be reading the old slot buffers
++    for (int i = 0; i < sched->n_backends; i++) {
++        ggml_backend_synchronize(sched->backends[i]);
++    }
++    ggml_backend_sched_expert_cache_free_buffers(cache);
++
++    size_t sum_expert_size = 0;
++    for (const auto & it : cache->tensors) {
++        sum_expert_size += it.second.expert_size;
++    }
++    if (sum_expert_size == 0) {
++        return;
++    }
++
++    const int n_slots_min = cache->params.n_slots_min > 0 ? cache->params.n_slots_min : 8;
++    const int64_t n_slots_budget = std::max<int64_t>(n_slots_min, (int64_t) (cache->params.capacity_bytes / sum_expert_size));
++
++    cache->stats.n_tensors        = 0;
++    cache->stats.n_slots_total    = 0;
++    cache->stats.slot_bytes_total = 0;
++
++    for (auto & it : cache->tensors) {
++        ggml_backend_sched_expert_tensor & et = it.second;
++        et.n_slots = (int) std::min<int64_t>(n_slots_budget, et.n_expert);
++        et.slots_nbytes = (size_t) et.n_slots * et.expert_size;
++        // extra room: MMQ reads past the last expert and some backends report alloc_size > nbytes
++        et.ids_offset = et.slots_nbytes + std::max<size_t>(GGML_SCHED_EXPERT_CACHE_PAD, 1 << 20);
++        et.ids_nbytes = std::max(et.ids_nbytes, (size_t) 256);
++        const size_t total = et.ids_offset + et.ids_nbytes + GGML_SCHED_EXPERT_CACHE_PAD;
++
++        et.buffer = ggml_backend_buft_alloc_buffer(sched->bufts[et.backend_id], total);
++        if (et.buffer == NULL) {
++            GGML_ABORT("%s: failed to allocate %zu bytes of expert cache slots for %s on %s\n", __func__, total, et.weight->name,
++                ggml_backend_buft_name(sched->bufts[et.backend_id]));
++        }
++        ggml_backend_buffer_set_usage(et.buffer, GGML_BACKEND_BUFFER_USAGE_COMPUTE);
++        ggml_backend_buffer_clear(et.buffer, 0); // padding must never contain NaN patterns
++
++        et.slot_of_expert.assign(et.n_expert, -1);
++        et.expert_of_slot.assign(et.n_slots, -1);
++        et.last_use.assign(et.n_slots, 0);
++        et.use_count.assign(et.n_slots, 0);
++        et.tick = 0;
++
++        cache->stats.n_tensors++;
++        cache->stats.n_slots_total    += et.n_slots;
++        cache->stats.slot_bytes_total += total;
++    }
++
++    GGML_LOG_INFO("%s: expert cache: %zu tensors, %d slots/tensor (budget %zu MiB, %.2f MiB per expert), %.2f MiB on device\n", __func__,
++        cache->tensors.size(), (int) std::min<int64_t>(n_slots_budget, INT32_MAX), cache->params.capacity_bytes / 1024 / 1024,
++        sum_expert_size / (double) cache->tensors.size() / 1024.0 / 1024.0, cache->stats.slot_bytes_total / 1024.0 / 1024.0);
++}
++
++// pass 0 of split_graph: discover host expert weights consumed by MUL_MAT_ID and make sure slot buffers exist
++static void ggml_backend_sched_expert_cache_prepare(ggml_backend_sched_t sched, struct ggml_cgraph * graph) {
++    struct ggml_backend_sched_expert_cache * cache = sched->expert_cache;
++    for (auto & it : cache->tensors) {
++        it.second.slots_view = nullptr;
++        it.second.ids_remap  = nullptr;
++        it.second.ids_orig   = nullptr;
++    }
++    for (int i = 0; i < graph->n_nodes; i++) {
++        struct ggml_tensor * node = graph->nodes[i];
++        struct ggml_tensor * w = ggml_backend_sched_expert_cache_weight(sched, node);
++        if (w == NULL) {
++            continue;
++        }
++        const int backend_id = ggml_backend_sched_expert_cache_backend(sched, node);
++        if (backend_id < 0) {
++            continue; // no device backend supports this op, the CPU path will be used
++        }
++        const size_t ids_nbytes = ggml_nbytes(node->src[2]);
++        auto it = cache->tensors.find(w);
++        if (it == cache->tensors.end()) {
++            ggml_backend_sched_expert_tensor et;
++            et.weight      = w;
++            et.backend_id  = backend_id;
++            et.n_expert    = w->ne[2];
++            et.expert_size = w->nb[2];
++            et.ids_nbytes  = ids_nbytes;
++            cache->tensors.emplace(w, std::move(et));
++            cache->layout_dirty = true;
++        } else if (it->second.ids_nbytes < ids_nbytes) {
++            it->second.ids_nbytes = ids_nbytes;
++            cache->layout_dirty = true;
++        }
++    }
++    ggml_backend_sched_expert_cache_layout(sched);
++}
++
++// pass 5 of split_graph: create the per-graph slot view and ids remap tensors for a cached node
++static struct ggml_tensor * ggml_backend_sched_expert_cache_slots_view(ggml_backend_sched_t sched, ggml_backend_sched_expert_tensor & et) {
++    if (et.slots_view == nullptr) {
++        struct ggml_tensor * w = et.weight;
++        struct ggml_tensor * t = ggml_new_tensor_3d(sched->ctx, w->type, w->ne[0], w->ne[1], et.n_slots);
++        ggml_format_name(t, "%s#xcache", w->name);
++        if (ggml_backend_tensor_alloc(et.buffer, t, ggml_backend_buffer_get_base(et.buffer)) != GGML_STATUS_SUCCESS) {
++            GGML_ABORT("%s: failed to bind expert cache slots for %s\n", __func__, w->name);
++        }
++        et.slots_view = t;
++    }
++    return et.slots_view;
++}
++
++static void ggml_backend_sched_expert_cache_bind_ids(ggml_backend_sched_t sched, struct ggml_tensor * node, ggml_backend_sched_expert_tensor & et, struct ggml_tensor * ids) {
++    if (et.ids_remap != nullptr) {
++        // a weight is expected to be consumed by exactly one MUL_MAT_ID per graph
++        GGML_ASSERT(et.ids_orig == ids && "expert cache: weight used by multiple MUL_MAT_ID nodes with different ids");
++        node->src[2] = et.ids_remap;
++        return;
++    }
++    GGML_ASSERT(ggml_nbytes(ids) <= et.ids_nbytes);
++    struct ggml_tensor * remap = ggml_dup_tensor_layout(sched->ctx, ids);
++    ggml_format_name(remap, "%s#xids", et.weight->name);
++    if (ggml_backend_tensor_alloc(et.buffer, remap, (char *) ggml_backend_buffer_get_base(et.buffer) + et.ids_offset) != GGML_STATUS_SUCCESS) {
++        GGML_ABORT("%s: failed to bind expert cache ids for %s\n", __func__, et.weight->name);
++    }
++    et.ids_remap = remap;
++    et.ids_orig  = ids;
++    node->src[2] = remap;
++}
++
++// compute time: make the experts selected by `ids` resident in the slots and upload the remapped ids
++static enum ggml_status ggml_backend_sched_expert_cache_load(
++        ggml_backend_sched_t sched, ggml_backend_sched_expert_tensor & et, ggml_backend_t split_backend,
++        struct ggml_tensor ** prev_ids_tensor) {
++    struct ggml_backend_sched_expert_cache * cache = sched->expert_cache;
++    struct ggml_tensor * ids = et.ids_orig;
++    GGML_ASSERT(ids != nullptr && et.slots_view != nullptr && et.ids_remap != nullptr);
++
++    const int64_t t_start = ggml_time_us();
++
++    // download the logical ids (they are produced by a previous split on the device)
++    if (ids != *prev_ids_tensor) {
++        ggml_backend_t ids_backend = ggml_backend_sched_get_tensor_backend(sched, ids);
++        if (ids_backend == NULL) {
++            ids_backend = split_backend;
++        }
++        cache->ids_host.resize(ggml_nbytes(ids) / sizeof(int32_t));
++        ggml_backend_tensor_get_async(ids_backend, ids, cache->ids_host.data(), 0, ggml_nbytes(ids));
++        ggml_backend_synchronize(ids_backend);
++        *prev_ids_tensor = ids;
++    }
++
++    const int64_t n_expert = et.n_expert;
++    et.tick++;
++
++    // distinct experts required by this step
++    cache->used.assign(n_expert, 0);
++    int64_t n_used = 0;
++    for (int64_t i1 = 0; i1 < ids->ne[1]; i1++) {
++        for (int64_t i0 = 0; i0 < ids->ne[0]; i0++) {
++            const int32_t id = cache->ids_host[i1 * ids->nb[1]/sizeof(int32_t) + i0 * ids->nb[0]/sizeof(int32_t)];
++            GGML_ASSERT(id >= 0 && id < n_expert);
++            if (!cache->used[id]) {
++                cache->used[id] = 1;
++                n_used++;
++            }
++        }
++    }
++    if (n_used > et.n_slots) {
++        GGML_LOG_ERROR("%s: expert cache: %s requires %lld distinct experts but only %d slots are available; "
++            "increase the cache size or reduce the batch size (-ub)\n", __func__, et.weight->name, (long long) n_used, et.n_slots);
++        return GGML_STATUS_FAILED;
++    }
++
++    // hits: touch resident experts first so that they cannot be chosen as victims
++    int64_t n_hits = 0;
++    for (int64_t e = 0; e < n_expert; e++) {
++        if (!cache->used[e]) {
++            continue;
++        }
++        const int32_t s = et.slot_of_expert[e];
++        if (s >= 0) {
++            et.last_use[s] = et.tick;
++            et.use_count[s]++;
++            n_hits++;
++        }
++    }
++
++    // misses: choose a victim slot per policy and copy the expert
++    const uint8_t * src_base = (const uint8_t *) et.weight->data;
++    int64_t n_miss = 0;
++    int64_t n_evict = 0;
++    int next_scan = 0; // empty-slot scan cursor
++    for (int64_t e = 0; e < n_expert; e++) {
++        if (!cache->used[e] || et.slot_of_expert[e] >= 0) {
++            continue;
++        }
++        int victim = -1;
++        // prefer empty slots
++        for (; next_scan < et.n_slots; next_scan++) {
++            if (et.expert_of_slot[next_scan] < 0) {
++                victim = next_scan++;
++                break;
++            }
++        }
++        if (victim < 0) {
++            for (int s = 0; s < et.n_slots; s++) {
++                if (et.last_use[s] == et.tick) {
++                    continue; // needed by this step
++                }
++                if (victim < 0) {
++                    victim = s;
++                    continue;
++                }
++                bool better;
++                if (cache->params.policy == GGML_SCHED_EXPERT_CACHE_LFU) {
++                    better = et.use_count[s] < et.use_count[victim] ||
++                             (et.use_count[s] == et.use_count[victim] && et.last_use[s] < et.last_use[victim]);
++                } else {
++                    better = et.last_use[s] < et.last_use[victim];
++                }
++                if (better) {
++                    victim = s;
++                }
++            }
++            GGML_ASSERT(victim >= 0);
++            const int32_t old = et.expert_of_slot[victim];
++            if (old >= 0) {
++                et.slot_of_expert[old] = -1;
++                n_evict++;
++            }
++        }
++        et.expert_of_slot[victim] = (int32_t) e;
++        et.slot_of_expert[e]      = victim;
++        et.last_use[victim]       = et.tick;
++        et.use_count[victim]      = 1;
++
++        ggml_backend_tensor_set_async(split_backend, et.slots_view,
++            src_base + (size_t) e * et.expert_size, (size_t) victim * et.expert_size, et.expert_size);
++        n_miss++;
++    }
++
++    // remapped ids with the same layout as the original tensor
++    cache->remap_host.assign(cache->ids_host.size(), 0);
++    for (int64_t i1 = 0; i1 < ids->ne[1]; i1++) {
++        for (int64_t i0 = 0; i0 < ids->ne[0]; i0++) {
++            const size_t idx = i1 * ids->nb[1]/sizeof(int32_t) + i0 * ids->nb[0]/sizeof(int32_t);
++            cache->remap_host[idx] = et.slot_of_expert[cache->ids_host[idx]];
++        }
++    }
++    ggml_backend_tensor_set_async(split_backend, et.ids_remap, cache->remap_host.data(), 0, ggml_nbytes(ids));
++
++    cache->stats.n_steps++;
++    cache->stats.accesses    += n_used;
++    cache->stats.hits        += n_hits;
++    cache->stats.misses      += n_miss;
++    cache->stats.evictions   += n_evict;
++    cache->stats.bytes_h2d   += (uint64_t) n_miss * et.expert_size;
++    cache->stats.ids_uploads += 1;
++    cache->stats.max_used_per_step = std::max<uint64_t>(cache->stats.max_used_per_step, (uint64_t) n_used);
++    cache->stats.host_ms += (ggml_time_us() - t_start) / 1000.0;
++
++    return GGML_STATUS_SUCCESS;
++}
++
+ // returns the priority of the backend, lower id is higher priority
+ static int ggml_backend_sched_backend_id(ggml_backend_sched_t sched, ggml_backend_t backend) {
+     for (int i = 0; i < sched->n_backends; i++) {
+@@ -948,6 +1294,15 @@ static int ggml_backend_sched_backend_id_from_cur(ggml_backend_sched_t sched, st
+         return cur_backend_id;
+     }
+ 
++    // expert cache: MUL_MAT_ID on host expert weights runs on the device regardless of the batch size
++    if (ggml_backend_sched_expert_cache_weight(sched, tensor) != NULL) {
++        const int b = ggml_backend_sched_expert_cache_backend(sched, tensor);
++        if (b >= 0) {
++            SET_CAUSE(tensor, "1.xc");
++            return b;
++        }
++    }
++
+     // operations with weights are preferably run on the same backend as the weights
+     // TODO: there are exceptions (see below) - not an ideal solution
+     bool allow = true;
+@@ -1084,6 +1439,11 @@ void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct ggml_cgra
+ 
+     graph->uid = ggml_graph_next_uid();
+ 
++    // pass 0: expert cache bookkeeping (slot buffers must exist before the input copies are created)
++    if (sched->expert_cache) {
++        ggml_backend_sched_expert_cache_prepare(sched, graph);
++    }
++
+     // pass 1: assign backends to ops with pre-allocated inputs
+     for (int i = 0; i < graph->n_leafs; i++) {
+         struct ggml_tensor * leaf = graph->leafs[i];
+@@ -1321,9 +1681,22 @@ void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct ggml_cgra
+ 
+             GGML_ASSERT(node_backend_id != -1); // all nodes should be assigned by now, this can happen if there is no CPU fallback
+ 
++            // expert cache: a cached MUL_MAT_ID must be the first node of its split so that its routing ids
++            // (produced by earlier nodes) are complete when the split's inputs are prepared
++            ggml_backend_sched_expert_tensor * xc = nullptr;
++            if (sched->expert_cache) {
++                struct ggml_tensor * w = ggml_backend_sched_expert_cache_weight(sched, node);
++                if (w) {
++                    auto it = sched->expert_cache->tensors.find(w);
++                    if (it != sched->expert_cache->tensors.end() && it->second.backend_id == node_backend_id) {
++                        xc = &it->second;
++                    }
++                }
++            }
++
+             // check if we should start a new split based on the sources of the current node
+-            bool need_new_split = false;
+-            if (node_backend_id == cur_backend_id && split->n_inputs > 0) {
++            bool need_new_split = xc != nullptr && i != split->i_start;
++            if (!need_new_split && node_backend_id == cur_backend_id && split->n_inputs > 0) {
+                 for (int j = 0; j < GGML_MAX_SRC; j++) {
+                     struct ggml_tensor * src = node->src[j];
+                     if (src == NULL) {
+@@ -1361,6 +1734,9 @@ void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct ggml_cgra
+                 cur_backend_id = node_backend_id;
+             }
+ 
++            // expert cache: remember the logical ids tensor before any input substitution below
++            struct ggml_tensor * xc_ids = xc != nullptr ? node->src[2] : nullptr;
++
+             // find inputs that are not on the same backend
+             for (int j = 0; j < GGML_MAX_SRC; j++) {
+                 struct ggml_tensor * src = node->src[j];
+@@ -1401,11 +1777,17 @@ void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct ggml_cgra
+                     if (tensor_id_copy(src_id, cur_backend_id, 0) == NULL) {
+                         ggml_backend_t backend = sched->backends[cur_backend_id];
+                         for (int c = 0; c < sched->n_copies; c++) {
+-                            struct ggml_tensor * tensor_copy = ggml_dup_tensor_layout(sched->ctx, src);
+-                            ggml_format_name(tensor_copy, "%s#%s#%d", ggml_backend_name(backend), src->name, c);
+-                            if (sched->n_copies > 1) {
+-                                ggml_set_input(tensor_copy);
+-                                ggml_set_output(tensor_copy); // prevent ggml-alloc from overwriting the tensor
++                            struct ggml_tensor * tensor_copy;
++                            if (xc != nullptr && j == 0) {
++                                // expert cache: the "copy" is the persistent compact slot buffer on the device
++                                tensor_copy = ggml_backend_sched_expert_cache_slots_view(sched, *xc);
++                            } else {
++                                tensor_copy = ggml_dup_tensor_layout(sched->ctx, src);
++                                ggml_format_name(tensor_copy, "%s#%s#%d", ggml_backend_name(backend), src->name, c);
++                                if (sched->n_copies > 1) {
++                                    ggml_set_input(tensor_copy);
++                                    ggml_set_output(tensor_copy); // prevent ggml-alloc from overwriting the tensor
++                                }
+                             }
+                             tensor_id_copy(src_id, cur_backend_id, c) = tensor_copy;
+                             SET_CAUSE(tensor_copy, "4.cpy");
+@@ -1419,6 +1801,11 @@ void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct ggml_cgra
+                     node->src[j] = tensor_id_copy(src_id, cur_backend_id, sched->cur_copy);
+                 }
+             }
++
++            if (xc != nullptr) {
++                GGML_ASSERT(node->src[0] == xc->slots_view && "expert cache: weight copy was not routed through the slot buffer");
++                ggml_backend_sched_expert_cache_bind_ids(sched, node, *xc, xc_ids);
++            }
+         }
+         split->i_end = graph->n_nodes;
+         sched->n_splits = i_split + 1;
+@@ -1690,6 +2077,18 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
+                     ggml_backend_synchronize(split_backend);
+                 }
+ 
++                // expert cache: copy only missing experts into the compact slot buffer and remap the ids
++                if (sched->expert_cache) {
++                    auto it = sched->expert_cache->tensors.find(input);
++                    if (it != sched->expert_cache->tensors.end() && it->second.slots_view == input_cpy) {
++                        enum ggml_status st = ggml_backend_sched_expert_cache_load(sched, it->second, split_backend, &prev_ids_tensor);
++                        if (st != GGML_STATUS_SUCCESS) {
++                            return st;
++                        }
++                        continue;
++                    }
++                }
++
+                 // when offloading MoE weights, we can reduce the amount of data copied by copying only the experts that are used
+                 ggml_tensor * node = split->graph.nodes[0];
+                 if (split->graph.n_nodes > 0 &&
+@@ -1911,12 +2310,60 @@ ggml_backend_sched_t ggml_backend_sched_new(
+ 
+     sched->galloc = ggml_gallocr_new_n(sched->bufts, n_backends);
+     sched->op_offload = op_offload;
++    sched->expert_cache = nullptr;
+ 
+     ggml_backend_sched_reset(sched);
+ 
+     return sched;
+ }
+ 
++void ggml_backend_sched_set_expert_cache(ggml_backend_sched_t sched, const struct ggml_backend_sched_expert_cache_params * params) {
++    GGML_ASSERT(sched);
++    if (sched->expert_cache) {
++        for (int i = 0; i < sched->n_backends; i++) {
++            ggml_backend_synchronize(sched->backends[i]);
++        }
++        ggml_backend_sched_expert_cache_free_buffers(sched->expert_cache);
++        delete sched->expert_cache;
++        sched->expert_cache = nullptr;
++    }
++    if (params == NULL || params->capacity_bytes == 0) {
++        return;
++    }
++    GGML_ASSERT(sched->n_copies == 1 && "expert cache does not support pipeline parallel copies");
++    GGML_ASSERT(sched->n_backends > 1 && "expert cache requires a device backend in addition to the CPU");
++    sched->expert_cache = new ggml_backend_sched_expert_cache();
++    sched->expert_cache->params = *params;
++    memset(&sched->expert_cache->stats, 0, sizeof(sched->expert_cache->stats));
++    sched->expert_cache->layout_dirty = true;
++}
++
++bool ggml_backend_sched_expert_cache_enabled(ggml_backend_sched_t sched) {
++    GGML_ASSERT(sched);
++    return sched->expert_cache != nullptr;
++}
++
++void ggml_backend_sched_get_expert_cache_stats(ggml_backend_sched_t sched, struct ggml_backend_sched_expert_cache_stats * stats) {
++    GGML_ASSERT(sched && stats);
++    if (sched->expert_cache) {
++        *stats = sched->expert_cache->stats;
++    } else {
++        memset(stats, 0, sizeof(*stats));
++    }
++}
++
++void ggml_backend_sched_reset_expert_cache_stats(ggml_backend_sched_t sched) {
++    GGML_ASSERT(sched);
++    if (sched->expert_cache) {
++        struct ggml_backend_sched_expert_cache_stats & s = sched->expert_cache->stats;
++        const uint64_t n_tensors = s.n_tensors, n_slots = s.n_slots_total, slot_bytes = s.slot_bytes_total;
++        memset(&s, 0, sizeof(s));
++        s.n_tensors = n_tensors;
++        s.n_slots_total = n_slots;
++        s.slot_bytes_total = slot_bytes;
++    }
++}
++
+ void ggml_backend_sched_free(ggml_backend_sched_t sched) {
+     if (sched == NULL) {
+         return;
+@@ -1926,6 +2373,10 @@ void ggml_backend_sched_free(ggml_backend_sched_t sched) {
+             ggml_backend_event_free(sched->events[b][c]);
+         }
+     }
++    if (sched->expert_cache) {
++        ggml_backend_sched_expert_cache_free_buffers(sched->expert_cache);
++        delete sched->expert_cache;
++    }
+     ggml_gallocr_free(sched->galloc);
+     ggml_free(sched->ctx);
+     ggml_hash_set_free(&sched->hash_set);
+diff --git a/include/llama.h b/include/llama.h
+index fc29e5b..b6a02df 100644
+--- a/include/llama.h
++++ b/include/llama.h
+@@ -222,8 +222,14 @@ extern "C" {
+     };
+ 
+     enum llama_moe_expert_storage {
+-        LLAMA_MOE_EXPERT_STORAGE_RESIDENT = 0,
+-        LLAMA_MOE_EXPERT_STORAGE_MMAP     = 1,
++        LLAMA_MOE_EXPERT_STORAGE_RESIDENT = 0, // normal placement
++        LLAMA_MOE_EXPERT_STORAGE_MMAP     = 1, // experts demand-paged from the file, executed on CPU
++        LLAMA_MOE_EXPERT_STORAGE_CACHE    = 2, // experts demand-paged from the file, executed on the device through a bounded slot cache
++    };
++
++    enum llama_moe_expert_cache_policy {
++        LLAMA_MOE_EXPERT_CACHE_POLICY_LRU = 0,
++        LLAMA_MOE_EXPERT_CACHE_POLICY_LFU = 1,
+     };
+ 
+     enum llama_context_type {
+@@ -402,6 +408,10 @@ extern "C" {
+         ggml_abort_callback abort_callback;
+         void *              abort_callback_data;
+ 
++        // bounded device cache for host-resident MoE expert weights (0 = disabled)
++        size_t moe_expert_cache_bytes;
++        enum llama_moe_expert_cache_policy moe_expert_cache_policy;
++
+         // Keep the booleans together and at the end of the struct to avoid misalignment during copy-by-value.
+         bool embeddings;  // if true, extract embeddings (together with logits)
+         bool offload_kqv; // offload the KQV ops (including the KV cache) to GPU
+@@ -1040,6 +1050,11 @@ extern "C" {
+     // and is not necessary to call it explicitly in most cases
+     LLAMA_API void llama_synchronize(struct llama_context * ctx);
+ 
++    // MoE expert cache statistics (see llama_context_params::moe_expert_cache_bytes)
++    // returns false when the cache is not enabled for this context
++    LLAMA_API bool llama_get_moe_expert_cache_stats(struct llama_context * ctx, struct ggml_backend_sched_expert_cache_stats * stats);
++    LLAMA_API void llama_reset_moe_expert_cache_stats(struct llama_context * ctx);
++
+     // Token logits obtained from the last call to llama_decode()
+     // The logits for which llama_batch.logits[i] != 0 are stored contiguously
+     // in the order they have appeared in the batch.
+diff --git a/src/llama-context.cpp b/src/llama-context.cpp
+index ef53728..0d11bb8 100644
+--- a/src/llama-context.cpp
++++ b/src/llama-context.cpp
+@@ -272,6 +272,17 @@ llama_context::llama_context(
+     cparams.op_offload = params.op_offload;
+     cparams.kv_unified = params.kv_unified;
+ 
++    cparams.moe_expert_cache_bytes  = params.moe_expert_cache_bytes;
++    cparams.moe_expert_cache_policy = params.moe_expert_cache_policy;
++    if (model.moe_expert_storage() == LLAMA_MOE_EXPERT_STORAGE_CACHE && cparams.moe_expert_cache_bytes == 0) {
++        cparams.moe_expert_cache_bytes = 8ull * 1024 * 1024 * 1024;
++        LLAMA_LOG_WARN("%s: moe_expert_storage = cache but no cache size given, using %zu MiB\n", __func__, cparams.moe_expert_cache_bytes / 1024 / 1024);
++    }
++    if (cparams.moe_expert_cache_bytes > 0) {
++        LLAMA_LOG_INFO("%s: moe_expert_cache      = %zu MiB (%s)\n", __func__, cparams.moe_expert_cache_bytes / 1024 / 1024,
++                cparams.moe_expert_cache_policy == LLAMA_MOE_EXPERT_CACHE_POLICY_LFU ? "lfu" : "lru");
++    }
++
+     // initialized later
+     cparams.pipeline_parallel = false;
+ 
+@@ -426,6 +437,7 @@ llama_context::llama_context(
+         // TODO: move these checks to ggml_backend_sched
+         // enabling pipeline parallelism in the scheduler increases memory usage, so it is only done when necessary
+         bool pipeline_parallel =
++            cparams.moe_expert_cache_bytes == 0 &&
+             model.n_devices() > 1 &&
+             model.n_gpu_layers() > model.hparams.n_layer_all &&
+             model.split_mode() == LLAMA_SPLIT_MODE_LAYER &&
+@@ -579,6 +591,33 @@ void llama_context::resolve_fused_ops(const llama_memory_context_i * mctx, uint3
+     }
+ }
+ 
++bool llama_context::get_moe_expert_cache_stats(struct ggml_backend_sched_expert_cache_stats * stats) const {
++    if (!sched || !ggml_backend_sched_expert_cache_enabled(sched.get())) {
++        memset(stats, 0, sizeof(*stats));
++        return false;
++    }
++    ggml_backend_sched_get_expert_cache_stats(sched.get(), stats);
++    return true;
++}
++
++void llama_context::reset_moe_expert_cache_stats() {
++    if (sched) {
++        ggml_backend_sched_reset_expert_cache_stats(sched.get());
++    }
++}
++
++void llama_context::sched_set_expert_cache() {
++    if (cparams.moe_expert_cache_bytes == 0 || backend_ptrs.size() < 2) {
++        return;
++    }
++    ggml_backend_sched_expert_cache_params xc = {
++        /*.capacity_bytes =*/ cparams.moe_expert_cache_bytes,
++        /*.policy         =*/ cparams.moe_expert_cache_policy == LLAMA_MOE_EXPERT_CACHE_POLICY_LFU ? GGML_SCHED_EXPERT_CACHE_LFU : GGML_SCHED_EXPERT_CACHE_LRU,
++        /*.n_slots_min    =*/ 0,
++    };
++    ggml_backend_sched_set_expert_cache(sched.get(), &xc);
++}
++
+ void llama_context::sched_reserve() {
+     if (!sched_need_reserve) {
+         return;
+@@ -606,6 +645,7 @@ void llama_context::sched_reserve() {
+     gf_res_prev_active = nullptr;
+ 
+     sched.reset(ggml_backend_sched_new(backend_ptrs.data(), backend_buft.data(), backend_ptrs.size(), max_nodes, cparams.pipeline_parallel, cparams.op_offload));
++    sched_set_expert_cache();
+ 
+     llama_memory_context_ptr mctx;
+     if (memory) {
+@@ -641,6 +681,7 @@ void llama_context::sched_reserve() {
+                 LLAMA_LOG_WARN("%s: compute buffer allocation failed, retrying without pipeline parallelism\n", __func__);
+                 cparams.pipeline_parallel = false;
+                 sched.reset(ggml_backend_sched_new(backend_ptrs.data(), backend_buft.data(), backend_ptrs.size(), max_nodes, false, cparams.op_offload));
++                sched_set_expert_cache();
+                 gf = graph_reserve(n_tokens, n_seqs, n_outputs_pp, mctx.get());
+             }
+             if (!gf) {
+@@ -3673,6 +3714,8 @@ llama_context_params llama_context_default_params() {
+         /*.type_v                      =*/ GGML_TYPE_F16,
+         /*.abort_callback              =*/ nullptr,
+         /*.abort_callback_data         =*/ nullptr,
++        /*.moe_expert_cache_bytes      =*/ 0,
++        /*.moe_expert_cache_policy     =*/ LLAMA_MOE_EXPERT_CACHE_POLICY_LRU,
+         /*.embeddings                  =*/ false,
+         /*.offload_kqv                 =*/ true,
+         /*.no_perf                     =*/ true,
+@@ -3880,6 +3923,14 @@ void llama_synchronize(llama_context * ctx) {
+     ctx->synchronize();
+ }
+ 
++bool llama_get_moe_expert_cache_stats(llama_context * ctx, struct ggml_backend_sched_expert_cache_stats * stats) {
++    return ctx->get_moe_expert_cache_stats(stats);
++}
++
++void llama_reset_moe_expert_cache_stats(llama_context * ctx) {
++    ctx->reset_moe_expert_cache_stats();
++}
++
+ float * llama_get_logits(llama_context * ctx) {
+     ctx->synchronize();
+ 
+diff --git a/src/llama-context.h b/src/llama-context.h
+index b7a9db5..c0a137e 100644
+--- a/src/llama-context.h
++++ b/src/llama-context.h
+@@ -56,6 +56,12 @@ struct llama_context {
+     //   - etc.
+     void sched_reserve();
+ 
++    // enable the ggml expert cache on the current scheduler when configured
++    void sched_set_expert_cache();
++
++    bool get_moe_expert_cache_stats(struct ggml_backend_sched_expert_cache_stats * stats) const;
++    void reset_moe_expert_cache_stats();
++
+     void synchronize();
+ 
+     const llama_model   & get_model()   const;
+diff --git a/src/llama-cparams.h b/src/llama-cparams.h
+index b592de1..7877dbf 100644
+--- a/src/llama-cparams.h
++++ b/src/llama-cparams.h
+@@ -54,6 +54,9 @@ struct llama_cparams {
+     bool kv_unified;
+     bool pipeline_parallel;
+ 
++    size_t moe_expert_cache_bytes; // 0 = disabled
++    enum llama_moe_expert_cache_policy moe_expert_cache_policy;
++
+     std::vector<bool> embeddings_layer_inp; // [n_layer()] extract input embeddings for layer
+ 
+     enum llama_context_type ctx_type;
+diff --git a/src/llama-model.h b/src/llama-model.h
+index 984b2cf..4362487 100644
+--- a/src/llama-model.h
++++ b/src/llama-model.h
+@@ -735,6 +735,7 @@ struct llama_model {
+ 
+     uint32_t n_gpu_layers() const;
+     llama_split_mode split_mode() const;
++    llama_moe_expert_storage moe_expert_storage() const { return params.moe_expert_storage; }
+ 
+     std::map<ggml_backend_buffer_type_t, size_t> memory_breakdown() const;
+ 
+diff --git a/src/llama.cpp b/src/llama.cpp
+index 834fd91..43e4fae 100644
+--- a/src/llama.cpp
++++ b/src/llama.cpp
+@@ -319,18 +319,19 @@ static std::pair<int, llama_model *> llama_model_load(struct gguf_context * meta
+         llama_model_loader ml(metadata, set_tensor_data, set_tensor_data_ud, fname, splits, file, params.load_mode,
+             params.check_tensors, params.no_alloc, params.load_mtp, params.kv_overrides, params.tensor_buft_overrides);
+ 
+-        if (params.moe_expert_storage == LLAMA_MOE_EXPERT_STORAGE_MMAP) {
++        if (params.moe_expert_storage == LLAMA_MOE_EXPERT_STORAGE_MMAP || params.moe_expert_storage == LLAMA_MOE_EXPERT_STORAGE_CACHE) {
++            const char * mode = params.moe_expert_storage == LLAMA_MOE_EXPERT_STORAGE_MMAP ? "mmap" : "cache";
+             if (ml.get_arch() != LLM_ARCH_QWEN3MOE) {
+-                throw std::runtime_error("mmap MoE expert storage is only supported for Qwen3 MoE");
++                throw std::runtime_error(std::string(mode) + " MoE expert storage is only supported for Qwen3 MoE");
+             }
+             if (!llama_supports_mmap()) {
+-                throw std::runtime_error("mmap MoE expert storage requires mmap support");
++                throw std::runtime_error(std::string(mode) + " MoE expert storage requires mmap support");
+             }
+             if (ml.files.empty()) {
+-                throw std::runtime_error("mmap MoE expert storage requires a file-backed model");
++                throw std::runtime_error(std::string(mode) + " MoE expert storage requires a file-backed model");
+             }
+             ml.lazy.mode = LLAMA_LAZY_MODE_ON;
+-            LLAMA_LOG_INFO("%s: Qwen3 MoE expert weights use demand-paged CPU mappings\n", __func__);
++            LLAMA_LOG_INFO("%s: Qwen3 MoE expert weights use demand-paged CPU mappings (%s)\n", __func__, mode);
+         } else {
+             ml.lazy.mode = params.lazy_mode;
+         }
+diff --git a/src/models/qwen3moe.cpp b/src/models/qwen3moe.cpp
+index 62cff07..49526bf 100644
+--- a/src/models/qwen3moe.cpp
++++ b/src/models/qwen3moe.cpp
+@@ -48,7 +48,7 @@ void llama_model_qwen3moe::load_arch_tensors(llama_model_loader &) {
+ 
+         // MoE branch
+         const int64_t n_ff_exp = hparams.n_ff_exp() ? hparams.n_ff_exp() : n_ff / n_expert_used;
+-        const int expert_flags = params.moe_expert_storage == LLAMA_MOE_EXPERT_STORAGE_MMAP ? TENSOR_READ_LAZY : 0;
++        const int expert_flags = params.moe_expert_storage != LLAMA_MOE_EXPERT_STORAGE_RESIDENT ? TENSOR_READ_LAZY : 0;
+ 
+         layer.ffn_gate_exps = create_tensor(tn(LLM_TENSOR_FFN_GATE_EXPS, "weight", i), {  n_embd, n_ff_exp, n_expert}, expert_flags);
+         layer.ffn_down_exps = create_tensor(tn(LLM_TENSOR_FFN_DOWN_EXPS, "weight", i), {n_ff_exp,   n_embd, n_expert}, expert_flags);
+diff --git a/tests/CMakeLists.txt b/tests/CMakeLists.txt
+index 9b3a4fc..45dd080 100644
+--- a/tests/CMakeLists.txt
++++ b/tests/CMakeLists.txt
+@@ -372,6 +372,10 @@ if (NOT LLAMA_USE_SYSTEM_GGML)
+ 
+     # Needs non-public ggml{,-backend}-impl.h
+     llama_build_and_test(test-alloc.cpp)
++
++    # SuperVRAM: synthetic ggml_backend_sched compact GPU expert cache test.
++    # Needs non-public ggml{,-backend}-impl.h; uses fully synthetic backends, no CUDA required.
++    llama_build_and_test(test-expert-cache.cpp)
+ endif()
+ 
+ llama_build(test-export-graph-ops.cpp)
+diff --git a/tests/test-expert-cache.cpp b/tests/test-expert-cache.cpp
+new file mode 100644
+index 0000000..5e17799
+--- /dev/null
++++ b/tests/test-expert-cache.cpp
+@@ -0,0 +1,459 @@
++// Synthetic, backend-agnostic unit test for the SuperVRAM compact GPU expert cache
++// (ggml_backend_sched_set_expert_cache et al., see ggml-backend.h / ggml-backend.cpp).
++//
++// This uses two fully synthetic "fake" backends (plain malloc'd memory, no real CPU/CUDA
++// device involved) so the test is fast, portable, and isolates the *scheduler's* cache
++// bookkeeping from any specific backend's kernels. The "dev" backend implements just enough
++// of GGML_OP_MUL_MAT_ID (naively, in plain loops) to make the routed computation observable.
++//
++// It verifies:
++//  1. a host-resident 3-D MoE expert weight, routed through a bounded 2-slot device cache
++//     across 3 sequential decode-like steps, produces results that exactly match an
++//     independently computed reference for whichever logical expert each step routes to
++//     (i.e. the cache copies/serves the *correct* expert's bytes, and the id remap is correct)
++//  2. cumulative hit/miss/eviction counters exactly match a hand-verified LRU trace
++//  3. requesting more distinct experts in one step than there are cache slots fails loudly
++//     (GGML_STATUS_FAILED) instead of corrupting memory or crashing
++
++#include "ggml.h"
++#include "ggml-alloc.h"
++#include "ggml-backend.h"
++#include "../ggml/src/ggml-backend-impl.h"
++#include "../ggml/src/ggml-impl.h"
++
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#include <vector>
++
++namespace {
++
++// identifies whether a fake buffer-type/device plays the "host" (CPU-typed, weight owning)
++// or "dev" (GPU-typed, cache owning) role, and points back at its own buffer type so that
++// ggml_backend_dev_buffer_type() has something to return
++struct fake_role {
++    bool is_host;
++    ggml_backend_buffer_type_t buft = nullptr;
++};
++
++// ---- buffer (malloc-backed, both roles share the same trivial memcpy semantics) ----
++
++void fake_buffer_free(ggml_backend_buffer_t buffer) {
++    free(buffer->context);
++}
++
++void * fake_buffer_get_base(ggml_backend_buffer_t buffer) {
++    return buffer->context;
++}
++
++void fake_buffer_set_tensor(ggml_backend_buffer_t, struct ggml_tensor * tensor, const void * data, size_t offset, size_t size) {
++    memcpy((char *) tensor->data + offset, data, size);
++}
++
++void fake_buffer_get_tensor(ggml_backend_buffer_t, const struct ggml_tensor * tensor, void * data, size_t offset, size_t size) {
++    memcpy(data, (const char *) tensor->data + offset, size);
++}
++
++void fake_buffer_clear(ggml_backend_buffer_t buffer, uint8_t value) {
++    memset(buffer->context, value, buffer->size);
++}
++
++const char * fake_buft_name(ggml_backend_buffer_type_t buft) {
++    return ((fake_role *) buft->context)->is_host ? "fake-host" : "fake-dev";
++}
++
++ggml_backend_buffer_t fake_buft_alloc_buffer(ggml_backend_buffer_type_t buft, size_t size) {
++    void * mem = malloc(size);
++    memset(mem, 0, size);
++    ggml_backend_buffer_i iface{};
++    iface.free_buffer = fake_buffer_free;
++    iface.get_base    = fake_buffer_get_base;
++    iface.set_tensor  = fake_buffer_set_tensor;
++    iface.get_tensor  = fake_buffer_get_tensor;
++    iface.clear       = fake_buffer_clear;
++    return ggml_backend_buffer_init(buft, iface, mem, size);
++}
++
++size_t fake_buft_get_alignment(ggml_backend_buffer_type_t) {
++    return 32;
++}
++
++bool fake_buft_is_host(ggml_backend_buffer_type_t buft) {
++    return ((fake_role *) buft->context)->is_host;
++}
++
++// ---- device ----
++
++const char * fake_dev_get_name(ggml_backend_dev_t dev) {
++    return ((fake_role *) dev->context)->is_host ? "fake-host-dev" : "fake-dev-dev";
++}
++
++const char * fake_dev_get_description(ggml_backend_dev_t dev) {
++    return fake_dev_get_name(dev);
++}
++
++void fake_dev_get_memory(ggml_backend_dev_t, size_t * free, size_t * total) {
++    *free = 0;
++    *total = 0;
++}
++
++enum ggml_backend_dev_type fake_dev_get_type_host(ggml_backend_dev_t) {
++    return GGML_BACKEND_DEVICE_TYPE_CPU;
++}
++
++enum ggml_backend_dev_type fake_dev_get_type_dev(ggml_backend_dev_t) {
++    return GGML_BACKEND_DEVICE_TYPE_GPU;
++}
++
++void fake_dev_get_props(ggml_backend_dev_t dev, struct ggml_backend_dev_props * props) {
++    props->name = fake_dev_get_name(dev);
++    props->description = fake_dev_get_name(dev);
++}
++
++bool fake_dev_supports_op(ggml_backend_dev_t, const struct ggml_tensor *) {
++    return true;
++}
++
++bool fake_dev_supports_buft(ggml_backend_dev_t dev, ggml_backend_buffer_type_t buft) {
++    // mirrors the real behavior of e.g. a CUDA backend: it only "supports" its own
++    // buffer type, never the plain host buffer type of another backend
++    return dev->context == buft->context;
++}
++
++ggml_backend_buffer_type_t fake_dev_get_buffer_type(ggml_backend_dev_t dev) {
++    return ((fake_role *) dev->context)->buft;
++}
++
++// ---- backend (stream) ----
++
++const char * fake_backend_get_name(ggml_backend_t backend) {
++    return fake_dev_get_name(backend->device);
++}
++
++void fake_backend_free(ggml_backend_t) {}
++
++enum ggml_status fake_host_graph_compute(ggml_backend_t, struct ggml_cgraph * cgraph) {
++    // the host backend only ever owns leaves (weight / inputs) in this test, never a node
++    if (cgraph->n_nodes != 0) {
++        fprintf(stderr, "fake_host_graph_compute: unexpected node on host backend\n");
++        return GGML_STATUS_FAILED;
++    }
++    return GGML_STATUS_SUCCESS;
++}
++
++// c = ggml_mul_mat_id(as, b, ids); as[cols,rows,n_rows_avail], b[cols,n_used,n_tokens],
++// ids[n_used,n_tokens] i32, c[rows,n_used,n_tokens]. Deliberately naive (no quantization,
++// no SIMD): this test only cares about correctness of the *cache's* data placement and id
++// remap, not about kernel performance.
++void compute_mul_mat_id(struct ggml_tensor * node) {
++    const struct ggml_tensor * as  = node->src[0];
++    const struct ggml_tensor * b   = node->src[1];
++    const struct ggml_tensor * ids = node->src[2];
++
++    const int64_t cols    = as->ne[0];
++    const int64_t rows    = as->ne[1];
++    const int64_t n_used  = ids->ne[0];
++    const int64_t n_tokens = ids->ne[1];
++
++    const char * as_data  = (const char *) as->data;
++    const char * b_data   = (const char *) b->data;
++    const char * ids_data = (const char *) ids->data;
++    char *       dst_data = (char *) node->data;
++
++    for (int64_t t = 0; t < n_tokens; ++t) {
++        for (int64_t s = 0; s < n_used; ++s) {
++            const int32_t e = *(const int32_t *) (ids_data + t * ids->nb[1] + s * ids->nb[0]);
++            const float * w_e   = (const float *) (as_data + e * as->nb[2]);
++            const float * b_col = (const float *) (b_data + t * b->nb[2] + s * b->nb[1]);
++            float *       out   = (float *) (dst_data + t * node->nb[2] + s * node->nb[1]);
++            for (int64_t j = 0; j < rows; ++j) {
++                const float * w_row = (const float *) ((const char *) w_e + j * as->nb[1]);
++                double sum = 0.0;
++                for (int64_t i = 0; i < cols; ++i) {
++                    sum += (double) w_row[i] * (double) b_col[i];
++                }
++                out[j] = (float) sum;
++            }
++        }
++    }
++}
++
++enum ggml_status fake_dev_graph_compute(ggml_backend_t, struct ggml_cgraph * cgraph) {
++    for (int i = 0; i < cgraph->n_nodes; ++i) {
++        struct ggml_tensor * node = cgraph->nodes[i];
++        if (node->op == GGML_OP_MUL_MAT_ID) {
++            compute_mul_mat_id(node);
++        } else if (node->op != GGML_OP_NONE) {
++            fprintf(stderr, "fake_dev_graph_compute: unexpected op %s\n", ggml_op_name(node->op));
++            return GGML_STATUS_FAILED;
++        }
++    }
++    return GGML_STATUS_SUCCESS;
++}
++
++// expected value of sum_i w[i,j,e] for the deterministic fill w[i,j,e] = e*100 + j*10 + i,
++// with the test's all-ones activation vector (see fill_weights/run_step below)
++double expected_row_sum(int64_t cols, int32_t e, int64_t j) {
++    double sum = 0.0;
++    for (int64_t i = 0; i < cols; ++i) {
++        sum += (double) (e * 100 + j * 10 + i);
++    }
++    return sum;
++}
++
++struct step_result {
++    enum ggml_status status;
++    std::vector<float> out; // [rows * n_used], only valid if status == SUCCESS
++};
++
++step_result run_step(ggml_backend_sched_t sched, struct ggml_tensor * w, int64_t cols, int64_t rows,
++                      const std::vector<int32_t> & ids_vals) {
++    const int64_t n_used = (int64_t) ids_vals.size();
++
++    ggml_init_params params{};
++    params.mem_size = 16 * ggml_tensor_overhead() + ggml_graph_overhead();
++    params.no_alloc = true;
++    ggml_context * ctx = ggml_init(params);
++
++    struct ggml_tensor * b = ggml_new_tensor_3d(ctx, GGML_TYPE_F32, cols, n_used, 1);
++    ggml_set_input(b);
++    struct ggml_tensor * ids = ggml_new_tensor_2d(ctx, GGML_TYPE_I32, n_used, 1);
++    ggml_set_input(ids);
++    struct ggml_tensor * y = ggml_mul_mat_id(ctx, w, b, ids);
++    ggml_set_output(y);
++
++    struct ggml_cgraph * graph = ggml_new_graph(ctx);
++    ggml_build_forward_expand(graph, y);
++
++    ggml_backend_sched_reset(sched);
++    if (!ggml_backend_sched_alloc_graph(sched, graph)) {
++        ggml_free(ctx);
++        return { GGML_STATUS_ALLOC_FAILED, {} };
++    }
++
++    std::vector<float> b_data(cols * n_used, 1.0f); // all-ones activations -> output is a row-sum
++    ggml_backend_tensor_set(b, b_data.data(), 0, ggml_nbytes(b));
++    ggml_backend_tensor_set(ids, ids_vals.data(), 0, ggml_nbytes(ids));
++
++    const enum ggml_status status = ggml_backend_sched_graph_compute(sched, graph);
++
++    step_result result;
++    result.status = status;
++    if (status == GGML_STATUS_SUCCESS) {
++        result.out.resize((size_t) (rows * n_used));
++        ggml_backend_tensor_get(y, result.out.data(), 0, ggml_nbytes(y));
++    }
++
++    ggml_free(ctx);
++    return result;
++}
++
++void run(const char * name, void (*f)()) {
++    printf("%s ", name);
++    fflush(stdout);
++    f();
++    printf("PASSED\n");
++}
++
++// shared fixture: two fake backends (dev=priority 0, host=priority 1/last, CPU-typed as
++// required by ggml_backend_sched_new), plus one persistent host-resident 3-D weight tensor
++struct fixture {
++    fake_role host_role{ true,  nullptr };
++    fake_role dev_role { false, nullptr };
++
++    ggml_backend_buffer_type host_buft{};
++    ggml_backend_buffer_type dev_buft{};
++    ggml_backend_device      host_device{};
++    ggml_backend_device      dev_device{};
++    ggml_backend             host_backend{};
++    ggml_backend             dev_backend{};
++
++    ggml_context * ctx_model = nullptr;
++    ggml_tensor *  w = nullptr;
++    ggml_backend_buffer_t w_buffer = nullptr;
++
++    static constexpr int64_t cols     = 4;
++    static constexpr int64_t rows     = 3;
++    static constexpr int64_t n_expert = 6;
++
++    fixture() {
++        host_buft.iface.get_name      = fake_buft_name;
++        host_buft.iface.alloc_buffer  = fake_buft_alloc_buffer;
++        host_buft.iface.get_alignment = fake_buft_get_alignment;
++        host_buft.iface.is_host       = fake_buft_is_host;
++        host_buft.device              = &host_device;
++        host_buft.context             = &host_role;
++        host_role.buft                = &host_buft;
++
++        dev_buft.iface = host_buft.iface; // identical vtable, only context differs
++        dev_buft.device  = &dev_device;
++        dev_buft.context = &dev_role;
++        dev_role.buft    = &dev_buft;
++
++        host_device.iface.get_name        = fake_dev_get_name;
++        host_device.iface.get_description = fake_dev_get_description;
++        host_device.iface.get_memory      = fake_dev_get_memory;
++        host_device.iface.get_type        = fake_dev_get_type_host;
++        host_device.iface.get_props       = fake_dev_get_props;
++        host_device.iface.get_buffer_type = fake_dev_get_buffer_type;
++        host_device.iface.supports_op     = fake_dev_supports_op;
++        host_device.iface.supports_buft   = fake_dev_supports_buft;
++        host_device.context               = &host_role;
++
++        dev_device.iface = host_device.iface;
++        dev_device.iface.get_type = fake_dev_get_type_dev;
++        dev_device.context        = &dev_role;
++
++        host_backend.iface.get_name      = fake_backend_get_name;
++        host_backend.iface.free          = fake_backend_free;
++        host_backend.iface.graph_compute = fake_host_graph_compute;
++        host_backend.device              = &host_device;
++        host_backend.context             = &host_role;
++
++        dev_backend.iface = host_backend.iface;
++        dev_backend.iface.graph_compute = fake_dev_graph_compute;
++        dev_backend.device              = &dev_device;
++        dev_backend.context             = &dev_role;
++
++        ggml_init_params params{};
++        params.mem_size = 4 * ggml_tensor_overhead();
++        params.no_alloc = true;
++        ctx_model = ggml_init(params);
++
++        w = ggml_new_tensor_3d(ctx_model, GGML_TYPE_F32, cols, rows, n_expert);
++        ggml_set_name(w, "expert_weight");
++        w_buffer = ggml_backend_buft_alloc_buffer(&host_buft, ggml_nbytes(w));
++        GGML_ASSERT(ggml_backend_tensor_alloc(w_buffer, w, ggml_backend_buffer_get_base(w_buffer)) == GGML_STATUS_SUCCESS);
++        ggml_backend_buffer_set_usage(w_buffer, GGML_BACKEND_BUFFER_USAGE_WEIGHTS);
++
++        // deterministic fill: w[i,j,e] = e*100 + j*10 + i
++        std::vector<float> host_w((size_t) (cols * rows * n_expert));
++        for (int64_t e = 0; e < n_expert; ++e) {
++            for (int64_t j = 0; j < rows; ++j) {
++                for (int64_t i = 0; i < cols; ++i) {
++                    host_w[(size_t) (e * rows * cols + j * cols + i)] = (float) (e * 100 + j * 10 + i);
++                }
++            }
++        }
++        ggml_backend_tensor_set(w, host_w.data(), 0, ggml_nbytes(w));
++    }
++
++    ~fixture() {
++        ggml_backend_buffer_free(w_buffer);
++        ggml_free(ctx_model);
++    }
++
++    ggml_backend_sched_t new_sched(int n_slots_min) {
++        const size_t expert_size = (size_t) (cols * rows) * sizeof(float);
++        ggml_backend_t backends[2] = { &dev_backend, &host_backend };
++        ggml_backend_buffer_type_t bufts[2] = { &dev_buft, &host_buft };
++        ggml_backend_sched_t sched = ggml_backend_sched_new(backends, bufts, 2, 64, /*parallel=*/false, /*op_offload=*/true);
++
++        ggml_backend_sched_expert_cache_params xc_params{};
++        xc_params.capacity_bytes = (size_t) n_slots_min * expert_size;
++        xc_params.policy         = GGML_SCHED_EXPERT_CACHE_LRU;
++        xc_params.n_slots_min    = n_slots_min;
++        ggml_backend_sched_set_expert_cache(sched, &xc_params);
++
++        return sched;
++    }
++};
++
++void test_cache_correctness_and_stats() {
++    fixture fx;
++    ggml_backend_sched_t sched = fx.new_sched(/*n_slots_min=*/2);
++    GGML_ASSERT(ggml_backend_sched_expert_cache_enabled(sched));
++
++    // hand-verified LRU trace (see comment block below) against the real
++    // ggml_backend_sched_expert_cache_load implementation:
++    //   step1 ids={0,1}: cold, 2 misses, 0 hits, 0 evictions -> slot0=e0, slot1=e1
++    //   step2 ids={0,2}: e0 hit, e2 miss evicting e1 (LRU)   -> slot0=e0, slot1=e2
++    //   step3 ids={1,2}: e2 hit, e1 miss evicting e0 (LRU)   -> slot0=e1, slot1=e2
++    // cumulative: accesses=6, hits=2, misses=4, evictions=2
++    const std::vector<std::vector<int32_t>> steps = { {0, 1}, {0, 2}, {1, 2} };
++
++    for (const auto & ids_vals : steps) {
++        step_result result = run_step(sched, fx.w, fx.cols, fx.rows, ids_vals);
++        GGML_ASSERT(result.status == GGML_STATUS_SUCCESS);
++        for (size_t s = 0; s < ids_vals.size(); ++s) {
++            for (int64_t j = 0; j < fx.rows; ++j) {
++                const double expected = expected_row_sum(fx.cols, ids_vals[s], j);
++                const double actual   = result.out[s * (size_t) fx.rows + (size_t) j];
++                if (expected != actual) {
++                    fprintf(stderr, "mismatch at expert=%d row=%lld: expected=%f actual=%f\n",
++                            ids_vals[s], (long long) j, expected, actual);
++                    GGML_ABORT("expert cache output mismatch");
++                }
++            }
++        }
++    }
++
++    struct ggml_backend_sched_expert_cache_stats stats {};
++    ggml_backend_sched_get_expert_cache_stats(sched, &stats);
++    GGML_ASSERT(stats.accesses  == 6);
++    GGML_ASSERT(stats.hits      == 2);
++    GGML_ASSERT(stats.misses    == 4);
++    GGML_ASSERT(stats.evictions == 2);
++    GGML_ASSERT(stats.n_slots_total == 2);
++
++    ggml_backend_sched_reset_expert_cache_stats(sched);
++    struct ggml_backend_sched_expert_cache_stats stats_after_reset {};
++    ggml_backend_sched_get_expert_cache_stats(sched, &stats_after_reset);
++    GGML_ASSERT(stats_after_reset.accesses == 0);
++    GGML_ASSERT(stats_after_reset.hits == 0);
++    GGML_ASSERT(stats_after_reset.n_slots_total == 2); // layout-only counters survive a stats reset
++
++    ggml_backend_sched_set_expert_cache(sched, nullptr);
++    GGML_ASSERT(!ggml_backend_sched_expert_cache_enabled(sched));
++
++    ggml_backend_sched_free(sched);
++}
++
++void test_cache_disabled_is_noop() {
++    fixture fx;
++    ggml_backend_t backends[2] = { &fx.dev_backend, &fx.host_backend };
++    ggml_backend_buffer_type_t bufts[2] = { &fx.dev_buft, &fx.host_buft };
++    ggml_backend_sched_t sched = ggml_backend_sched_new(backends, bufts, 2, 64, false, true);
++    GGML_ASSERT(!ggml_backend_sched_expert_cache_enabled(sched));
++
++    struct ggml_backend_sched_expert_cache_stats stats {};
++    ggml_backend_sched_get_expert_cache_stats(sched, &stats);
++    GGML_ASSERT(stats.accesses == 0 && stats.n_slots_total == 0);
++
++    ggml_backend_sched_free(sched);
++}
++
++// requesting more distinct experts in one step than the configured cache has slots for must
++// fail loudly (a documented v1 limitation - see docs/IMPLEMENTATION_STATUS.md), not crash or
++// silently corrupt the output
++void test_oversized_step_fails_cleanly() {
++    fixture fx;
++    ggml_backend_sched_t sched = fx.new_sched(/*n_slots_min=*/2);
++
++    // warm the cache up first so we know a real failure path is exercised, not just a cold start
++    step_result warm = run_step(sched, fx.w, fx.cols, fx.rows, { 0, 1 });
++    GGML_ASSERT(warm.status == GGML_STATUS_SUCCESS);
++
++    step_result oversized = run_step(sched, fx.w, fx.cols, fx.rows, { 3, 4, 5 }); // 3 distinct > 2 slots
++    GGML_ASSERT(oversized.status == GGML_STATUS_FAILED);
++    GGML_ASSERT(oversized.out.empty());
++
++    // the scheduler must remain usable afterwards for a step that fits again
++    step_result recovered = run_step(sched, fx.w, fx.cols, fx.rows, { 0, 1 });
++    GGML_ASSERT(recovered.status == GGML_STATUS_SUCCESS);
++    for (int64_t j = 0; j < fx.rows; ++j) {
++        GGML_ASSERT(recovered.out[0 * (size_t) fx.rows + (size_t) j] == (float) expected_row_sum(fx.cols, 0, j));
++        GGML_ASSERT(recovered.out[1 * (size_t) fx.rows + (size_t) j] == (float) expected_row_sum(fx.cols, 1, j));
++    }
++
++    ggml_backend_sched_free(sched);
++}
++
++} // namespace
++
++int main() {
++    run("test_cache_correctness_and_stats", test_cache_correctness_and_stats);
++    run("test_cache_disabled_is_noop", test_cache_disabled_is_noop);
++    run("test_oversized_step_fails_cleanly", test_oversized_step_fails_cleanly);
++    return 0;
++}
+diff --git a/tools/llama-bench/llama-bench.cpp b/tools/llama-bench/llama-bench.cpp
+index c696498..cb49d2e 100644
+--- a/tools/llama-bench/llama-bench.cpp
++++ b/tools/llama-bench/llama-bench.cpp
+@@ -288,10 +288,19 @@ static const char * moe_expert_storage_str(llama_moe_expert_storage storage) {
+     switch (storage) {
+         case LLAMA_MOE_EXPERT_STORAGE_RESIDENT: return "resident";
+         case LLAMA_MOE_EXPERT_STORAGE_MMAP:     return "mmap";
++        case LLAMA_MOE_EXPERT_STORAGE_CACHE:    return "cache";
+         default: GGML_ABORT("invalid MoE expert storage");
+     }
+ }
+ 
++static const char * moe_expert_cache_policy_str(llama_moe_expert_cache_policy policy) {
++    switch (policy) {
++        case LLAMA_MOE_EXPERT_CACHE_POLICY_LRU: return "lru";
++        case LLAMA_MOE_EXPERT_CACHE_POLICY_LFU: return "lfu";
++        default: GGML_ABORT("invalid MoE expert cache policy");
++    }
++}
++
+ static std::string pair_str(const std::pair<int, int> & p) {
+     static char buf[32];
+     snprintf(buf, sizeof(buf), "%d,%d", p.first, p.second);
+@@ -364,6 +373,8 @@ struct cmd_params {
+     std::vector<llama_load_mode>     load_mode;
+     std::vector<llama_lazy_mode>     lazy_mode;
+     std::vector<llama_moe_expert_storage> moe_expert_storage;
++    std::vector<int>                 moe_expert_cache_mib;
++    std::vector<llama_moe_expert_cache_policy> moe_expert_cache_policy;
+     std::vector<int>                 main_gpu;
+     std::vector<bool>                no_kv_offload;
+     std::vector<llama_flash_attn_type> flash_attn;
+@@ -410,6 +421,8 @@ static const cmd_params cmd_params_defaults = {
+     /* load_mode            */ { LLAMA_LOAD_MODE_AUTO },
+     /* lazy_mode            */ { LLAMA_LAZY_MODE_AUTO },
+     /* moe_expert_storage   */ { LLAMA_MOE_EXPERT_STORAGE_RESIDENT },
++    /* moe_expert_cache_mib */ { 0 },
++    /* moe_expert_cache_policy */ { LLAMA_MOE_EXPERT_CACHE_POLICY_LRU },
+     /* main_gpu             */ { 0 },
+     /* no_kv_offload        */ { false },
+     /* flash_attn           */ { LLAMA_FLASH_ATTN_TYPE_AUTO },
+@@ -487,7 +500,9 @@ static void print_usage(int /* argc */, char ** argv) {
+     printf("  -dev, --device <dev0/dev1/...>                    (default: auto)\n");
+     printf("  -lm, --load-mode <auto|none|mmap|mlock|mmap+mlock|dio> (default: %s)\n", join(transform_to_str(cmd_params_defaults.load_mode, llama_load_mode_name), ",").c_str());
+     printf("  -lzm, --lazy-mode <on|auto|off>                   (default: %s)\n", join(transform_to_str(cmd_params_defaults.lazy_mode, lazy_mode_str), ",").c_str());
+-    printf("  --moe-expert-storage <resident|mmap>              (default: %s)\n", join(transform_to_str(cmd_params_defaults.moe_expert_storage, moe_expert_storage_str), ",").c_str());
++    printf("  --moe-expert-storage <resident|mmap|cache>        (default: %s)\n", join(transform_to_str(cmd_params_defaults.moe_expert_storage, moe_expert_storage_str), ",").c_str());
++    printf("  --moe-expert-cache-size <MiB>                     (default: %s)\n", join(cmd_params_defaults.moe_expert_cache_mib, ",").c_str());
++    printf("  --moe-expert-cache-policy <lru|lfu>               (default: %s)\n", join(transform_to_str(cmd_params_defaults.moe_expert_cache_policy, moe_expert_cache_policy_str), ",").c_str());
+     printf("  -embd, --embeddings <0|1>                         (default: %s)\n", join(cmd_params_defaults.embeddings, ",").c_str());
+     printf("  -ts, --tensor-split <ts0/ts1/..>                  (default: 0)\n");
+     printf("  -ot --override-tensor <tensor name pattern>=<buffer type>;...\n");
+@@ -852,6 +867,33 @@ static cmd_params parse_cmd_params(int argc, char ** argv) {
+                         params.moe_expert_storage.push_back(LLAMA_MOE_EXPERT_STORAGE_RESIDENT);
+                     } else if (value == "mmap") {
+                         params.moe_expert_storage.push_back(LLAMA_MOE_EXPERT_STORAGE_MMAP);
++                    } else if (value == "cache") {
++                        params.moe_expert_storage.push_back(LLAMA_MOE_EXPERT_STORAGE_CACHE);
++                    } else {
++                        invalid_param = true;
++                        break;
++                    }
++                }
++                if (invalid_param) {
++                    break;
++                }
++            } else if (arg == "--moe-expert-cache-size") {
++                if (++i >= argc) {
++                    invalid_param = true;
++                    break;
++                }
++                params.moe_expert_cache_mib = parse_int_range(argv[i]);
++            } else if (arg == "--moe-expert-cache-policy") {
++                if (++i >= argc) {
++                    invalid_param = true;
++                    break;
++                }
++                auto p = string_split<std::string>(argv[i], split_delim);
++                for (const auto & value : p) {
++                    if (value == "lru") {
++                        params.moe_expert_cache_policy.push_back(LLAMA_MOE_EXPERT_CACHE_POLICY_LRU);
++                    } else if (value == "lfu") {
++                        params.moe_expert_cache_policy.push_back(LLAMA_MOE_EXPERT_CACHE_POLICY_LFU);
+                     } else {
+                         invalid_param = true;
+                         break;
+@@ -1179,6 +1221,12 @@ static cmd_params parse_cmd_params(int argc, char ** argv) {
+     if (params.moe_expert_storage.empty()) {
+         params.moe_expert_storage = cmd_params_defaults.moe_expert_storage;
+     }
++    if (params.moe_expert_cache_mib.empty()) {
++        params.moe_expert_cache_mib = cmd_params_defaults.moe_expert_cache_mib;
++    }
++    if (params.moe_expert_cache_policy.empty()) {
++        params.moe_expert_cache_policy = cmd_params_defaults.moe_expert_cache_policy;
++    }
+     if (params.main_gpu.empty()) {
+         params.main_gpu = cmd_params_defaults.main_gpu;
+     }
+@@ -1247,6 +1295,8 @@ struct cmd_params_instance {
+     llama_load_mode    load_mode;
+     llama_lazy_mode    lazy_mode;
+     llama_moe_expert_storage moe_expert_storage;
++    int                moe_expert_cache_mib;
++    llama_moe_expert_cache_policy moe_expert_cache_policy;
+     int                main_gpu;
+     bool               no_kv_offload;
+     llama_flash_attn_type flash_attn;
+@@ -1335,6 +1385,8 @@ struct cmd_params_instance {
+         cparams.embeddings      = embeddings;
+         cparams.op_offload      = !no_op_offload;
+         cparams.swa_full        = false;
++        cparams.moe_expert_cache_bytes  = (size_t) moe_expert_cache_mib << 20;
++        cparams.moe_expert_cache_policy = moe_expert_cache_policy;
+ 
+         return cparams;
+     }
+@@ -1354,6 +1406,8 @@ static std::vector<cmd_params_instance> get_cmd_params_instances(const cmd_param
+     for (const auto & lm : params.load_mode)
+     for (const auto & lzm : params.lazy_mode)
+     for (const auto & mes : params.moe_expert_storage)
++    for (const auto & xc_mib : params.moe_expert_cache_mib)
++    for (const auto & xc_pol : params.moe_expert_cache_policy)
+     for (const auto & mg : params.main_gpu)
+     for (const auto & devs : params.devices)
+     for (const auto & ts : params.tensor_split)
+@@ -1395,6 +1449,8 @@ static std::vector<cmd_params_instance> get_cmd_params_instances(const cmd_param
+                 /* .load_mode             = */ lm,
+                 /* .lazy_mode             = */ lzm,
+                 /* .moe_expert_storage    = */ mes,
++                /* .moe_expert_cache_mib  = */ xc_mib,
++                /* .moe_expert_cache_policy = */ xc_pol,
+                 /* .main_gpu              = */ mg,
+                 /* .no_kv_offload         = */ nkvo,
+                 /* .flash_attn            = */ fa,
+@@ -1433,6 +1489,8 @@ static std::vector<cmd_params_instance> get_cmd_params_instances(const cmd_param
+                 /* .load_mode             = */ lm,
+                 /* .lazy_mode             = */ lzm,
+                 /* .moe_expert_storage    = */ mes,
++                /* .moe_expert_cache_mib  = */ xc_mib,
++                /* .moe_expert_cache_policy = */ xc_pol,
+                 /* .main_gpu              = */ mg,
+                 /* .no_kv_offload         = */ nkvo,
+                 /* .flash_attn            = */ fa,
+@@ -1471,6 +1529,8 @@ static std::vector<cmd_params_instance> get_cmd_params_instances(const cmd_param
+                 /* .load_mode             = */ lm,
+                 /* .lazy_mode             = */ lzm,
+                 /* .moe_expert_storage    = */ mes,
++                /* .moe_expert_cache_mib  = */ xc_mib,
++                /* .moe_expert_cache_policy = */ xc_pol,
+                 /* .main_gpu              = */ mg,
+                 /* .no_kv_offload         = */ nkvo,
+                 /* .flash_attn            = */ fa,
+diff --git a/tools/server/server-context.cpp b/tools/server/server-context.cpp
+index b6835e4..07cd55a 100644
+--- a/tools/server/server-context.cpp
++++ b/tools/server/server-context.cpp
+@@ -2514,6 +2514,7 @@ private:
+                     res->n_processing_slots  = n_processing_slots;
+                     res->n_tasks_deferred    = queue_tasks.queue_tasks_deferred_size();
+                     res->metrics             = metrics;
++                    res->moe_expert_cache_enabled = llama_get_moe_expert_cache_stats(ctx_tgt, &res->moe_expert_cache_stats);
+ 
+                     if (task.metrics_reset_bucket) {
+                         metrics.reset_bucket();
+@@ -4221,6 +4222,11 @@ server_context_meta server_context::get_meta() const {
+         /* model_n_params         */ llama_model_n_params(impl->model_tgt),
+         /* model_size             */ llama_model_size(impl->model_tgt),
+         /* model_ftype            */ ftype_name,
++
++        /* moe_expert_cache_enabled */ impl->params_base.moe_expert_cache_mib > 0 &&
++                                        impl->params_base.moe_expert_storage == LLAMA_MOE_EXPERT_STORAGE_CACHE,
++        /* moe_expert_cache_mib     */ (uint64_t) impl->params_base.moe_expert_cache_mib,
++        /* moe_expert_cache_policy  */ impl->params_base.moe_expert_cache_policy == LLAMA_MOE_EXPERT_CACHE_POLICY_LFU ? "lfu" : "lru",
+     };
+ }
+ 
+@@ -4633,6 +4639,11 @@ static json get_res_props(const server_context_meta & meta, const common_params
+         { "build_info",                  meta.build_info },
+         { "is_sleeping",                 is_sleeping },
+         { "cors_proxy_enabled",          params.ui_mcp_proxy },
++        { "moe_expert_cache",            json {
++            {"enabled",  meta.moe_expert_cache_enabled},
++            {"size_mib", meta.moe_expert_cache_mib},
++            {"policy",   meta.moe_expert_cache_policy},
++        } },
+     };
+     if (params.use_jinja) {
+         if (!tmpl_tools.empty()) {
+diff --git a/tools/server/server-context.h b/tools/server/server-context.h
+index 0acbbff..94a94fc 100644
+--- a/tools/server/server-context.h
++++ b/tools/server/server-context.h
+@@ -52,6 +52,11 @@ struct server_context_meta {
+     uint64_t model_n_params;
+     uint64_t model_size;
+     std::string model_ftype;
++
++    // SuperVRAM: compact GPU expert cache config (static, see /metrics for live stats)
++    bool        moe_expert_cache_enabled;
++    uint64_t    moe_expert_cache_mib;
++    std::string moe_expert_cache_policy;
+ };
+ 
+ enum server_state {
+diff --git a/tools/server/server-task.cpp b/tools/server/server-task.cpp
+index 0d3beb3..350fab3 100644
+--- a/tools/server/server-task.cpp
++++ b/tools/server/server-task.cpp
+@@ -1602,6 +1602,29 @@ std::string server_task_result_metrics::to_metrics() {
+     add_items("counter", counters);
+     add_items("gauge",   gauges);
+ 
++    // SuperVRAM: compact GPU expert cache (see docs/IMPLEMENTATION_STATUS.md)
++    if (moe_expert_cache_enabled) {
++        const auto & xc = moe_expert_cache_stats;
++        const double hit_rate = xc.accesses > 0 ? (double) xc.hits / (double) xc.accesses : 0.0;
++
++        add_items("counter", {
++            { "moe_expert_cache_accesses_total",  "Distinct experts required by cached MUL_MAT_ID nodes", (double) xc.accesses },
++            { "moe_expert_cache_hits_total",      "Experts already resident in a device slot",            (double) xc.hits },
++            { "moe_expert_cache_misses_total",    "Experts copied host to device into a slot",            (double) xc.misses },
++            { "moe_expert_cache_evictions_total", "Resident experts replaced by a different expert",      (double) xc.evictions },
++            { "moe_expert_cache_bytes_h2d_total", "Expert bytes copied host to device",                   (double) xc.bytes_h2d },
++            { "moe_expert_cache_steps_total",     "Number of (tensor, graph) load events",                (double) xc.n_steps },
++        });
++        add_items("gauge", {
++            { "moe_expert_cache_hit_rate",           "Fraction of accesses served from the device cache", hit_rate },
++            { "moe_expert_cache_n_tensors",          "Cached weight tensors",                              (double) xc.n_tensors },
++            { "moe_expert_cache_n_slots_total",      "Device slots across all cached tensors",             (double) xc.n_slots_total },
++            { "moe_expert_cache_slot_bytes_total",   "Device bytes reserved for slots",                    (double) xc.slot_bytes_total },
++            { "moe_expert_cache_max_used_per_step",  "Max distinct experts required by a single step",     (double) xc.max_used_per_step },
++            { "moe_expert_cache_host_ms_total",      "Host time spent in the cache load path",             xc.host_ms },
++        });
++    }
++
+     // labeled counter: one time series per draft position
+     if (!metrics.n_accepted_per_pos.empty()) {
+         prometheus << "# HELP llamacpp:spec_decode_num_accepted_tokens_per_pos_total"
+diff --git a/tools/server/server-task.h b/tools/server/server-task.h
+index 9c99143..fec772e 100644
+--- a/tools/server/server-task.h
++++ b/tools/server/server-task.h
+@@ -497,6 +497,10 @@ struct server_task_result_metrics : server_task_result {
+ 
+     server_metrics metrics;
+ 
++    // SuperVRAM: compact GPU expert cache live stats (cumulative counters from ggml_backend_sched)
++    bool moe_expert_cache_enabled = false;
++    struct ggml_backend_sched_expert_cache_stats moe_expert_cache_stats {};
++
+     virtual json to_json() override;
+ 
+     struct metric_item {

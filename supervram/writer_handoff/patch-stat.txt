@@ -1,3 +1,4 @@
+# patches/0001-qwen3-moe-mmap-expert-storage.patch
  common/arg.cpp          | 15 +++++++++++++++
  common/common.cpp       |  7 ++++---
  common/common.h         |  1 +
@@ -6,3 +7,25 @@
  src/llama.cpp           | 16 +++++++++++++++-
  src/models/qwen3moe.cpp |  7 ++++---
  7 files changed, 46 insertions(+), 7 deletions(-)
+
+# patches/0002-compact-gpu-expert-cache.patch (applies on top of 0001)
+ common/arg.cpp                    |  30 ++-
+ common/common.cpp                 |   5 +
+ common/common.h                   |   2 +
+ ggml/include/ggml-backend.h       |  43 ++++
+ ggml/src/ggml-backend.cpp         | 465 +++++++++++++++++++++++++++++++++++++-
+ include/llama.h                   |  19 +-
+ src/llama-context.cpp             |  51 +++++
+ src/llama-context.h               |   6 +
+ src/llama-cparams.h               |   3 +
+ src/llama-model.h                 |   1 +
+ src/llama.cpp                     |  11 +-
+ src/models/qwen3moe.cpp           |   2 +-
+ tests/CMakeLists.txt              |   4 +
+ tests/test-expert-cache.cpp       | 459 +++++++++++++++++++++++++++++++++++++
+ tools/llama-bench/llama-bench.cpp |  62 ++++-
+ tools/server/server-context.cpp   |  11 +
+ tools/server/server-context.h     |   5 +
+ tools/server/server-task.cpp      |  23 ++
+ tools/server/server-task.h        |   4 +
+ 19 files changed, 1188 insertions(+), 18 deletions(-)
