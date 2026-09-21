@@ -106,6 +106,8 @@ Quality (teacher-forced, `scripts/compare_quality.py`): Q8_0 generated 384 token
 
 Caveats: the reference is Q8_0, not ground truth, and the text is Q8-generated (which favors Q8). Stock Q4_K_M also quantizes the dense weights, so this is not an experts-only change. No benchmark accuracy or ground-truth perplexity has been measured.
 
+Ground-truth check (`results/rtx3090/quality/ground-truth-ppl-q4-vs-q8.json`, `ppl-*.log`): `llama-perplexity`, n_ctx 512, 60 chunks (about 30.7k tokens) of human-written text: the prose of llama.cpp's `docs/*.md` (255,802 characters, code blocks and tables removed; a technical-documentation domain, not a standard benchmark like WikiText). Q8_0 (experts on the CPU for this scoring run) PPL 9.073 +/- 0.224; Q4_K_M PPL 9.253 +/- 0.231. The per-model error bars are wide because both models scored the same tokens; the paired per-chunk difference is 0.0196 +/- 0.0026 nats/token, i.e. **Q4_K_M perplexity is 1.020x Q8_0's (95 % CI 1.015-1.025), worse in 48 of 60 chunks**. This agrees with the +2.1 % from the teacher-forced test and does not rely on Q8 as the reference. Limits: one corpus and domain, no full-precision (F16/BF16) reference, no downstream-task accuracy.
+
 Speed, same cold-start protocol (evicted, direct I/O, 4 GiB RAM cap, 1,536 tokens, same prompt), steady state from token 256:
 
 | Experts | GPU cache | Fraction of experts cached | Hit rate | SSD read | Decode t/s |

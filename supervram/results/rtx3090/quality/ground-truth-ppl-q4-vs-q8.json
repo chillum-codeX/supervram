@@ -1,0 +1,15 @@
+{
+  "corpus": "llama.cpp docs/*.md prose (code blocks and tables removed), 255,802 chars",
+  "n_ctx": 512,
+  "chunks": 60,
+  "ppl_q8": 9.0728,
+  "ppl_q4_k_m": 9.2527,
+  "paired_nll_diff_mean": 0.01963,
+  "paired_nll_diff_se": 0.00255,
+  "ppl_ratio": 1.0198,
+  "ppl_ratio_95ci": [
+    1.0147,
+    1.0249
+  ],
+  "chunks_q4_worse": 48
+}
