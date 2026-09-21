@@ -1,40 +1,29 @@
 # Evidence ledger
 
-## Measured in the current environment
+## Measured in the current environment (`measured_rtx3090`)
 
-- Host is an 8-vCPU AMD EPYC container with no visible NVIDIA driver/GPU.
-- Workspace filesystem is NFS, not local NVMe.
-- `libcufile` is absent; GDS candidate status is false.
-- Native C++ reader test: passed.
-- Python cache/store/predictor tests: 8/8 passed.
-- Patched llama.cpp `test-arg-parser`: passed.
-- Patched llama.cpp Qwen3 MoE synthetic architecture fixture generation: passed.
-- Resident and mmap-backed synthetic Qwen3 MoE one-token CPU inference produced an identical complete-logit FNV-1a hash and checksum under the fixed entrypoint seed.
-- Expert packer extracted and checksum-verified four expert records from the tiny generated GGUF.
-- `llama-server` target build was blocked by an unrelated UI asset packaging failure after core libraries and server objects compiled; non-server targets compiled.
+- Host: Intel Core i9-9920X, 24 threads, 125 GiB RAM, `/home` ext4 on WD SN550 NVMe.
+- GPU: GeForce RTX 3090 24 GiB, driver 595.91.07, CUDA 12.6, BAR1 256 MiB, idle PCIe gen2 x16 (max gen3).
+- `cuFileRead` into `cudaMalloc` works in compatibility mode (~1.8 GB/s, matches O_DIRECT pread+H2D). `nvidia-fs` is absent; this is host bounce, not SSD-to-VRAM DMA.
+- Sequential O_DIRECT pread of a 2 GiB file on `/home`: ~1991 MiB/s.
+- Native C++ reader test and Python cache/store/predictor tests: passed on this host as well.
+- Tiny synthetic Qwen3 MoE: resident/mmap/cache greedy token ids and logits hashes identical.
+- Qwen3-30B-A3B Q4_K_M: greedy 8-token ids identical across resident/mmap/cache; resident vs cache logits hashes identical.
+- Qwen3-30B-A3B Q8_0: greedy 8-token ids identical across `--cpu-moe`, mmap, cache; logits hashes differ (CPU vs CUDA).
+- llama-bench (3 reps): see `results/rtx3090/SUMMARY.json`. Cache decode-only Q4 tg128 47.1 t/s vs mmap 33.8 vs full GPU 171; Q8 cache tg64 24.6 vs cpu-moe/mmap ~23.1.
+
+- Cache-size x policy ablation, 20 runs x 1 rep, 32-token cold decode (`results/rtx3090/ablations/`): hit rate plateaus ~81 % (compulsory misses); LRU/LFU indistinguishable at n=1; Q4 decode 18-28 t/s, Q8 10-20 t/s; Q8 at 20 GiB cache is a real CUDA OOM.
 
 ## Deterministic synthetic trace replay
 
-`results/simulation-smoke.json` validates the software policies, not LLM throughput. Its exact run used 16 tokens, 4 layers, 16 experts, top-2 routing, 4 KiB synthetic experts and an 8-expert cache. It observed a 0.195 cache hit rate and Markov prediction precision 0.56/coverage 0.21875. These values must not be interpreted as Qwen routing behavior.
+`results/simulation-smoke.json` validates the software policies, not LLM throughput. Do not interpret those hit rates as Qwen routing behavior.
 
 ## Analytical projection
 
-`results/roofline-projection.json` computes transfer lower bounds from explicit assumed dimensions, quantization overhead, NVMe/PCIe bandwidth, fixed read latency and compute time. It is not measured data.
+`results/roofline-projection.json` is not measured data.
 
-## Published external
+## Still pending
 
-None collected by NovixCodeAgent. Literature claims belong to NovixWriterAgent and must be cited there.
-
-## Pending RTX 3090 target measurements
-
-- cuFile/GDS device-buffer operation and compatibility-mode status.
-- BAR1/Resizable BAR, ACS/IOMMU and PCIe topology implications.
-- Local NVMe bandwidth/IOPS/latency.
-- Real Qwen3 MoE correctness and model/context limits.
-- Prompt/decode throughput, TTFT, TPOT, latency percentiles.
-- VRAM/RAM/page-cache use, CPU/GPU utilization and transfer overlap.
-- Cache hit rate, router prediction quality and bytes/reads per token.
-- Power and joules/token.
-- All cache-size, prefetch, replacement and predictor ablations.
-
-No pending value may be filled from the simulation or roofline artifacts.
+- Prefetch, pinned staging, GDS device DMA, llama-server `/metrics` cache stats.
+- Prompt-batch cache (v1 errors when `n_used > n_slots`).
+- Full 720-run ablation matrix (prefetch/predictor axes, >= 5 reps, pp512), energy, Nsight overlap traces.

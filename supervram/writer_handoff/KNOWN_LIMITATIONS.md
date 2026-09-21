@@ -1,16 +1,11 @@
 # Known limitations and failure modes
 
-1. The integrated llama.cpp patch provides a demand-paged CPU expert baseline, not a true bounded GPU cache.
-2. The standalone cache engine is policy-accurate but not connected to ggml CUDA kernels.
-3. Current llama.cpp stores each layer projection as one 3-D tensor. A compact GPU cache needs new fixed slots and logical-to-slot ID remapping; partial copies alone still reserve full tensor shape.
-4. Router IDs become known inside the graph. Host-driven storage submission introduces a synchronization boundary unless a backend-specific asynchronous protocol is added.
-5. Prompt batches can select up to `min(n_expert, n_tokens * top_k)` distinct experts, potentially defeating a small cache. Decode-only and prompt-processing modes need separate policies or fallback.
-6. Linux page cache is not a hard RAM budget. The mmap baseline minimizes eager reads but cannot guarantee bounded system-RAM residency.
-7. O_DIRECT requires aligned offsets, sizes and user buffers and may not work on all filesystems. The Python path falls back; strict experimental runs should reject fallback.
-8. Seeing `libcufile` is not proof of direct SSD-to-device DMA. Compatibility mode, topology, filesystem, driver, CUDA and device restrictions must be recorded.
-9. RTX 3090 behavior, consumer-GPU GDS support and BAR1/topology impacts are unresolved pending target hardware.
-10. Real prediction quality is unknown until router traces are collected from Qwen3 MoE prompts.
-11. SSD endurance and thermal throttling may distort sustained results.
-12. CUDA graph capture may be incompatible with host decisions, callbacks, dynamic addresses or per-layer synchronization.
-13. Quantized expert slices must preserve GGML block encoding and alignment. The packer preserves raw encoded bytes but no CUDA consumer is implemented.
-14. Cross-framework throughput comparisons require matching quantization, context, batch, output length and quality; otherwise they are not fair.
+1. The compact GPU cache copies host mmap pages to device slots. It is not SSD-to-VRAM DMA. cuFile on this machine is compatibility-mode host bounce.
+2. Prompt ubatches can select up to `min(n_expert, n_tokens * top_k)` distinct experts. v1 fails loudly when that exceeds `n_slots` (llama-bench `-ub 16` returned decode `-3`). Decode with `-ub 1` stays within top-k.
+3. Q4_K_M fits in 24 GiB, so cache cannot beat full GPU residency there; it is the correctness/overhead reference. Q8_0 (30 GiB) is the case where cache competes with `--cpu-moe` / mmap.
+4. Cold-cache short runs copy several GiB and look slower than mmap; warmed llama-bench decode is the fairer comparison.
+5. Linux page cache is not a hard RAM budget. mmap/cache minimize eager reads but do not cap system RAM.
+6. BAR1 is 256 MiB; Resizable BAR is not in effect. Idle PCIe is gen2 x16.
+7. CUDA graphs were disabled for bring-up (`GGML_CUDA_DISABLE_GRAPHS=1`).
+8. No prefetch, no pinned staging ring, no llama-server cache metrics.
+9. Cross-framework throughput comparisons still require matching quantization, context, batch and output length.

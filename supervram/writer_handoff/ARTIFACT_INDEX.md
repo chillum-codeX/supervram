@@ -13,7 +13,7 @@
 - `scripts/simulate_trace.py`: deterministic policy replay.
 - `scripts/analyze_trace.py`: JSONL aggregation.
 - `scripts/roofline.py`: explicit analytical projection.
-- `scripts/run_ablations.py`: 720-run requested Cartesian plan.
+- `scripts/run_ablations.py`: 720-run requested Cartesian plan; `--mode target` runs the cache-size x policy sweep against `svram-verify`.
 - `scripts/benchmark_target.py`: target llama-server latency/resource harness.
 - `results/`: current measured probe, synthetic replay, projection, tiny GGUF and ablation manifest.
 - `writer_handoff/EVIDENCE_LEDGER.md`: strict evidence labels.
