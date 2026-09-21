@@ -13,7 +13,9 @@
 #include "llama.h"
 
 #include <chrono>
+#include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -58,6 +60,11 @@ struct options {
     int n_batch = 512;
     int n_ubatch = 64;
     std::string prompt = "The tallest mountain in the world is";
+    std::string prompt_file;   // --prompt-file: read the prompt text from a file
+    int prompt_tokens = 0;     // --prompt-tokens N: use exactly N prompt tokens (truncate the file, then append the suffix)
+    std::string prompt_suffix; // --prompt-suffix TEXT: appended after the truncated file text
+    bool ignore_eos = false;   // --ignore-eos: never stop at an end-of-generation token (throughput tests)
+    std::string progress;      // --progress FILE: append a line per prefill chunk
     std::string dump_logits;
     std::string force_tokens; // teacher forcing: feed these token ids instead of the argmax
     std::string json;
@@ -86,6 +93,11 @@ bool parse(int argc, char ** argv, options & o) {
         else if (a == "--n-ubatch") { if (!next(v)) return false; o.n_ubatch = std::atoi(v.c_str()); }
         else if (a == "--threads") { if (!next(v)) return false; o.threads = std::atoi(v.c_str()); }
         else if (a == "--prompt") { if (!next(o.prompt)) return false; }
+        else if (a == "--prompt-file") { if (!next(o.prompt_file)) return false; }
+        else if (a == "--prompt-tokens") { if (!next(v)) return false; o.prompt_tokens = std::atoi(v.c_str()); }
+        else if (a == "--prompt-suffix") { if (!next(o.prompt_suffix)) return false; }
+        else if (a == "--ignore-eos") { o.ignore_eos = true; }
+        else if (a == "--progress") { if (!next(o.progress)) return false; }
         else if (a == "--dump-logits") { if (!next(o.dump_logits)) return false; }
         else if (a == "--force-tokens") { if (!next(o.force_tokens)) return false; }
         else if (a == "--json") { if (!next(o.json)) return false; }
@@ -170,13 +182,42 @@ int main(int argc, char ** argv) {
 
     const llama_vocab * vocab = llama_model_get_vocab(model);
     const int32_t n_vocab = llama_vocab_n_tokens(vocab);
-    std::vector<llama_token> tokens(o.prompt.size() + 16);
-    int n_prompt = llama_tokenize(vocab, o.prompt.c_str(), (int32_t) o.prompt.size(), tokens.data(), (int32_t) tokens.size(), true, true);
-    if (n_prompt < 0) {
-        tokens.resize(-n_prompt);
-        n_prompt = llama_tokenize(vocab, o.prompt.c_str(), (int32_t) o.prompt.size(), tokens.data(), (int32_t) tokens.size(), true, true);
+    auto tokenize = [&](const std::string & text, bool add_special, bool parse_special) {
+        std::vector<llama_token> out(text.size() + 16);
+        int n = llama_tokenize(vocab, text.c_str(), (int32_t) text.size(), out.data(), (int32_t) out.size(), add_special, parse_special);
+        if (n < 0) {
+            out.resize(-n);
+            n = llama_tokenize(vocab, text.c_str(), (int32_t) text.size(), out.data(), (int32_t) out.size(), add_special, parse_special);
+        }
+        out.resize(std::max(n, 0));
+        return out;
+    };
+    std::vector<llama_token> tokens;
+    if (!o.prompt_file.empty()) {
+        std::ifstream pf(o.prompt_file);
+        std::string text((std::istreambuf_iterator<char>(pf)), std::istreambuf_iterator<char>());
+        tokens = tokenize(text, true, false);
+        if (o.prompt_tokens > 0) {
+            const std::vector<llama_token> suffix = o.prompt_suffix.empty() ? std::vector<llama_token>() : tokenize(o.prompt_suffix, false, false);
+            const size_t keep = (size_t) o.prompt_tokens > suffix.size() ? (size_t) o.prompt_tokens - suffix.size() : 0;
+            if (tokens.size() < keep) {
+                std::fprintf(stderr, "prompt file has only %zu tokens, %zu requested\n", tokens.size(), keep);
+                return 1;
+            }
+            tokens.resize(keep);
+            tokens.insert(tokens.end(), suffix.begin(), suffix.end());
+        }
+    } else {
+        tokens = tokenize(o.prompt, true, true);
     }
-    tokens.resize(n_prompt);
+    const int n_prompt = (int) tokens.size();
+    if (n_prompt + o.n_predict > o.n_ctx) {
+        std::fprintf(stderr, "warning: prompt (%d) + n_predict (%d) exceeds n_ctx (%d)\n", n_prompt, o.n_predict, o.n_ctx);
+    }
+    std::vector<char> is_eog(n_vocab, 0);
+    if (o.ignore_eos) {
+        for (int32_t i = 0; i < n_vocab; ++i) is_eog[i] = llama_vocab_is_eog(vocab, i) ? 1 : 0;
+    }
 
     std::ofstream dump;
     if (!o.dump_logits.empty()) {
@@ -200,11 +241,21 @@ int main(int argc, char ** argv) {
     std::vector<double> step_ms;
 
     const double t_pp0 = now_ms();
-    if (llama_decode(ctx, llama_batch_get_one(tokens.data(), n_prompt)) != 0) {
-        std::fprintf(stderr, "prompt decode failed\n");
-        return 1;
+    std::vector<double> prefill_chunk_ms;
+    for (int i0 = 0; i0 < n_prompt; i0 += o.n_batch) {
+        const int n = std::min(o.n_batch, n_prompt - i0);
+        const double tc = now_ms();
+        if (llama_decode(ctx, llama_batch_get_one(tokens.data() + i0, n)) != 0) {
+            std::fprintf(stderr, "prompt decode failed at token %d\n", i0);
+            return 1;
+        }
+        llama_synchronize(ctx); // llama_decode returns once GPU work is queued; time the completed step
+        prefill_chunk_ms.push_back(now_ms() - tc);
+        if (!o.progress.empty()) {
+            std::ofstream pg(o.progress, std::ios::app);
+            pg << "prefill " << (i0 + n) << "/" << n_prompt << " chunk_ms=" << prefill_chunk_ms.back() << " elapsed_s=" << (now_ms() - t_pp0) / 1000.0 << "\n";
+        }
     }
-    llama_synchronize(ctx); // llama_decode returns once GPU work is queued; time the completed step
     const double prompt_ms = now_ms() - t_pp0;
 
     for (int step = 0; step < o.n_predict; ++step) {
@@ -215,9 +266,11 @@ int main(int argc, char ** argv) {
         char h[32];
         std::snprintf(h, sizeof(h), "%016llx", (unsigned long long) fnv1a(logits, n_vocab));
         hashes.emplace_back(h);
-        int32_t best = 0;
-        for (int32_t i = 1; i < n_vocab; ++i) {
-            if (logits[i] > logits[best]) best = i;
+        int32_t best = -1, mx = 0;
+        for (int32_t i = 0; i < n_vocab; ++i) {
+            if (logits[i] > logits[mx]) mx = i;
+            if (o.ignore_eos && is_eog[i]) continue;
+            if (best < 0 || logits[i] > logits[best]) best = i;
         }
         if (!forced.empty() && (size_t) step >= forced.size()) {
             break;
@@ -225,12 +278,12 @@ int main(int argc, char ** argv) {
         int32_t chosen = forced.empty() ? best : forced[step];
         {
             double sum = 0.0;
-            for (int32_t i = 0; i < n_vocab; ++i) sum += std::exp((double) logits[i] - (double) logits[best]);
-            chosen_logprobs.push_back((float) ((double) logits[chosen] - (double) logits[best] - std::log(sum)));
+            for (int32_t i = 0; i < n_vocab; ++i) sum += std::exp((double) logits[i] - (double) logits[mx]);
+            chosen_logprobs.push_back((float) ((double) logits[chosen] - (double) logits[mx] - std::log(sum)));
             argmax_tokens.push_back(best);
         }
         generated.push_back(chosen);
-        if (llama_vocab_is_eog(vocab, chosen)) {
+        if (!o.ignore_eos && llama_vocab_is_eog(vocab, chosen)) {
             break;
         }
         const double t0 = now_ms();
@@ -288,6 +341,8 @@ int main(int argc, char ** argv) {
         for (size_t i = 0; i < chosen_logprobs.size(); ++i) out << (i ? "," : "") << chosen_logprobs[i];
         out << "],\n  \"logits_hashes\": [";
         for (size_t i = 0; i < hashes.size(); ++i) out << (i ? "," : "") << '"' << hashes[i] << '"';
+        out << "],\n  \"prefill_chunk_ms\": [";
+        for (size_t i = 0; i < prefill_chunk_ms.size(); ++i) out << (i ? "," : "") << prefill_chunk_ms[i];
         out << "],\n  \"step_ms\": [";
         for (size_t i = 0; i < step_ms.size(); ++i) out << (i ? "," : "") << step_ms[i];
         out << "]\n}\n";
