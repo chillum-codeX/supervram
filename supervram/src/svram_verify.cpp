@@ -229,6 +229,7 @@ int main(int argc, char ** argv) {
                         (unsigned long long) st.accesses, (unsigned long long) st.hits, (unsigned long long) st.misses,
                         (unsigned long long) st.evictions, hit_rate, (unsigned long long) st.bytes_h2d,
                         (unsigned long long) st.n_slots_total, st.host_ms);
+            std::printf("direct_io_stats bytes_ssd=%llu io_ms=%.1f\n", (unsigned long long) st.bytes_ssd, st.io_ms);
         }
     }
 #endif
