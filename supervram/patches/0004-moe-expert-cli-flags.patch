@@ -1,0 +1,192 @@
+diff --git a/common/arg.cpp b/common/arg.cpp
+index 6b38de2..fb5ed60 100644
+--- a/common/arg.cpp
++++ b/common/arg.cpp
+@@ -2756,6 +2756,40 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
+             }
+         }
+     ).set_env("LLAMA_ARG_MOE_EXPERT_CACHE_POLICY"));
++    add_opt(common_arg(
++        {"--moe-expert-direct-io"},
++        "read MoE expert cache misses from the model file with O_DIRECT into a pinned staging buffer instead of the mmap (Linux; the model then does not need to fit in or pass through the page cache)",
++        [](common_params & params) {
++            params.moe_expert_direct_io = true;
++        }
++    ).set_env("LLAMA_ARG_MOE_EXPERT_DIRECT_IO"));
++    add_opt(common_arg(
++        {"--moe-expert-io-threads"}, "N",
++        "parallel O_DIRECT reads for --moe-expert-direct-io (default: 8)",
++        [](common_params & params, int value) {
++            if (value < 0) {
++                throw std::invalid_argument("invalid value");
++            }
++            params.moe_expert_io_threads = value;
++        }
++    ).set_env("LLAMA_ARG_MOE_EXPERT_IO_THREADS"));
++    add_opt(common_arg(
++        {"--moe-expert-staging-mib"}, "N",
++        "pinned staging buffer in MiB for --moe-expert-direct-io (default: 128)",
++        [](common_params & params, int value) {
++            if (value < 0) {
++                throw std::invalid_argument("invalid value");
++            }
++            params.moe_expert_staging_mib = value;
++        }
++    ).set_env("LLAMA_ARG_MOE_EXPERT_STAGING_MIB"));
++    add_opt(common_arg(
++        {"--moe-expert-trace"}, "FILE",
++        "record the experts each layer selects for every token to FILE (for offline cache-policy analysis)",
++        [](common_params & params, const std::string & value) {
++            params.moe_expert_trace = value;
++        }
++    ).set_env("LLAMA_ARG_MOE_EXPERT_TRACE"));
+     add_opt(common_arg(
+         {"--numa"}, "TYPE",
+         "attempt optimizations that help on some NUMA systems\n"
+diff --git a/common/common.cpp b/common/common.cpp
+index 73beca5..92690f9 100644
+--- a/common/common.cpp
++++ b/common/common.cpp
+@@ -1750,6 +1750,10 @@ struct llama_context_params common_context_params_to_llama(const common_params &
+     cparams.kv_unified        = params.kv_unified;
+     cparams.moe_expert_cache_bytes  = params.moe_expert_cache_mib << 20;
+     cparams.moe_expert_cache_policy = params.moe_expert_cache_policy;
++    cparams.moe_expert_direct_io    = params.moe_expert_direct_io ? 1 : 0;
++    cparams.moe_expert_io_threads   = params.moe_expert_io_threads;
++    cparams.moe_expert_staging_mib  = params.moe_expert_staging_mib;
++    cparams.moe_expert_trace        = params.moe_expert_trace.empty() ? nullptr : params.moe_expert_trace.c_str();
+     if (params.moe_expert_storage == LLAMA_MOE_EXPERT_STORAGE_CACHE && cparams.moe_expert_cache_bytes == 0) {
+         cparams.moe_expert_cache_bytes = 8ull << 30;
+     }
+diff --git a/common/common.h b/common/common.h
+index 22e1f87..c969155 100644
+--- a/common/common.h
++++ b/common/common.h
+@@ -487,6 +487,10 @@ struct common_params {
+     enum llama_moe_expert_storage moe_expert_storage = LLAMA_MOE_EXPERT_STORAGE_RESIDENT;
+     size_t moe_expert_cache_mib = 0; // 0 = llama.cpp default when storage=cache
+     enum llama_moe_expert_cache_policy moe_expert_cache_policy = LLAMA_MOE_EXPERT_CACHE_POLICY_LRU;
++    bool        moe_expert_direct_io    = false; // read expert cache misses with O_DIRECT into pinned staging (Linux)
++    int32_t     moe_expert_io_threads   = 0;     // 0 = default
++    int32_t     moe_expert_staging_mib  = 0;     // 0 = default
++    std::string moe_expert_trace;                // record per-token expert selections to this file
+ 
+     common_cpu_params cpuparams;
+     common_cpu_params cpuparams_batch;
+diff --git a/ggml/include/ggml-backend.h b/ggml/include/ggml-backend.h
+index a7feebf..6337701 100644
+--- a/ggml/include/ggml-backend.h
++++ b/ggml/include/ggml-backend.h
+@@ -372,6 +372,10 @@ extern "C" {
+         size_t capacity_bytes;                              // device bytes for expert slots, shared by all cached tensors
+         enum ggml_backend_sched_expert_cache_policy policy; // eviction policy
+         int    n_slots_min;                                 // lower bound on slots per tensor (0 -> 8)
++        int    direct_io;                                   // 1 = O_DIRECT reads into pinned staging (Linux); also enabled by SVRAM_DIRECT_IO=1
++        int    io_threads;                                  // parallel direct reads (0 -> SVRAM_IO_THREADS or 8)
++        size_t staging_bytes;                               // pinned staging buffer size (0 -> SVRAM_STAGING_MIB or 128 MiB)
++        const char * trace_path;                            // record the experts each layer selects per token (NULL -> SVRAM_TRACE)
+     };
+ 
+     struct ggml_backend_sched_expert_cache_stats {
+diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
+index d16f3eb..8d17941 100644
+--- a/ggml/src/ggml-backend.cpp
++++ b/ggml/src/ggml-backend.cpp
+@@ -2708,16 +2708,25 @@ void ggml_backend_sched_set_expert_cache(ggml_backend_sched_t sched, const struc
+     sched->expert_cache->params = *params;
+     memset(&sched->expert_cache->stats, 0, sizeof(sched->expert_cache->stats));
+     sched->expert_cache->layout_dirty = true;
+-    if (const char * env = getenv("SVRAM_TRACE")) {
+-        sched->expert_cache->trace = fopen(env, "w");
++    // explicit parameters win, the SVRAM_* environment variables are the fallback
++    const char * trace_path = params->trace_path != nullptr && params->trace_path[0] != '\0' ? params->trace_path : getenv("SVRAM_TRACE");
++    if (trace_path != nullptr && trace_path[0] != '\0') {
++        sched->expert_cache->trace = fopen(trace_path, "w");
++        if (sched->expert_cache->trace == nullptr) {
++            GGML_LOG_WARN("%s: expert cache: cannot open trace file %s\n", __func__, trace_path);
++        }
+     }
+ #if defined(__linux__)
+     const char * env_direct = getenv("SVRAM_DIRECT_IO");
+-    sched->expert_cache->direct_io = env_direct != nullptr && atoi(env_direct) != 0;
+-    if (const char * env = getenv("SVRAM_IO_THREADS")) {
++    sched->expert_cache->direct_io = params->direct_io != 0 || (env_direct != nullptr && atoi(env_direct) != 0);
++    if (params->io_threads > 0) {
++        sched->expert_cache->io_threads = params->io_threads;
++    } else if (const char * env = getenv("SVRAM_IO_THREADS")) {
+         sched->expert_cache->io_threads = std::max(1, atoi(env));
+     }
+-    if (const char * env = getenv("SVRAM_STAGING_MIB")) {
++    if (params->staging_bytes > 0) {
++        sched->expert_cache->staging_bytes = params->staging_bytes;
++    } else if (const char * env = getenv("SVRAM_STAGING_MIB")) {
+         sched->expert_cache->staging_bytes = (size_t) std::max(1, atoi(env)) << 20;
+     }
+ #endif
+diff --git a/include/llama.h b/include/llama.h
+index b6a02df..98f8bef 100644
+--- a/include/llama.h
++++ b/include/llama.h
+@@ -411,6 +411,10 @@ extern "C" {
+         // bounded device cache for host-resident MoE expert weights (0 = disabled)
+         size_t moe_expert_cache_bytes;
+         enum llama_moe_expert_cache_policy moe_expert_cache_policy;
++        int32_t      moe_expert_direct_io;    // 1 = read cache misses with O_DIRECT into pinned staging instead of the mmap (Linux)
++        int32_t      moe_expert_io_threads;   // parallel direct reads (0 = default 8)
++        int32_t      moe_expert_staging_mib;  // pinned staging buffer size in MiB (0 = default 128)
++        const char * moe_expert_trace;        // if set, record the experts each layer selects per token to this file
+ 
+         // Keep the booleans together and at the end of the struct to avoid misalignment during copy-by-value.
+         bool embeddings;  // if true, extract embeddings (together with logits)
+diff --git a/src/llama-context.cpp b/src/llama-context.cpp
+index 0d11bb8..e5d2387 100644
+--- a/src/llama-context.cpp
++++ b/src/llama-context.cpp
+@@ -274,6 +274,10 @@ llama_context::llama_context(
+ 
+     cparams.moe_expert_cache_bytes  = params.moe_expert_cache_bytes;
+     cparams.moe_expert_cache_policy = params.moe_expert_cache_policy;
++    cparams.moe_expert_direct_io    = params.moe_expert_direct_io;
++    cparams.moe_expert_io_threads   = params.moe_expert_io_threads;
++    cparams.moe_expert_staging_mib  = params.moe_expert_staging_mib;
++    cparams.moe_expert_trace        = params.moe_expert_trace;
+     if (model.moe_expert_storage() == LLAMA_MOE_EXPERT_STORAGE_CACHE && cparams.moe_expert_cache_bytes == 0) {
+         cparams.moe_expert_cache_bytes = 8ull * 1024 * 1024 * 1024;
+         LLAMA_LOG_WARN("%s: moe_expert_storage = cache but no cache size given, using %zu MiB\n", __func__, cparams.moe_expert_cache_bytes / 1024 / 1024);
+@@ -614,6 +618,10 @@ void llama_context::sched_set_expert_cache() {
+         /*.capacity_bytes =*/ cparams.moe_expert_cache_bytes,
+         /*.policy         =*/ cparams.moe_expert_cache_policy == LLAMA_MOE_EXPERT_CACHE_POLICY_LFU ? GGML_SCHED_EXPERT_CACHE_LFU : GGML_SCHED_EXPERT_CACHE_LRU,
+         /*.n_slots_min    =*/ 0,
++        /*.direct_io      =*/ cparams.moe_expert_direct_io,
++        /*.io_threads     =*/ cparams.moe_expert_io_threads,
++        /*.staging_bytes  =*/ (size_t) std::max<int32_t>(0, cparams.moe_expert_staging_mib) << 20,
++        /*.trace_path     =*/ cparams.moe_expert_trace,
+     };
+     ggml_backend_sched_set_expert_cache(sched.get(), &xc);
+ }
+@@ -3716,6 +3724,10 @@ llama_context_params llama_context_default_params() {
+         /*.abort_callback_data         =*/ nullptr,
+         /*.moe_expert_cache_bytes      =*/ 0,
+         /*.moe_expert_cache_policy     =*/ LLAMA_MOE_EXPERT_CACHE_POLICY_LRU,
++        /*.moe_expert_direct_io        =*/ 0,
++        /*.moe_expert_io_threads       =*/ 0,
++        /*.moe_expert_staging_mib      =*/ 0,
++        /*.moe_expert_trace            =*/ nullptr,
+         /*.embeddings                  =*/ false,
+         /*.offload_kqv                 =*/ true,
+         /*.no_perf                     =*/ true,
+diff --git a/src/llama-cparams.h b/src/llama-cparams.h
+index 7877dbf..0f8ba3c 100644
+--- a/src/llama-cparams.h
++++ b/src/llama-cparams.h
+@@ -56,6 +56,10 @@ struct llama_cparams {
+ 
+     size_t moe_expert_cache_bytes; // 0 = disabled
+     enum llama_moe_expert_cache_policy moe_expert_cache_policy;
++    int32_t      moe_expert_direct_io;
++    int32_t      moe_expert_io_threads;
++    int32_t      moe_expert_staging_mib;
++    const char * moe_expert_trace;
+ 
+     std::vector<bool> embeddings_layer_inp; // [n_layer()] extract input embeddings for layer
+ 

@@ -411,6 +411,10 @@ extern "C" {
         // bounded device cache for host-resident MoE expert weights (0 = disabled)
         size_t moe_expert_cache_bytes;
         enum llama_moe_expert_cache_policy moe_expert_cache_policy;
+        int32_t      moe_expert_direct_io;    // 1 = read cache misses with O_DIRECT into pinned staging instead of the mmap (Linux)
+        int32_t      moe_expert_io_threads;   // parallel direct reads (0 = default 8)
+        int32_t      moe_expert_staging_mib;  // pinned staging buffer size in MiB (0 = default 128)
+        const char * moe_expert_trace;        // if set, record the experts each layer selects per token to this file
 
         // Keep the booleans together and at the end of the struct to avoid misalignment during copy-by-value.
         bool embeddings;  // if true, extract embeddings (together with logits)

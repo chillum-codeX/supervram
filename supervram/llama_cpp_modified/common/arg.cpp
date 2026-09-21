@@ -2757,6 +2757,40 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         }
     ).set_env("LLAMA_ARG_MOE_EXPERT_CACHE_POLICY"));
     add_opt(common_arg(
+        {"--moe-expert-direct-io"},
+        "read MoE expert cache misses from the model file with O_DIRECT into a pinned staging buffer instead of the mmap (Linux; the model then does not need to fit in or pass through the page cache)",
+        [](common_params & params) {
+            params.moe_expert_direct_io = true;
+        }
+    ).set_env("LLAMA_ARG_MOE_EXPERT_DIRECT_IO"));
+    add_opt(common_arg(
+        {"--moe-expert-io-threads"}, "N",
+        "parallel O_DIRECT reads for --moe-expert-direct-io (default: 8)",
+        [](common_params & params, int value) {
+            if (value < 0) {
+                throw std::invalid_argument("invalid value");
+            }
+            params.moe_expert_io_threads = value;
+        }
+    ).set_env("LLAMA_ARG_MOE_EXPERT_IO_THREADS"));
+    add_opt(common_arg(
+        {"--moe-expert-staging-mib"}, "N",
+        "pinned staging buffer in MiB for --moe-expert-direct-io (default: 128)",
+        [](common_params & params, int value) {
+            if (value < 0) {
+                throw std::invalid_argument("invalid value");
+            }
+            params.moe_expert_staging_mib = value;
+        }
+    ).set_env("LLAMA_ARG_MOE_EXPERT_STAGING_MIB"));
+    add_opt(common_arg(
+        {"--moe-expert-trace"}, "FILE",
+        "record the experts each layer selects for every token to FILE (for offline cache-policy analysis)",
+        [](common_params & params, const std::string & value) {
+            params.moe_expert_trace = value;
+        }
+    ).set_env("LLAMA_ARG_MOE_EXPERT_TRACE"));
+    add_opt(common_arg(
         {"--numa"}, "TYPE",
         "attempt optimizations that help on some NUMA systems\n"
         "- distribute: spread execution evenly over all nodes\n"

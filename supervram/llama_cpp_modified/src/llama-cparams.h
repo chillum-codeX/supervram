@@ -56,6 +56,10 @@ struct llama_cparams {
 
     size_t moe_expert_cache_bytes; // 0 = disabled
     enum llama_moe_expert_cache_policy moe_expert_cache_policy;
+    int32_t      moe_expert_direct_io;
+    int32_t      moe_expert_io_threads;
+    int32_t      moe_expert_staging_mib;
+    const char * moe_expert_trace;
 
     std::vector<bool> embeddings_layer_inp; // [n_layer()] extract input embeddings for layer
 

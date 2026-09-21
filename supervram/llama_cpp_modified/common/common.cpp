@@ -1750,6 +1750,10 @@ struct llama_context_params common_context_params_to_llama(const common_params &
     cparams.kv_unified        = params.kv_unified;
     cparams.moe_expert_cache_bytes  = params.moe_expert_cache_mib << 20;
     cparams.moe_expert_cache_policy = params.moe_expert_cache_policy;
+    cparams.moe_expert_direct_io    = params.moe_expert_direct_io ? 1 : 0;
+    cparams.moe_expert_io_threads   = params.moe_expert_io_threads;
+    cparams.moe_expert_staging_mib  = params.moe_expert_staging_mib;
+    cparams.moe_expert_trace        = params.moe_expert_trace.empty() ? nullptr : params.moe_expert_trace.c_str();
     if (params.moe_expert_storage == LLAMA_MOE_EXPERT_STORAGE_CACHE && cparams.moe_expert_cache_bytes == 0) {
         cparams.moe_expert_cache_bytes = 8ull << 30;
     }

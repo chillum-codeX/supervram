@@ -3,7 +3,7 @@
 ## Implemented and tested now
 
 - Pinned llama.cpp revision `ce8caa6e60a03093351d6016a818720e0d46f0fb` and Qwen3 MoE code map.
-- `--moe-expert-storage resident|mmap|cache`, `--moe-expert-cache-size`, `--moe-expert-cache-policy lru|lfu`.
+- `--moe-expert-storage resident|mmap|cache`, `--moe-expert-cache-size`, `--moe-expert-cache-policy lru|lfu`, and (patch 0004) `--moe-expert-direct-io`, `--moe-expert-io-threads N`, `--moe-expert-staging-mib N`, `--moe-expert-trace FILE`. With `--moe-expert-direct-io` only the dense weights (815 MiB of a 17.3 GiB Q4_K_M file) end up in the page cache; on the mmap path 9.5 GiB do (standard `llama-completion`, both runs after evicting the file).
 - Demand-paged Qwen3 MoE expert weights (`TENSOR_READ_LAZY` / lazy mode ON) stay in host/file mappings.
 - Compact GPU expert cache in `ggml_backend_sched`: per-weight device slot buffer `{ne0,ne1,n_slots}`, LRU/LFU, logical-to-slot id remap, stats API.
 - `svram-verify` greedy token-id / logits-hash gate.
@@ -179,5 +179,5 @@ Misses are the rarely used experts (about 0.2 per layer per token), so they are 
 
 - Prompt ubatches that route more distinct experts than `n_slots` return a hard error (observed as llama-bench warmup `res = -3` at `-ub 16`). Use `-ub 1` or a larger cache for decode; prompt processing is not a v1 win.
 - No prefetch (measured to be a net loss with history-based prediction and worth at most about 4-11 % with an ideal early-router predictor, see above), no GDS copy backend, no llama-server `/metrics` cache stats (stats are in the server task JSON only), and only the 20-run cache-size x policy ablation above, not the 720-run matrix (no prefetch/predictor axes, no repetitions).
-- Direct I/O (`SVRAM_DIRECT_IO=1`, Linux only, env-var controlled, no CLI flag yet) uses one pinned staging buffer with a synchronize before each reuse: no double buffering and no prefetch, so reads never overlap compute (reads of one layer are batched, see above). The default path is still mmap.
+- Direct I/O (`--moe-expert-direct-io`, Linux only; the `SVRAM_*` environment variables remain as a fallback) uses one pinned staging buffer with a synchronize before each reuse: no double buffering and no prefetch, so reads never overlap compute (reads of one layer are batched, see above). The default path is still mmap.
 - CUDA graphs were disabled (`GGML_CUDA_DISABLE_GRAPHS=1`) for bring-up.

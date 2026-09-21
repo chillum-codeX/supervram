@@ -274,6 +274,10 @@ llama_context::llama_context(
 
     cparams.moe_expert_cache_bytes  = params.moe_expert_cache_bytes;
     cparams.moe_expert_cache_policy = params.moe_expert_cache_policy;
+    cparams.moe_expert_direct_io    = params.moe_expert_direct_io;
+    cparams.moe_expert_io_threads   = params.moe_expert_io_threads;
+    cparams.moe_expert_staging_mib  = params.moe_expert_staging_mib;
+    cparams.moe_expert_trace        = params.moe_expert_trace;
     if (model.moe_expert_storage() == LLAMA_MOE_EXPERT_STORAGE_CACHE && cparams.moe_expert_cache_bytes == 0) {
         cparams.moe_expert_cache_bytes = 8ull * 1024 * 1024 * 1024;
         LLAMA_LOG_WARN("%s: moe_expert_storage = cache but no cache size given, using %zu MiB\n", __func__, cparams.moe_expert_cache_bytes / 1024 / 1024);
@@ -614,6 +618,10 @@ void llama_context::sched_set_expert_cache() {
         /*.capacity_bytes =*/ cparams.moe_expert_cache_bytes,
         /*.policy         =*/ cparams.moe_expert_cache_policy == LLAMA_MOE_EXPERT_CACHE_POLICY_LFU ? GGML_SCHED_EXPERT_CACHE_LFU : GGML_SCHED_EXPERT_CACHE_LRU,
         /*.n_slots_min    =*/ 0,
+        /*.direct_io      =*/ cparams.moe_expert_direct_io,
+        /*.io_threads     =*/ cparams.moe_expert_io_threads,
+        /*.staging_bytes  =*/ (size_t) std::max<int32_t>(0, cparams.moe_expert_staging_mib) << 20,
+        /*.trace_path     =*/ cparams.moe_expert_trace,
     };
     ggml_backend_sched_set_expert_cache(sched.get(), &xc);
 }
@@ -3716,6 +3724,10 @@ llama_context_params llama_context_default_params() {
         /*.abort_callback_data         =*/ nullptr,
         /*.moe_expert_cache_bytes      =*/ 0,
         /*.moe_expert_cache_policy     =*/ LLAMA_MOE_EXPERT_CACHE_POLICY_LRU,
+        /*.moe_expert_direct_io        =*/ 0,
+        /*.moe_expert_io_threads       =*/ 0,
+        /*.moe_expert_staging_mib      =*/ 0,
+        /*.moe_expert_trace            =*/ nullptr,
         /*.embeddings                  =*/ false,
         /*.offload_kqv                 =*/ true,
         /*.no_perf                     =*/ true,

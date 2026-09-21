@@ -49,6 +49,10 @@ struct options {
     int n_cpu_moe = 0;
     int cache_mib = 0;
     std::string cache_policy = "lru";
+    bool direct_io = false;    // --direct-io: O_DIRECT reads for cache misses (also SVRAM_DIRECT_IO=1)
+    int io_threads = 0;        // --io-threads N (0 = default)
+    int staging_mib = 0;       // --staging-mib N (0 = default)
+    std::string trace;         // --trace FILE: record per-token expert selections
     int n_predict = 32;
     int n_ctx = 1024;
     int n_batch = 512;
@@ -72,6 +76,10 @@ bool parse(int argc, char ** argv, options & o) {
         else if (a == "--n-cpu-moe") { if (!next(v)) return false; o.n_cpu_moe = std::atoi(v.c_str()); }
         else if (a == "--cache-mib") { if (!next(v)) return false; o.cache_mib = std::atoi(v.c_str()); }
         else if (a == "--cache-policy") { if (!next(o.cache_policy)) return false; }
+        else if (a == "--direct-io") { o.direct_io = true; }
+        else if (a == "--io-threads") { if (!next(v)) return false; o.io_threads = std::atoi(v.c_str()); }
+        else if (a == "--staging-mib") { if (!next(v)) return false; o.staging_mib = std::atoi(v.c_str()); }
+        else if (a == "--trace") { if (!next(o.trace)) return false; }
         else if (a == "--n-predict") { if (!next(v)) return false; o.n_predict = std::atoi(v.c_str()); }
         else if (a == "--n-ctx") { if (!next(v)) return false; o.n_ctx = std::atoi(v.c_str()); }
         else if (a == "--n-batch") { if (!next(v)) return false; o.n_batch = std::atoi(v.c_str()); }
@@ -148,6 +156,10 @@ int main(int argc, char ** argv) {
     if (o.storage == "cache") {
         cparams.moe_expert_cache_bytes = (size_t) o.cache_mib << 20;
         cparams.moe_expert_cache_policy = o.cache_policy == "lfu" ? LLAMA_MOE_EXPERT_CACHE_POLICY_LFU : LLAMA_MOE_EXPERT_CACHE_POLICY_LRU;
+        cparams.moe_expert_direct_io = o.direct_io ? 1 : 0;
+        cparams.moe_expert_io_threads = o.io_threads;
+        cparams.moe_expert_staging_mib = o.staging_mib;
+        cparams.moe_expert_trace = o.trace.empty() ? nullptr : o.trace.c_str();
     }
 #endif
     llama_context * ctx = llama_init_from_model(model, cparams);

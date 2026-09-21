@@ -487,6 +487,10 @@ struct common_params {
     enum llama_moe_expert_storage moe_expert_storage = LLAMA_MOE_EXPERT_STORAGE_RESIDENT;
     size_t moe_expert_cache_mib = 0; // 0 = llama.cpp default when storage=cache
     enum llama_moe_expert_cache_policy moe_expert_cache_policy = LLAMA_MOE_EXPERT_CACHE_POLICY_LRU;
+    bool        moe_expert_direct_io    = false; // read expert cache misses with O_DIRECT into pinned staging (Linux)
+    int32_t     moe_expert_io_threads   = 0;     // 0 = default
+    int32_t     moe_expert_staging_mib  = 0;     // 0 = default
+    std::string moe_expert_trace;                // record per-token expert selections to this file
 
     common_cpu_params cpuparams;
     common_cpu_params cpuparams_batch;

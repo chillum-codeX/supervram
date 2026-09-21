@@ -7,7 +7,7 @@ Everything lives under `/home/truppy/Downloads/workspace/project/supervram/`. Mo
 
 | What | Where |
 |---|---|
-| Patches to llama.cpp (apply 0001, 0002, 0003 in order to `ce8caa6`) | `patches/` |
+| Patches to llama.cpp (apply 0001 to 0004 in order to `ce8caa6`) | `patches/` |
 | The same 23 modified/added llama.cpp files, readable and tracked | `llama_cpp_modified/` (refresh: `scripts/sync_llama_cpp_modified.sh`) |
 | The working llama.cpp checkout and CUDA build | `third_party/llama.cpp/`, `third_party/llama.cpp/build-3090/` |
 | Test/measurement tool (`svram-verify`) | `src/svram_verify.cpp`, built to `build/svram-verify` |
@@ -21,13 +21,18 @@ cd project && SUPERVRAM_CUDA=1 ./entrypoint.sh          # CPU checks + CUDA buil
 cd supervram/build && ninja svram-verify
 ```
 
-## Runtime switches (environment variables)
+## Runtime options
 
-| Variable | Meaning |
+Command-line flags (any llama.cpp tool that takes the usual model options, plus `svram-verify` with the short names in brackets):
+
+| Flag | Meaning |
 |---|---|
-| `SVRAM_DIRECT_IO=1` | read expert cache misses with O_DIRECT into pinned staging (Linux); default is the mmap path |
-| `SVRAM_IO_THREADS` (8), `SVRAM_STAGING_MIB` (128) | direct-I/O parallelism and staging size |
-| `SVRAM_TRACE=<file>` | record the distinct experts each layer selects per token |
+| `--moe-expert-storage cache` | GPU expert cache; also `--moe-expert-cache-size MiB`, `--moe-expert-cache-policy lru\|lfu` |
+| `--moe-expert-direct-io` [`--direct-io`] | read cache misses with O_DIRECT into pinned staging (Linux); default is the mmap path |
+| `--moe-expert-io-threads N` [`--io-threads`] (8), `--moe-expert-staging-mib N` [`--staging-mib`] (128) | direct-I/O parallelism and staging size |
+| `--moe-expert-trace FILE` [`--trace`] | record the distinct experts each layer selects per token |
+
+The environment variables `SVRAM_DIRECT_IO=1`, `SVRAM_IO_THREADS`, `SVRAM_STAGING_MIB`, `SVRAM_TRACE=<file>` still work as a fallback (the scripts use them); an explicit flag wins.
 
 ## Experiments
 

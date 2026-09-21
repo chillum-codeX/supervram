@@ -27,21 +27,24 @@ not valid. The mistakes, all found and fixed:
 - **A timing bug.** The benchmark tool stopped its clock before the GPU finished, so full-GPU runs showed thousands of tokens/s and
   every earlier decode number was inflated. Fixed, and the sweeps were rerun.
 - **A missing line in a patch**, so the saved patch did not reproduce the tested build. Fixed and verified: applying patches 0001, 0002,
-  0003 to the pinned llama.cpp rebuilds the tested tree exactly.
+  0003, 0004 to the pinned llama.cpp rebuilds the tested tree exactly.
 - **Two wrong statements I made and later corrected:** that the Q4 cache "plateaus at 63 t/s because of per-step overhead", and that
   overlapping reads with compute could gain only about 10%.
 - **A measurement race** that once reported 47 GiB of RAM use (it sampled the desktop app, not the test process). Fixed.
 
 ## 3. What was built
 
-A bounded GPU cache of expert weights inside llama.cpp's scheduler, in three patches:
+A bounded GPU cache of expert weights inside llama.cpp's scheduler, in four patches:
 - **0001 (existing):** demand-paged experts on the CPU.
 - **0002:** the GPU expert cache. Each layer gets a fixed number of GPU "slots". For every token the router says which experts are
   needed; hits are used in place, misses are copied into a slot (evicting the least recently used expert), and the routing ids are
   remapped to slot numbers. Output is bit-identical to running the same weights fully on the GPU.
 - **0003:** the SSD path. A miss is read straight from the model file with O_DIRECT (bypassing the page cache), several reads at once,
   into a 128 MiB pinned staging buffer, then copied to the GPU. A layer's three weights (gate, up, down) are read as one batch with one
-  GPU sync per layer. Also an opt-in routing trace (`SVRAM_TRACE`). Enabled with `SVRAM_DIRECT_IO=1`.
+  GPU sync per layer. Also an opt-in routing trace.
+- **0004:** real command-line options for all of it: `--moe-expert-direct-io`, `--moe-expert-io-threads`, `--moe-expert-staging-mib`,
+  `--moe-expert-trace` (they work in `llama-server`, `llama-completion` and the other llama.cpp tools; the old `SVRAM_*`
+  environment variables still work as a fallback).
 
 ## 4. Results in order
 
@@ -104,6 +107,6 @@ Q8_0 (30 GiB, does not fit in VRAM), 16 GiB cache, cold start unless noted:
 
 ## 9. Where everything lives
 
-Code: `patches/0001..0003`, `src/svram_verify.cpp`. Tools: `scripts/cold_run.py`, `ssd_expert_read_bench.py`, `analyze_policies.py`,
+Code: `patches/0001..0004`, `src/svram_verify.cpp`. Tools: `scripts/cold_run.py`, `ssd_expert_read_bench.py`, `analyze_policies.py`,
 `compare_quality.py`, `aggregate_ablations.py`. Results: `results/rtx3090/` (cold, ablations-long, traces, quality). Status tables:
 `docs/IMPLEMENTATION_STATUS.md`; evidence log: `writer_handoff/EVIDENCE_LEDGER.md`; running log: `../progress.md`.

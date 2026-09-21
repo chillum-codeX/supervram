@@ -372,6 +372,10 @@ extern "C" {
         size_t capacity_bytes;                              // device bytes for expert slots, shared by all cached tensors
         enum ggml_backend_sched_expert_cache_policy policy; // eviction policy
         int    n_slots_min;                                 // lower bound on slots per tensor (0 -> 8)
+        int    direct_io;                                   // 1 = O_DIRECT reads into pinned staging (Linux); also enabled by SVRAM_DIRECT_IO=1
+        int    io_threads;                                  // parallel direct reads (0 -> SVRAM_IO_THREADS or 8)
+        size_t staging_bytes;                               // pinned staging buffer size (0 -> SVRAM_STAGING_MIB or 128 MiB)
+        const char * trace_path;                            // record the experts each layer selects per token (NULL -> SVRAM_TRACE)
     };
 
     struct ggml_backend_sched_expert_cache_stats {

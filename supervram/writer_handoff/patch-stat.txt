@@ -35,3 +35,14 @@
  src/llama-model-loader.cpp  |   8 +
  src/llama-model-loader.h    |   1 +
  4 files changed, 420 insertions(+), 19 deletions(-)
+
+# patches/0004-moe-expert-cli-flags.patch (applies on top of 0003)
+ common/arg.cpp              | 34 ++++++++++++++++++++++++++++++++++
+ common/common.cpp           |  4 ++++
+ common/common.h             |  4 ++++
+ ggml/include/ggml-backend.h |  4 ++++
+ ggml/src/ggml-backend.cpp   | 19 ++++++++++++++-----
+ include/llama.h             |  4 ++++
+ src/llama-context.cpp       | 12 ++++++++++++
+ src/llama-cparams.h         |  4 ++++
+ 8 files changed, 80 insertions(+), 5 deletions(-)

@@ -2708,16 +2708,25 @@ void ggml_backend_sched_set_expert_cache(ggml_backend_sched_t sched, const struc
     sched->expert_cache->params = *params;
     memset(&sched->expert_cache->stats, 0, sizeof(sched->expert_cache->stats));
     sched->expert_cache->layout_dirty = true;
-    if (const char * env = getenv("SVRAM_TRACE")) {
-        sched->expert_cache->trace = fopen(env, "w");
+    // explicit parameters win, the SVRAM_* environment variables are the fallback
+    const char * trace_path = params->trace_path != nullptr && params->trace_path[0] != '\0' ? params->trace_path : getenv("SVRAM_TRACE");
+    if (trace_path != nullptr && trace_path[0] != '\0') {
+        sched->expert_cache->trace = fopen(trace_path, "w");
+        if (sched->expert_cache->trace == nullptr) {
+            GGML_LOG_WARN("%s: expert cache: cannot open trace file %s\n", __func__, trace_path);
+        }
     }
 #if defined(__linux__)
     const char * env_direct = getenv("SVRAM_DIRECT_IO");
-    sched->expert_cache->direct_io = env_direct != nullptr && atoi(env_direct) != 0;
-    if (const char * env = getenv("SVRAM_IO_THREADS")) {
+    sched->expert_cache->direct_io = params->direct_io != 0 || (env_direct != nullptr && atoi(env_direct) != 0);
+    if (params->io_threads > 0) {
+        sched->expert_cache->io_threads = params->io_threads;
+    } else if (const char * env = getenv("SVRAM_IO_THREADS")) {
         sched->expert_cache->io_threads = std::max(1, atoi(env));
     }
-    if (const char * env = getenv("SVRAM_STAGING_MIB")) {
+    if (params->staging_bytes > 0) {
+        sched->expert_cache->staging_bytes = params->staging_bytes;
+    } else if (const char * env = getenv("SVRAM_STAGING_MIB")) {
         sched->expert_cache->staging_bytes = (size_t) std::max(1, atoi(env)) << 20;
     }
 #endif
