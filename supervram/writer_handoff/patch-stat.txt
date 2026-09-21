@@ -31,7 +31,7 @@
  19 files changed, 1188 insertions(+), 18 deletions(-)
 # patches/0003-direct-io-expert-reads.patch (applies on top of 0002)
  ggml/include/ggml-backend.h |   7 ++
- ggml/src/ggml-backend.cpp   | 282 +++++++++++++++++++++++++++++++++++++++++++-
+ ggml/src/ggml-backend.cpp   | 300 +++++++++++++++++++++++++++++++++++++++++++-
  src/llama-model-loader.cpp  |   8 ++
  src/llama-model-loader.h    |   1 +
- 4 files changed, 296 insertions(+), 2 deletions(-)
+ 4 files changed, 314 insertions(+), 2 deletions(-)
