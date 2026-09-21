@@ -795,6 +795,7 @@ struct ggml_backend_sched_split {
 
 // expert cache (SuperVRAM): compact device slots for host-resident MoE expert weights
 #define GGML_SCHED_EXPERT_CACHE_PAD 512 // extra zeroed bytes after the last slot (MMQ reads a little past the end)
+#define GGML_SCHED_EXPERT_CACHE_MAX_BATCH 4 // larger batches need most experts of every layer: use the regular offload path
 
 // on-disk location of host expert weights (registered by the model loader)
 struct ggml_expert_source {
@@ -1078,6 +1079,10 @@ static struct ggml_tensor * ggml_backend_sched_expert_cache_weight(ggml_backend_
     if (w->ne[2] <= 1 || w->ne[3] != 1 || !ggml_is_contiguous(w)) {
         return NULL;
     }
+    // prompt processing: a big batch touches most experts of every layer, so a small slot cache cannot serve it
+    if (node->src[2] != NULL && node->src[2]->ne[1] > GGML_SCHED_EXPERT_CACHE_MAX_BATCH) {
+        return NULL;
+    }
     return w;
 }
 
@@ -1270,27 +1275,13 @@ static void ggml_backend_sched_expert_cache_bind_ids(ggml_backend_sched_t sched,
     node->src[2] = remap;
 }
 
-struct ggml_expert_miss {
-    ggml_backend_sched_expert_tensor * et;
-    int64_t expert;
-    int     slot;
-};
-
-// direct I/O: read the missed experts (of possibly several weights) with parallel O_DIRECT reads into the pinned
-// staging buffer, then copy each one into its device slot. Reads are 4 KiB aligned (a few KiB of padding per
-// expert); the copy skips the padding. Batching gate/up/down of a layer keeps more reads in flight.
-static bool ggml_backend_sched_expert_cache_read_direct(
-        struct ggml_backend_sched_expert_cache * cache, ggml_backend_t split_backend, const std::vector<ggml_expert_miss> & misses) {
+// direct I/O: allocate the pinned staging buffer and the read thread pool on first use
+static bool ggml_backend_sched_expert_cache_init_staging(
+        struct ggml_backend_sched_expert_cache * cache, ggml_backend_t split_backend, size_t min_bytes) {
 #if defined(__linux__)
     const size_t align = 4096;
-    auto stride_of = [&](const ggml_expert_miss & m) { return ((m.et->expert_size + align - 1) & ~(align - 1)) + align; }; // room for head/tail padding
-    size_t max_stride = 0;
-    for (const auto & m : misses) {
-        max_stride = std::max(max_stride, stride_of(m));
-    }
-
     if (cache->staging == nullptr) {
-        const size_t bytes = std::max(cache->staging_bytes, max_stride);
+        const size_t bytes = std::max(cache->staging_bytes, min_bytes);
         uint8_t * raw = nullptr;
         ggml_backend_dev_t dev = ggml_backend_get_device(split_backend);
         ggml_backend_buffer_type_t buft = dev ? ggml_backend_dev_host_buffer_type(dev) : nullptr;
@@ -1312,14 +1303,132 @@ static bool ggml_backend_sched_expert_cache_read_direct(
         GGML_LOG_INFO("%s: expert cache: direct I/O, %d threads, %zu MiB %s staging\n", __func__,
             cache->io_threads, bytes / 1024 / 1024, cache->staging_buf ? "pinned" : "pageable");
     }
+    if (cache->pool == nullptr) {
+        cache->pool = new ggml_expert_io_pool(cache->io_threads);
+    }
+    return true;
+#else
+    GGML_UNUSED(cache); GGML_UNUSED(split_backend); GGML_UNUSED(min_bytes);
+    return false;
+#endif
+}
+
+// direct I/O: file source of a host weight, if one was registered by the model loader
+static bool ggml_backend_sched_expert_cache_source(struct ggml_backend_sched_expert_cache * cache, const struct ggml_tensor * t, int * fd, uint64_t * offset) {
+#if defined(__linux__)
+    if (cache == nullptr || !cache->direct_io) {
+        return false;
+    }
+    ggml_expert_source src;
+    {
+        std::lock_guard<std::mutex> lock(g_expert_sources_mutex);
+        auto it = g_expert_sources.find(t);
+        if (it == g_expert_sources.end()) {
+            return false;
+        }
+        src = it->second;
+    }
+    auto f = cache->fds.find(src.path);
+    if (f == cache->fds.end()) {
+        f = cache->fds.emplace(src.path, open(src.path.c_str(), O_RDONLY | O_DIRECT)).first;
+    }
+    if (f->second < 0) {
+        return false;
+    }
+    *fd = f->second;
+    *offset = src.offset;
+    return true;
+#else
+    GGML_UNUSED(cache); GGML_UNUSED(t); GGML_UNUSED(fd); GGML_UNUSED(offset);
+    return false;
+#endif
+}
+
+// direct I/O: copy nbytes of a weight from the file to dst_tensor at dst_offset (prompt batches copy whole experts).
+// Large parallel O_DIRECT reads fill one half of the pinned staging buffer while the other half is copied to the device.
+static bool ggml_backend_sched_expert_cache_stream_range(
+        struct ggml_backend_sched_expert_cache * cache, ggml_backend_t split_backend, struct ggml_tensor * dst_tensor,
+        size_t dst_offset, int fd, uint64_t file_offset, size_t nbytes) {
+#if defined(__linux__)
+    const size_t align = 4096;
+    if (!ggml_backend_sched_expert_cache_init_staging(cache, split_backend, 2 * (1u << 20))) {
+        return false;
+    }
+    const size_t half = (cache->staging_bytes / 2) & ~(align - 1);
+    const size_t job_size = 4u << 20;
+    if (half < 2 * align) {
+        return false;
+    }
+    if (cache->staging_busy) { // an earlier miss copy may still read the staging buffer
+        ggml_backend_synchronize(split_backend);
+        cache->staging_busy = false;
+    }
+    bool busy[2] = { false, false };
+    size_t done = 0;
+    int which = 0;
+    while (done < nbytes) {
+        const size_t len = std::min(nbytes - done, half - 2 * align);
+        const uint64_t off = file_offset + done;
+        const uint64_t a   = off & ~(uint64_t) (align - 1);
+        const uint64_t end = (off + len + align - 1) & ~(uint64_t) (align - 1);
+        const size_t head  = (size_t) (off - a);
+        uint8_t * buf = cache->staging + (size_t) which * half;
+        if (busy[which]) { // the copy that used this half must be finished
+            ggml_backend_synchronize(split_backend);
+            busy[0] = busy[1] = false;
+        }
+        std::vector<ggml_expert_io_job> jobs;
+        for (uint64_t p = a; p < end; p += job_size) {
+            const size_t n = (size_t) std::min<uint64_t>(job_size, end - p);
+            jobs.push_back({ fd, buf + (p - a), p, n, std::min<size_t>(n, (size_t) (off + len > p ? off + len - p : 0)) });
+            cache->stats.bytes_ssd += n;
+        }
+        const int64_t t_io = ggml_time_us();
+        if (!cache->pool->run(std::move(jobs))) {
+            GGML_LOG_ERROR("%s: expert cache: direct read failed while streaming %s\n", __func__, dst_tensor->name);
+            return false;
+        }
+        cache->stats.io_ms += (ggml_time_us() - t_io) / 1000.0;
+        ggml_backend_tensor_set_async(split_backend, dst_tensor, buf + head, dst_offset + done, len);
+        busy[which] = true;
+        which ^= 1;
+        done += len;
+    }
+    cache->staging_busy = busy[0] || busy[1];
+    return true;
+#else
+    GGML_UNUSED(cache); GGML_UNUSED(split_backend); GGML_UNUSED(dst_tensor); GGML_UNUSED(dst_offset);
+    GGML_UNUSED(fd); GGML_UNUSED(file_offset); GGML_UNUSED(nbytes);
+    return false;
+#endif
+}
+
+struct ggml_expert_miss {
+    ggml_backend_sched_expert_tensor * et;
+    int64_t expert;
+    int     slot;
+};
+
+// direct I/O: read the missed experts (of possibly several weights) with parallel O_DIRECT reads into the pinned
+// staging buffer, then copy each one into its device slot. Reads are 4 KiB aligned (a few KiB of padding per
+// expert); the copy skips the padding. Batching gate/up/down of a layer keeps more reads in flight.
+static bool ggml_backend_sched_expert_cache_read_direct(
+        struct ggml_backend_sched_expert_cache * cache, ggml_backend_t split_backend, const std::vector<ggml_expert_miss> & misses) {
+#if defined(__linux__)
+    const size_t align = 4096;
+    auto stride_of = [&](const ggml_expert_miss & m) { return ((m.et->expert_size + align - 1) & ~(align - 1)) + align; }; // room for head/tail padding
+    size_t max_stride = 0;
+    for (const auto & m : misses) {
+        max_stride = std::max(max_stride, stride_of(m));
+    }
+
+    if (!ggml_backend_sched_expert_cache_init_staging(cache, split_backend, max_stride)) {
+        return false;
+    }
     if (max_stride > cache->staging_bytes) {
         GGML_LOG_ERROR("%s: expert cache: staging buffer too small for one expert\n", __func__);
         return false;
     }
-    if (cache->pool == nullptr) {
-        cache->pool = new ggml_expert_io_pool(cache->io_threads);
-    }
-
     size_t i0 = 0;
     while (i0 < misses.size()) {
         // take as many misses as fit into the staging buffer
@@ -2519,6 +2628,13 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
                         const size_t padding = std::min<size_t>(expert_size, 512);
                         const size_t padding_end = last_id < n_expert - 1 ? padding : 0;
 
+                        int src_fd = -1;
+                        uint64_t src_off = 0;
+                        if (ggml_backend_sched_expert_cache_source(sched->expert_cache, input, &src_fd, &src_off) &&
+                            ggml_backend_sched_expert_cache_stream_range(sched->expert_cache, split_backend, input_cpy, expert_offset,
+                                src_fd, src_off + expert_offset, expert_size_copy + padding_end)) {
+                            return;
+                        }
                         ggml_backend_tensor_set_async(split_backend,
                             input_cpy,
                             (const uint8_t *)input->data + expert_offset, expert_offset,

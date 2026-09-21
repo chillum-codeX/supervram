@@ -175,6 +175,26 @@ Misses are the rarely used experts (about 0.2 per layer per token), so they are 
 
 **Conclusion:** history-based prefetch would lose speed. The only credible predictor is the model's own router applied early to the hidden state (a "pre-gated" design), which needs extra graph nodes and host read-backs in `qwen3moe`; even a perfect version would gain about 4-11 % at 1-4 layers of lookahead on this drive (about 8-23 % on a 7 GB/s drive). It was therefore not built. Prefetch becomes more attractive only with a much faster SSD.
 
+## Long context: 32,000-token prompt + 4,096-token output, VRAM + RAM + SSD (`results/rtx3090/longctx/`)
+
+Goal (clarified): run the same weights at the maximum context using any combination of VRAM, RAM and SSD, for people without a high-end GPU. So RAM is a legitimate tier; the earlier "RAM must not hold the model" rule now applies only to the low-RAM row below. Q8_0 (30 GiB) on the 24 GB RTX 3090, prompt = first 32,000 tokens of the docs prose plus a one-line instruction, context 36,352 tokens (KV cache 3.4 GiB of VRAM), greedy decoding with end-of-text ignored (`--ignore-eos`). `scripts/run_longctx_compare.sh`, `scripts/summarize_longctx.py`.
+
+**Patch 0005** makes this possible: (1) prompt batches larger than 4 tokens step aside from the slot cache and use llama.cpp's regular whole-expert offload (a big batch touches nearly every expert, so a small cache cannot serve it, and the cache errors when a batch needs more experts than slots); (2) with `--moe-expert-direct-io` that whole-expert copy is streamed from the model file with large parallel O_DIRECT reads into double-buffered pinned staging, so it runs at SSD speed instead of at page-fault speed.
+
+| Setup (same Q8_0 weights, 32,000 in) | Prefill | Decode, first 2,048 output tokens | Prompt + 2,048 tokens | RAM used |
+|---|---|---|---|---|
+| Stock llama.cpp, experts of 25 layers on the CPU (23 layers' experts in VRAM), batch 4096 | **22.6 s** (1,418 t/s) | 33.7 t/s | **83 s** | model in RAM (30 GiB) |
+| Tiered: 14 GiB VRAM expert cache + RAM, batch 4096 | 34.7 s (922 t/s) | **40.5 t/s** | 85 s | model in RAM (30 GiB) |
+| Tiered: 12 GiB VRAM cache + RAM | 34.7 s | 31.3 t/s | 100 s | model in RAM |
+| **Tiered: 14 GiB VRAM cache + SSD, RAM capped at 4 GiB** (direct I/O) | 123 s (261 t/s) | 15.2 t/s | 257 s | **2.2 GiB peak**, 1.45 GiB of the file in the page cache |
+
+- Prefill scales with batch size for both systems (stock: 56.5 s at 1024, 34.2 s at 2048, 22.5 s at 4096; tiered: 97.9 / 56.6 / 34.6 s). Whole-expert copies over PCIe (about 9.6 GB/s) dominate the tiered system's prefill because its VRAM holds cache slots, not resident layers.
+- **Caveat on decode speed: repetition artifact.** Forcing greedy decoding to continue past the natural end of text makes the output degenerate into loops from about token 2,048 (80 % then 99.8 % repeated 8-grams; 2 distinct tokens in a 60-token window at token 3,500). Looping text is trivially cacheable, so tiered decode over all 4,096 tokens reads 42.5 / 51.0 t/s (12 / 14 GiB) and reaches 63-76 t/s in the last thousand tokens. Those figures are inflated and are not claimed; the table uses the first 2,048 tokens (6 % repeated 8-grams or less). Stock llama.cpp is unaffected (33.6 t/s over all 4,096).
+- **Correction to an earlier statement:** I first said the tiered system decodes 25-35 % faster than stock; that used the inflated segments. On natural text the best tiered setting is about 20 % faster on decode and about even on the whole request. **When the model fits in VRAM + RAM, plain llama.cpp with a static layer split is already good; the tiered system roughly matches it there.**
+- **Where the new work matters:** machines with too little RAM for the model (or models bigger than VRAM + RAM). With 4 GiB of RAM the 30 GiB model still handles a 32,000-token prompt in 2 minutes and decodes at 15 t/s. Before patch 0005 the same setting was projected at about 25 minutes of prefill (0.17 GB/s page-fault reads) and, before the batch bypass, about 45 minutes (6-token batches). Streaming vs mmap output is bit-identical (3,000-token prompt: tokens and logits hashes match).
+- The 4 GiB decode rate (15.2 t/s) is below the 31.8 t/s of the earlier short-context run because the cache is 14 GiB (61 slots) instead of 16 GiB (71 slots) to leave room for the KV cache and the prefill batch buffers, the cache starts empty after a prompt (prompt batches do not fill it), and attention over 32,000 keys costs extra. Hit rate 95.2 %.
+- Single runs, one prompt, Q8_0 only. Expected next lever for mid-size RAM (for example 16 GB): an explicit RAM tier between the VRAM cache and the SSD; not built yet.
+
 ## Remaining gaps
 
 - Prompt ubatches that route more distinct experts than `n_slots` return a hard error (observed as llama-bench warmup `res = -3` at `-ub 16`). Use `-ub 1` or a larger cache for decode; prompt processing is not a v1 win.

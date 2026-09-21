@@ -27,14 +27,14 @@ not valid. The mistakes, all found and fixed:
 - **A timing bug.** The benchmark tool stopped its clock before the GPU finished, so full-GPU runs showed thousands of tokens/s and
   every earlier decode number was inflated. Fixed, and the sweeps were rerun.
 - **A missing line in a patch**, so the saved patch did not reproduce the tested build. Fixed and verified: applying patches 0001, 0002,
-  0003, 0004 to the pinned llama.cpp rebuilds the tested tree exactly.
+  0003, 0004, 0005 to the pinned llama.cpp rebuilds the tested tree exactly.
 - **Two wrong statements I made and later corrected:** that the Q4 cache "plateaus at 63 t/s because of per-step overhead", and that
   overlapping reads with compute could gain only about 10%.
 - **A measurement race** that once reported 47 GiB of RAM use (it sampled the desktop app, not the test process). Fixed.
 
 ## 3. What was built
 
-A bounded GPU cache of expert weights inside llama.cpp's scheduler, in four patches:
+A bounded GPU cache of expert weights inside llama.cpp's scheduler, in five patches:
 - **0001 (existing):** demand-paged experts on the CPU.
 - **0002:** the GPU expert cache. Each layer gets a fixed number of GPU "slots". For every token the router says which experts are
   needed; hits are used in place, misses are copied into a slot (evicting the least recently used expert), and the routing ids are
@@ -45,6 +45,24 @@ A bounded GPU cache of expert weights inside llama.cpp's scheduler, in four patc
 - **0004:** real command-line options for all of it: `--moe-expert-direct-io`, `--moe-expert-io-threads`, `--moe-expert-staging-mib`,
   `--moe-expert-trace` (they work in `llama-server`, `llama-completion` and the other llama.cpp tools; the old `SVRAM_*`
   environment variables still work as a fallback).
+
+- **0005:** long prompts. Big prompt batches step aside from the cache and use llama.cpp's regular whole-expert copy; with
+  `--moe-expert-direct-io` that copy streams from the SSD with large parallel reads (SSD speed instead of page-fault speed).
+
+## 4b. The goal, clarified: any mix of VRAM, RAM and SSD (long context)
+
+After the first version of this document you clarified the target: run the same weights at the maximum context (32,000 tokens in,
+4,096 out) using whatever combination of VRAM, RAM and SSD gives the best result, so people without expensive GPUs can use it. RAM is
+therefore a legitimate tier; "RAM must not hold the model" only defines the low-RAM case. Measured on the 30 GiB Q8_0 model,
+32,000-token prompt, first 2,048 output tokens:
+
+| Machine budget | Prefill | Decode | Note |
+|---|---|---|---|
+| 24 GB GPU + enough RAM (plain llama.cpp static split) | 23 s | 33.7 t/s | already good; nothing to add |
+| 24 GB GPU + enough RAM (VRAM expert cache) | 35 s | 40.5 t/s | about 20% faster decode, slower prefill |
+| 24 GB GPU + **4 GB RAM** + SSD | 123 s | 15.2 t/s | works at all only with this project's streaming reads |
+
+So the honest value of the project is the last row and models bigger than VRAM + RAM, not beating llama.cpp when RAM is plentiful.
 
 ## 4. Results in order
 
@@ -107,6 +125,6 @@ Q8_0 (30 GiB, does not fit in VRAM), 16 GiB cache, cold start unless noted:
 
 ## 9. Where everything lives
 
-Code: `patches/0001..0004`, `src/svram_verify.cpp`. Tools: `scripts/cold_run.py`, `ssd_expert_read_bench.py`, `analyze_policies.py`,
+Code: `patches/0001..0005`, `src/svram_verify.cpp`. Tools: `scripts/cold_run.py`, `ssd_expert_read_bench.py`, `analyze_policies.py`,
 `compare_quality.py`, `aggregate_ablations.py`. Results: `results/rtx3090/` (cold, ablations-long, traces, quality). Status tables:
 `docs/IMPLEMENTATION_STATUS.md`; evidence log: `writer_handoff/EVIDENCE_LEDGER.md`; running log: `../progress.md`.

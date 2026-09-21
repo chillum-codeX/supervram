@@ -7,7 +7,7 @@ Everything lives under `/home/truppy/Downloads/workspace/project/supervram/`. Mo
 
 | What | Where |
 |---|---|
-| Patches to llama.cpp (apply 0001 to 0004 in order to `ce8caa6`) | `patches/` |
+| Patches to llama.cpp (apply 0001 to 0005 in order to `ce8caa6`) | `patches/` |
 | The same 23 modified/added llama.cpp files, readable and tracked | `llama_cpp_modified/` (refresh: `scripts/sync_llama_cpp_modified.sh`) |
 | The working llama.cpp checkout and CUDA build | `third_party/llama.cpp/`, `third_party/llama.cpp/build-3090/` |
 | Test/measurement tool (`svram-verify`) | `src/svram_verify.cpp`, built to `build/svram-verify` |
@@ -42,6 +42,7 @@ The environment variables `SVRAM_DIRECT_IO=1`, `SVRAM_IO_THREADS`, `SVRAM_STAGIN
 | SSD ceiling for expert-sized reads | `python3 scripts/ssd_expert_read_bench.py ~/models/Qwen3-30B-A3B-Q8_0.gguf` (accepts block devices and several targets) |
 | Cache size x policy sweep, 3 reps | `scripts/run_ablation_sweep.sh`, then `python3 scripts/aggregate_ablations.py results/rtx3090/ablations-long` |
 | Routing traces + Q4-vs-Q8 teacher-forced quality | `scripts/run_traces_and_quality.sh` (prompts in `scripts/prompts.txt`), then `analyze_policies.py` and `compare_quality.py` |
+| 32,000-token prompt + 4,096-token output, three ways to use VRAM/RAM/SSD | `scripts/run_longctx_compare.sh NAME --storage resident --n-cpu-moe 25` (stock), `... --storage cache --cache-mib 14336` (tiered, RAM), and `cold_run.py --ram-cap 4G ... -- --storage cache --cache-mib 14336 --direct-io --n-ubatch 4096 --prompt-file ... --prompt-tokens 32000` (RAM-poor); summarize with `scripts/summarize_longctx.py` |
 | Prefetch upper bound and predictor accuracy (simulation on the traces) | `python3 scripts/simulate_prefetch.py results/rtx3090/traces/q8-p*.trace [--r 1.65]` and `python3 scripts/prefetch_predictor_eval.py results/rtx3090/traces/q8-p*.trace` |
 | Ground-truth perplexity, Q4_K_M vs Q8_0 | `scripts/run_ground_truth_ppl.sh` |
 | 43 GiB synthetic test model | `scripts/make_synthetic_model.sh`, then `cold_run.py` with `--model ~/models/Qwen3-30B-A3B-synthetic-F16x24-Q8x24.gguf` |

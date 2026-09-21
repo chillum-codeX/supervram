@@ -1,0 +1,2 @@
+# verbose CUDA logs (15 MB each); kept locally
+*.err
