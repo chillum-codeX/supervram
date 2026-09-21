@@ -6,3 +6,4 @@ ram4g-warm-bias0.02-ub4096-c14336	prefill_s=80.2	decode_tps=42.6	n_out=2048	by_p
 ram4g-warm-bias0.02-ub8192-c11264	prefill_s=52.1	decode_tps=29.5	n_out=2048	by_pos(0-512,512-1024,1024-2048,2048-4096)=30.4,27.5,30.2,nan	total_s=122
 ram4g-warm-bias0-ub4096-c14336	prefill_s=79.9	decode_tps=14.9	n_out=2048	by_pos(0-512,512-1024,1024-2048,2048-4096)=17.3,13.4,14.7,nan	total_s=217
 ram4g-warm-bias0.01-ub4096-c14336	prefill_s=80.2	decode_tps=31.5	n_out=2048	by_pos(0-512,512-1024,1024-2048,2048-4096)=33.7,29.2,31.6,nan	total_s=145
+ram4g-warm-bias0.02-ub4096-c14336-out4096	prefill_s=80.1	decode_tps=46.9	n_out=4096	by_pos(0-512,512-1024,1024-2048,2048-4096)=42.9,41.8,43.8,51.5	total_s=167

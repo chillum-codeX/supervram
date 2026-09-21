@@ -57,11 +57,12 @@ data in the page cache. Here the decode covers **2,048 forced tokens** (not 4,09
 | Warm start + prefill reuse, exact | 79.9 s | 14.9 t/s | 217 s | 299 GiB |
 | Warm start + prefill reuse, bias 0.01 | 80.2 s | 31.5 t/s | 145 s | 175 GiB |
 | **Warm start + prefill reuse, bias 0.02** (cache 14 GiB, ub 4096) | **80.2 s** | **42.6 t/s** | **128 s** | 148 GiB |
+| Same as the bias-0.02 row but 4,096 forced out | 80.1 s | 46.9 t/s | **167 s (4,096 out)** | - |
 | Same, bias 0.02, cache 11 GiB, ub 8192 | **52.1 s** | 29.5 t/s | **122 s** | 141 GiB |
 
-Estimate (not measured): with 4,096 output tokens the bias-0.02 / 14 GiB row would take about 80 s + 4,096 / 42.6 = about 176 s.
-So on a machine with only 4 GB of free RAM, 24 GB of VRAM and an SSD, the full 32k-in / 4,096-out job would take about 176 s (estimate), about 1.2x the
-142 s of plain llama.cpp on a machine with plenty of RAM, and it works at all only because of this project's streaming reads.
+Measured with the full 4,096 forced output tokens (bias 0.02, cache 14 GiB, ub 4096): prefill 80.1 s + decode 46.9 t/s (42.9 -> 51.5 t/s by
+position as the cache warms) = **167 s total**, about 1.18x the 142 s of plain llama.cpp on a machine with plenty of RAM, on a machine that has
+only 4 GB of free RAM plus an SSD. Plain llama.cpp cannot run that workload at usable speed there; this works because of the streaming reads.
 Prefill is the SSD-bound part: it streams the 30 GiB model through the GPU once per prompt batch, and a bigger batch (ub 8192) trades cache
 size for fewer passes.
 
@@ -72,8 +73,7 @@ size for fewer passes.
   task-level (accuracy) evaluation was run. Exact mode is the default result.
 - Single 32k prompt (concatenated project documentation); other prompts have different routing statistics. The warm profile
   (`warm-profile-q8.txt`) was built from routing traces of other prompts, not from the benchmark prompt itself.
-- RAM-poor results cover 2,048 output tokens. Decode speed rose over the run (42.3 -> 43.3 t/s in the last 1,024), so 4,096 is
-  unlikely to be slower per token, but it was not run.
+- RAM-poor: the table rows are 2,048 output tokens; one bias-0.02 run was repeated at 4,096 (167 s). The exact-mode and 11 GiB rows were not run at 4,096.
 - Exactness (tokens and logits hashes identical to full-GPU execution) was verified on Q4_K_M with short prompts and 1,500-token prompts, not on Q8_0
   at 32k (no Q8 full-GPU reference fits in 24 GB). The Q8 runs use the same code paths.
 - The synthetic 43 GiB model and the "SSD is the wall" analysis from the previous day are unchanged; a bigger model than VRAM+RAM
