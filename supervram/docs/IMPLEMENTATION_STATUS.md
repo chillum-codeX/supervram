@@ -36,7 +36,7 @@ Baselines (same tool, same settings): Q4_K_M full GPU 195-200 t/s, mmap 30 t/s; 
 | 20 | 63.5 / 63.0 | 95.4 / 95.4 % | failed (CUDA OOM) | - |
 
 - **Q8_0 (does not fit in VRAM):** with a 16 GiB cache the cache path decodes at about 40 t/s against 22.7-24.4 t/s for `--cpu-moe`, roughly 1.7x, at a 94 % hit rate. Below 12 GiB it is slower than `--cpu-moe`. `llama-bench` with a 12 GiB cache (24.6 t/s) agrees with the 12 GiB row here (26.4 t/s).
-- **Q4_K_M (fits in VRAM):** the cache plateaus at about 63 t/s, a third of full-GPU speed, with 95 % hits and zero evictions from 12 GiB up. The ceiling is therefore per-step overhead (per-layer routing-id readback and synchronization), not misses. This is an inference from the plateau, not a profiled result.
+- **Q4_K_M (fits in VRAM):** in this 256-token sweep the cache plateaus at about 63 t/s with 95 % hits and zero evictions from 12 GiB up. **Superseded:** that plateau included cache fill and predates the one-sync-per-layer change; see the Q4_K_M section below (about 106-127 t/s warm).
 - **Policy:** LRU beats LFU when the cache is small (8 GiB Q4: 42.4 vs 36.9 t/s, ranges do not overlap); they are equal once the working set fits.
 - Q8_0 at 20 GiB fails with a genuine `cudaMalloc` OOM (`results/rtx3090/ablations-long/q8/OOM-20480MiB-excerpt.txt`); the failures are in the manifests.
 - **Correctness (256 tokens, `-ub 1`):** the Q4 cache output equals full-GPU resident execution bit for bit (256/256 logits hashes and tokens). CPU-expert paths (Q4 mmap, Q8 `--cpu-moe`) differ from CUDA from step 0 (different kernels), and tokens diverge at step 5 (Q4) / 16 (Q8). Q8 has no GPU-resident reference because it does not fit.
@@ -93,6 +93,30 @@ Same 1,536-token cold-start run as above (Q8_0, 16 GiB cache, direct I/O, 4 GiB 
 - 72 % of decode time is now SSD wait (36.1 of 50.4 s); the remaining ~9 ms/token is GPU compute and launch overhead. The read rate is within about 12 % of the drive's measured 2.4 GB/s ceiling.
 - Estimated parity (native ~100 t/s is an unmeasured estimate): 31.8 t/s is about 0.32x.
 - Overlapping the remaining reads with compute would need a prediction of the missed experts one layer ahead. Because the SSD wait (about 23 ms/token) exceeds the compute (about 9 ms/token), the best case is about 41 t/s, and only with a perfect predictor.
+
+## Smaller experts: Q4_K_M vs Q8_0 through the SSD path (`results/rtx3090/quality/`, `results/rtx3090/cold/q4-*`)
+
+Quality (teacher-forced, `scripts/compare_quality.py`): Q8_0 generated 384 tokens for each of 8 varied prompts; Q4_K_M was fed exactly those tokens (`svram-verify --force-tokens`) and we recorded its own argmax and the probability it gives Q8's tokens. The tool is checked: Q8 scoring its own tokens gives 100 % agreement and identical log-probabilities.
+
+| 3,072 tokens, 8 prompts | Q4_K_M vs Q8_0 |
+|---|---|
+| Top-1 agreement with Q8's next token | **96.0 %** (per prompt 93.0-97.7 %) |
+| Mean log-prob of Q8's tokens: Q8 / Q4 | -0.183 / -0.204 nats |
+| Perplexity ratio on Q8's text (Q4 / Q8) | **1.021** (+2.1 %) |
+
+Caveats: the reference is Q8_0, not ground truth, and the text is Q8-generated (which favors Q8). Stock Q4_K_M also quantizes the dense weights, so this is not an experts-only change. No benchmark accuracy or ground-truth perplexity has been measured.
+
+Speed, same cold-start protocol (evicted, direct I/O, 4 GiB RAM cap, 1,536 tokens, same prompt), steady state from token 256:
+
+| Experts | GPU cache | Fraction of experts cached | Hit rate | SSD read | Decode t/s |
+|---|---|---|---|---|---|
+| Q8_0 | 16 GiB | ~55 % | 97.4 % | 76.7 GB | 31.8 |
+| **Q4_K_M** | 9 GiB | ~55 % | 97.0 % | 52.2 GB | **41.4** |
+| Q4_K_M | 16 GiB (everything fits) | ~92 % | 99.2 % | 14.1 GB (read once) | **126.8** |
+
+- **Smaller experts read 32 % fewer bytes at the same cached fraction and decode about 30 % faster (41.4 vs 31.8 t/s).** The bandwidth-only argument (fewer bytes per miss) holds; the hit rate is about the same.
+- **Parity does not improve at equal cached fraction.** Q4_K_M running fully in VRAM is 195-200 t/s, so 41.4 t/s is about 0.21x of the same model's native speed; Q8_0 was about 0.32x of an unmeasured native estimate. Quantizing raises absolute speed and lets more of the model fit; it does not by itself close the ratio while ~45 % of the experts come from a 2.4 GB/s SSD.
+- **Correction:** earlier text said the Q4 cache "plateaus at about 63 t/s ... per-step overhead". That figure was a 256-token average including cache fill and predates the one-sync-per-layer change. Warm, with everything resident, the current build decodes about 106 t/s (mmap path, tokens 512+) to 127 t/s (direct path), i.e. about 0.64x of full-GPU residency (195-200 t/s); the remaining cache-path cost is about 2.7 ms/token.
 
 ## Remaining gaps
 
