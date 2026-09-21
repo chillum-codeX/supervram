@@ -415,6 +415,7 @@ extern "C" {
         int32_t      moe_expert_io_threads;   // parallel direct reads (0 = default 8)
         int32_t      moe_expert_staging_mib;  // pinned staging buffer size in MiB (0 = default 128)
         const char * moe_expert_trace;        // if set, record the experts each layer selects per token to this file
+        float        moe_expert_cache_bias;   // cache-aware routing: added to the router score of experts resident in VRAM (0 = off; changes outputs)
         int32_t      moe_expert_zerocopy;     // 1 = experts stay in pinned host RAM (see --override-tensor ...=CUDA_Host) and GPU kernels read them in place
 
         // Keep the booleans together and at the end of the struct to avoid misalignment during copy-by-value.
@@ -1057,6 +1058,9 @@ extern "C" {
 
     // MoE expert cache statistics (see llama_context_params::moe_expert_cache_bytes)
     // returns false when the cache is not enabled for this context
+    // zero-copy expert tier: fill the VRAM slots from a usage profile file before decoding; returns ms or -1 if not applicable
+    LLAMA_API double llama_moe_expert_cache_warm(struct llama_context * ctx, const char * path);
+
     LLAMA_API bool llama_get_moe_expert_cache_stats(struct llama_context * ctx, struct ggml_backend_sched_expert_cache_stats * stats);
     LLAMA_API void llama_reset_moe_expert_cache_stats(struct llama_context * ctx);
 

@@ -405,6 +405,10 @@ extern "C" {
     // reserve/alloc of a graph that uses host expert weights. Requires a scheduler without pipeline copies.
     GGML_API void ggml_backend_sched_set_expert_cache(ggml_backend_sched_t sched, const struct ggml_backend_sched_expert_cache_params * params);
     GGML_API bool ggml_backend_sched_expert_cache_enabled(ggml_backend_sched_t sched);
+    // zero-copy tier: fill the VRAM slots from a usage profile ("<layer> <expert> <weight>" per line); returns ms or -1
+    GGML_API double ggml_backend_sched_expert_cache_warm(ggml_backend_sched_t sched, const char * path);
+    // cache-aware routing: fill out[layer * n_expert + e] = beta for experts resident in the VRAM slots (zero-copy tier)
+    GGML_API void ggml_backend_sched_expert_cache_fill_bias(ggml_backend_sched_t sched, float beta, float * out, int n_layer, int n_expert);
     GGML_API void ggml_backend_sched_get_expert_cache_stats(ggml_backend_sched_t sched, struct ggml_backend_sched_expert_cache_stats * stats);
     GGML_API void ggml_backend_sched_reset_expert_cache_stats(ggml_backend_sched_t sched);
 

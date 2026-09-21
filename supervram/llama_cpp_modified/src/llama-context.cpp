@@ -279,6 +279,7 @@ llama_context::llama_context(
     cparams.moe_expert_staging_mib  = params.moe_expert_staging_mib;
     cparams.moe_expert_trace        = params.moe_expert_trace;
     cparams.moe_expert_zerocopy     = params.moe_expert_zerocopy;
+    cparams.moe_expert_cache_bias   = params.moe_expert_cache_bias;
     if (model.moe_expert_storage() == LLAMA_MOE_EXPERT_STORAGE_CACHE && cparams.moe_expert_cache_bytes == 0) {
         cparams.moe_expert_cache_bytes = 8ull * 1024 * 1024 * 1024;
         LLAMA_LOG_WARN("%s: moe_expert_storage = cache but no cache size given, using %zu MiB\n", __func__, cparams.moe_expert_cache_bytes / 1024 / 1024);
@@ -594,6 +595,10 @@ void llama_context::resolve_fused_ops(const llama_memory_context_i * mctx, uint3
         resolve(llm_fused_op_dsv4_hc_post_probe, cparams.fused_dsv4_hc_post);
         cparams.auto_fhc = false;
     }
+}
+
+double llama_context::moe_expert_cache_warm(const char * path) {
+    return sched ? ggml_backend_sched_expert_cache_warm(sched.get(), path) : -1.0;
 }
 
 bool llama_context::get_moe_expert_cache_stats(struct ggml_backend_sched_expert_cache_stats * stats) const {
@@ -3730,6 +3735,7 @@ llama_context_params llama_context_default_params() {
         /*.moe_expert_io_threads       =*/ 0,
         /*.moe_expert_staging_mib      =*/ 0,
         /*.moe_expert_trace            =*/ nullptr,
+        /*.moe_expert_cache_bias       =*/ 0.0f,
         /*.moe_expert_zerocopy         =*/ 0,
         /*.embeddings                  =*/ false,
         /*.offload_kqv                 =*/ true,
@@ -3936,6 +3942,10 @@ void llama_set_warmup(llama_context * ctx, bool warmup) {
 
 void llama_synchronize(llama_context * ctx) {
     ctx->synchronize();
+}
+
+double llama_moe_expert_cache_warm(llama_context * ctx, const char * path) {
+    return ctx->moe_expert_cache_warm(path);
 }
 
 bool llama_get_moe_expert_cache_stats(llama_context * ctx, struct ggml_backend_sched_expert_cache_stats * stats) {

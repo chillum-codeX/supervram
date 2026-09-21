@@ -1,0 +1,4 @@
+R0-stock-ncpumoe25	prefill_s=22.3	decode_tps=34.4	n_out=4096	by_pos(0-512,512-1024,1024-2048,2048-4096)=33.4,34.7,34.5,34.6	total_s=141
+R0-prev-cache14g-mmap	prefill_s=34.7	decode_tps=33.3	n_out=4096	by_pos(0-512,512-1024,1024-2048,2048-4096)=35.8,35.8,35.3,31.2	total_s=158
+R0-zerocopy-s2-14g	prefill_s=33.4	decode_tps=29.7	n_out=4096	by_pos(0-512,512-1024,1024-2048,2048-4096)=19.7,34.0,32.9,31.2	total_s=171
+R0-hot-proxy-zerocopy-14g	prefill_s=33.3	decode_tps=57.8	n_out=4096	by_pos(0-512,512-1024,1024-2048,2048-4096)=25.5,68.7,70.7,71.2	total_s=104

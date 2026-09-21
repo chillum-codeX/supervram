@@ -921,6 +921,7 @@ struct ggml_backend_sched_expert_tensor {
     // zero-copy tier: pointer to the expert weights (int64 per expert) read by the CUDA kernel
     struct ggml_tensor * ptr_table = nullptr;   // per-graph tensor object, rebuilt for every graph
     struct ggml_tensor * cnt_table = nullptr;   // per-graph tensor object for the kernel's per-expert use counters
+    struct ggml_tensor * slots_persist = nullptr; // graph-independent descriptor of the slot buffer (promotion and warm-start copies)
     int                  ctl_index = -1;        // position of this weight in the shared control block
     int                  layer     = -1;
     int                  kind      = -1;        // 0 = gate, 1 = up, 2 = down
@@ -950,6 +951,14 @@ struct ggml_backend_sched_expert_cache {
     std::vector<int64_t>  shadow;               // host copy of the pointer tables
     std::vector<uint32_t> counts, prev_counts;
     ggml_backend_t copy_backend = nullptr;      // second stream: background promotion copies
+    struct ggml_tensor * xfer_src = nullptr;    // descriptors for device-to-device slot copies (data pointers are set per copy)
+    struct ggml_tensor * xfer_dst = nullptr;
+    double   prof_ms[8]     = {0};              // SVRAM_PROMOTE_PROFILE: time per promotion-step section
+    int64_t  prof_steps     = 0;
+    bool     prof           = false;
+    bool     check          = false;            // SVRAM_PROMOTE_CHECK: verify promoted data and residency bookkeeping
+    bool     debug_sync     = false;            // SVRAM_PROMOTE_SYNC: finish all copies before the next graph
+    int64_t  check_errors   = 0;
     struct ggml_pending_promotion { int layer; int64_t expert; int slot; };
     std::vector<ggml_pending_promotion> pending;
     std::map<int, ggml_backend_sched_expert_tensor *[3]> layers;
@@ -1214,10 +1223,12 @@ static void ggml_backend_sched_expert_cache_ctl_init(ggml_backend_sched_t sched)
     }
     ggml_backend_buffer_set_usage(cache->ctl_buffer, GGML_BACKEND_BUFFER_USAGE_COMPUTE);
     ggml_backend_buffer_clear(cache->ctl_buffer, 0);
-    struct ggml_init_params ip = { ggml_tensor_overhead() * 4, NULL, true };
+    struct ggml_init_params ip = { ggml_tensor_overhead() * (6 + n_t), NULL, true };
     cache->ctl_ctx = ggml_init(ip);
     char * base = (char *) ggml_backend_buffer_get_base(cache->ctl_buffer);
     cache->ctl_ptr_view = ggml_new_tensor_1d(cache->ctl_ctx, GGML_TYPE_I8, (int64_t) ptr_bytes);
+    cache->xfer_src = ggml_new_tensor_1d(cache->ctl_ctx, GGML_TYPE_I8, 1);
+    cache->xfer_dst = ggml_new_tensor_1d(cache->ctl_ctx, GGML_TYPE_I8, 1);
     cache->ctl_cnt_view = ggml_new_tensor_1d(cache->ctl_ctx, GGML_TYPE_I8, (int64_t) cnt_bytes);
     if (ggml_backend_tensor_alloc(cache->ctl_buffer, cache->ctl_ptr_view, base) != GGML_STATUS_SUCCESS ||
         ggml_backend_tensor_alloc(cache->ctl_buffer, cache->ctl_cnt_view, base + ptr_bytes) != GGML_STATUS_SUCCESS) {
@@ -1238,6 +1249,10 @@ static void ggml_backend_sched_expert_cache_ctl_init(ggml_backend_sched_t sched)
         for (int64_t e = 0; e < et.n_expert; e++) {
             cache->shadow[(size_t) et.ctl_index * (size_t) stride + (size_t) e] = (int64_t) (uintptr_t) ((const uint8_t *) et.weight->data + (size_t) e * et.expert_size);
         }
+        et.slots_persist = ggml_new_tensor_3d(cache->ctl_ctx, et.weight->type, et.weight->ne[0], et.weight->ne[1], et.n_slots);
+        if (ggml_backend_tensor_alloc(et.buffer, et.slots_persist, ggml_backend_buffer_get_base(et.buffer)) != GGML_STATUS_SUCCESS) {
+            GGML_ABORT("%s: failed to bind the slot descriptor for %s\n", __func__, et.weight->name);
+        }
         if (et.layer >= 0 && et.kind >= 0) {
             auto & L = cache->layers[et.layer];
             L[et.kind] = &et;
@@ -1247,6 +1262,132 @@ static void ggml_backend_sched_expert_cache_ctl_init(ggml_backend_sched_t sched)
     cache->ctl_stride = stride;
     cache->ctl_ptr_bytes = ptr_bytes;
     cache->promote_tick = 0;
+    cache->prof = getenv("SVRAM_PROMOTE_PROFILE") != nullptr;
+    cache->check = getenv("SVRAM_PROMOTE_CHECK") != nullptr;
+    cache->debug_sync = getenv("SVRAM_PROMOTE_SYNC") != nullptr;
+}
+
+// zero-copy tier warm start: fill the VRAM slots from a usage profile ("<layer> <expert> <weight>" per line) so the first
+// tokens already hit. Returns the time in ms, or -1 on failure.
+double ggml_backend_sched_expert_cache_warm(ggml_backend_sched_t sched, const char * path) {
+    GGML_ASSERT(sched);
+    struct ggml_backend_sched_expert_cache * cache = sched->expert_cache;
+    if (cache == nullptr || !cache->zero_copy || cache->ctl_buffer == nullptr || cache->layers.empty()) {
+        return -1.0;
+    }
+    FILE * f = fopen(path, "r");
+    if (f == nullptr) {
+        GGML_LOG_WARN("%s: expert cache: cannot open warm profile %s\n", __func__, path);
+        return -1.0;
+    }
+    const int64_t t0 = ggml_time_us();
+    const size_t n = (size_t) cache->ctl_stride;
+    std::map<int, std::vector<float>> prof; // layer -> weight per expert
+    int layer, expert; float w;
+    while (fscanf(f, "%d %d %f", &layer, &expert, &w) == 3) {
+        auto & v = prof[layer];
+        if (v.empty()) {
+            v.assign(n, 0.0f);
+        }
+        if (expert >= 0 && (size_t) expert < n) {
+            v[expert] = w;
+        }
+    }
+    fclose(f);
+    ggml_backend_sched_expert_tensor * any = cache->layers.begin()->second[2] ? cache->layers.begin()->second[2] : cache->layers.begin()->second[1];
+    if (cache->copy_backend == nullptr) {
+        ggml_backend_dev_t dev = ggml_backend_get_device(sched->backends[any ? any->backend_id : 0]);
+        cache->copy_backend = dev ? ggml_backend_dev_init(dev, nullptr) : nullptr;
+        if (cache->copy_backend == nullptr) {
+            return -1.0;
+        }
+    }
+    // start from a clean state: finish copies that are still in flight, forget pending promotions, point every expert at its host copy
+    ggml_backend_synchronize(cache->copy_backend);
+    cache->pending.clear();
+    for (auto & kv : cache->layers) {
+        for (int k = 0; k < 3; k++) {
+            ggml_backend_sched_expert_tensor * et = kv.second[k];
+            if (et == nullptr) {
+                continue;
+            }
+            for (int64_t e = 0; e < et->n_expert; e++) {
+                cache->shadow[(size_t) et->ctl_index * n + (size_t) e] = (int64_t) (uintptr_t) ((const uint8_t *) et->weight->data + (size_t) e * et->expert_size);
+            }
+            et->slot_of_expert.assign(et->n_expert, -1);
+            et->expert_of_slot.assign(et->n_slots, -1);
+            et->last_use.assign(et->n_slots, 0);
+            et->use_count.assign(et->n_slots, 0);
+        }
+    }
+    int64_t n_loaded = 0;
+    for (auto & kv : cache->layers) {
+        auto & L = kv.second;
+        ggml_backend_sched_expert_tensor * m = L[2] ? L[2] : (L[1] ? L[1] : L[0]);
+        auto pv = prof.find(kv.first);
+        if (m == nullptr || pv == prof.end()) {
+            continue;
+        }
+        std::vector<int> order(m->n_expert);
+        for (int e = 0; e < (int) m->n_expert; e++) {
+            order[e] = e;
+        }
+        std::sort(order.begin(), order.end(), [&](int a, int b) { return pv->second[a] > pv->second[b]; });
+        const size_t mbase = (size_t) m->ctl_index * n;
+        for (int64_t e = 0; e < m->n_expert; e++) {
+            cache->score[mbase + e] = pv->second[e] / std::max(1e-6f, 1.0f - cache->score_decay); // steady-state decayed count
+        }
+        for (int i = 0; i < m->n_slots && i < (int) order.size(); i++) {
+            const int e = order[i];
+            if (pv->second[e] <= 0.0f) {
+                break;
+            }
+            for (int k = 0; k < 3; k++) {
+                ggml_backend_sched_expert_tensor * et = L[k];
+                if (et == nullptr) {
+                    continue;
+                }
+                ggml_backend_tensor_set_async(cache->copy_backend, et->slots_persist,
+                    (const uint8_t *) et->weight->data + (size_t) e * et->expert_size, (size_t) i * et->expert_size, et->expert_size);
+                cache->shadow[(size_t) et->ctl_index * n + e] =
+                    (int64_t) (uintptr_t) ((char *) ggml_backend_buffer_get_base(et->buffer) + (size_t) i * et->expert_size);
+            }
+            m->slot_of_expert[e] = i;
+            m->expert_of_slot[i] = e;
+            m->last_use[i] = 0;
+            m->use_count[i] = 1;
+            n_loaded++;
+        }
+    }
+    ggml_backend_synchronize(cache->copy_backend);
+    ggml_backend_tensor_set(cache->ctl_ptr_view, cache->shadow.data(), 0, cache->ctl_ptr_bytes);
+    const double ms = (ggml_time_us() - t0) / 1000.0;
+    GGML_LOG_INFO("%s: expert cache warm start: %lld experts (x3 weights) from %s in %.0f ms\n", __func__, (long long) n_loaded, path, ms);
+    return ms;
+}
+
+// cache-aware routing: bias[layer * n_expert + e] = beta for every expert that is resident in the VRAM slots (zero-copy tier)
+void ggml_backend_sched_expert_cache_fill_bias(ggml_backend_sched_t sched, float beta, float * out, int n_layer, int n_expert) {
+    GGML_ASSERT(sched);
+    struct ggml_backend_sched_expert_cache * cache = sched->expert_cache;
+    if (cache == nullptr || !cache->zero_copy) {
+        return;
+    }
+    for (auto & kv : cache->layers) {
+        if (kv.first < 0 || kv.first >= n_layer) {
+            continue;
+        }
+        auto & L = kv.second;
+        ggml_backend_sched_expert_tensor * m = L[2] ? L[2] : (L[1] ? L[1] : L[0]);
+        if (m == nullptr) {
+            continue;
+        }
+        for (int e = 0; e < n_expert && e < (int) m->slot_of_expert.size(); e++) {
+            if (m->slot_of_expert[e] >= 0) {
+                out[(size_t) kv.first * n_expert + e] = beta;
+            }
+        }
+    }
 }
 
 // (re)allocate the slot buffers for all registered tensors; called at the start of split_graph when the set of
@@ -2599,6 +2740,68 @@ static bool ggml_backend_sched_alloc_splits(ggml_backend_sched_t sched) {
     return true;
 }
 
+// zero-copy tier, prompt batches: while copying whole experts to the temporary device tensor, take the experts that are
+// resident in VRAM from their slot (device to device) and copy only the others from host RAM. Returns false if not applicable.
+static bool ggml_backend_sched_expert_cache_copy_resident(ggml_backend_sched_t sched, const struct ggml_tensor * input,
+        struct ggml_tensor * input_cpy, ggml_backend_t backend, int32_t first_id, int32_t last_id, size_t expert_size, size_t padding_end) {
+    struct ggml_backend_sched_expert_cache * cache = sched->expert_cache;
+    if (cache == nullptr || !cache->zero_copy || cache->ctl_buffer == nullptr || cache->xfer_src == nullptr) {
+        return false;
+    }
+    auto it = cache->tensors.find(const_cast<struct ggml_tensor *>(input));
+    if (it == cache->tensors.end() || it->second.buffer == nullptr || it->second.layer < 0) {
+        return false;
+    }
+    ggml_backend_sched_expert_tensor & et = it->second;
+    auto & L = cache->layers[et.layer];
+    ggml_backend_sched_expert_tensor * m = L[2] ? L[2] : (L[1] ? L[1] : L[0]);
+    if (m == nullptr || m->slot_of_expert.empty() || et.expert_size != expert_size) {
+        return false;
+    }
+    bool any = false;
+    for (int32_t e = first_id; e <= last_id; e++) {
+        if (m->slot_of_expert[e] >= 0) {
+            any = true;
+            break;
+        }
+    }
+    if (!any) {
+        return false;
+    }
+    auto shape = [&](struct ggml_tensor * t, size_t n) {
+        t->ne[0] = (int64_t) n;
+        t->nb[1] = t->nb[2] = t->nb[3] = n;
+    };
+    shape(cache->xfer_src, expert_size);
+    shape(cache->xfer_dst, expert_size);
+    cache->xfer_src->buffer = et.buffer;
+    cache->xfer_dst->buffer = input_cpy->buffer;
+    char * slot_base = (char *) ggml_backend_buffer_get_base(et.buffer);
+    int32_t e = first_id;
+    while (e <= last_id) {
+        const int32_t sl = m->slot_of_expert[e];
+        if (sl >= 0) {
+            cache->xfer_src->data = slot_base + (size_t) sl * expert_size;
+            cache->xfer_dst->data = (char *) input_cpy->data + (size_t) e * expert_size;
+            ggml_backend_tensor_copy_async(backend, backend, cache->xfer_src, cache->xfer_dst);
+            e++;
+        } else {
+            int32_t e2 = e;
+            while (e2 + 1 <= last_id && m->slot_of_expert[e2 + 1] < 0) {
+                e2++;
+            }
+            ggml_backend_tensor_set_async(backend, input_cpy, (const uint8_t *) input->data + (size_t) e * expert_size,
+                (size_t) e * expert_size, (size_t) (e2 - e + 1) * expert_size);
+            e = e2 + 1;
+        }
+    }
+    if (padding_end > 0) { // the bytes after the last expert must not hold NaNs (MMQ reads a little past the end)
+        ggml_backend_tensor_set_async(backend, input_cpy, (const uint8_t *) input->data + (size_t) (last_id + 1) * expert_size,
+            (size_t) (last_id + 1) * expert_size, padding_end);
+    }
+    return true;
+}
+
 // zero-copy tier, once per token boundary (the previous graph is complete, the next one is not launched yet):
 // 1. read the use counters the kernels incremented, 2. commit last boundary's copies (flip their table entries to the VRAM
 // slots), 3. copy the most used experts that were served from RAM into VRAM slots on a second stream, so the copies overlap
@@ -2628,6 +2831,7 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched) 
         }
     }
     const int64_t t_start = ggml_time_us();
+    int64_t tp[8]; tp[0] = t_start;
     const size_t n = (size_t) cache->ctl_stride;
     const uint64_t tick = ++cache->promote_tick;
     auto master_of = [](ggml_backend_sched_expert_tensor * const (&L)[3]) {
@@ -2637,12 +2841,13 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched) 
     // 1. usage since the last boundary
     ggml_backend_tensor_get_async(main, cache->ctl_cnt_view, cache->counts.data(), 0, cache->counts.size() * sizeof(uint32_t));
     ggml_backend_synchronize(main);
+    tp[1] = ggml_time_us();
     struct cand { int layer; int64_t expert; uint32_t used; };
     std::vector<cand> cands;
     uint64_t n_used = 0, n_hit = 0;
     for (auto & kv : cache->layers) {
         ggml_backend_sched_expert_tensor * m = master_of(kv.second);
-        if (m == nullptr || m->slots_view == nullptr) {
+        if (m == nullptr || m->slots_persist == nullptr) {
             continue;
         }
         const size_t base = (size_t) m->ctl_index * n;
@@ -2668,6 +2873,7 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched) 
     cache->stats.accesses += n_used;
     cache->stats.hits     += n_hit;
     cache->stats.misses   += n_used - n_hit;
+    tp[2] = ggml_time_us();
 
     // 2. commit the copies issued at the previous boundary
     bool table_dirty = false;
@@ -2684,9 +2890,31 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched) 
             }
             master_of(L)->slot_of_expert[pr.expert] = pr.slot;
             table_dirty = true;
+            if (cache->check) {
+                for (int k = 0; k < 3; k++) {
+                    ggml_backend_sched_expert_tensor * et = L[k];
+                    if (et == nullptr) {
+                        continue;
+                    }
+                    std::vector<uint8_t> a(4096), b(4096);
+                    ggml_backend_tensor_get(et->slots_persist, a.data(), (size_t) pr.slot * et->expert_size, 4096);
+                    memcpy(b.data(), (const uint8_t *) et->weight->data + (size_t) pr.expert * et->expert_size, 4096);
+                    if (memcmp(a.data(), b.data(), 4096) != 0 && cache->check_errors++ < 20) {
+                        int holds = -1;
+                        for (int64_t e2 = 0; e2 < et->n_expert && holds < 0; e2++) {
+                            if (memcmp(a.data(), (const uint8_t *) et->weight->data + (size_t) e2 * et->expert_size, 4096) == 0) {
+                                holds = (int) e2;
+                            }
+                        }
+                        GGML_LOG_ERROR("promote check: DATA MISMATCH layer %d expert %lld slot %d kind %d (tick %llu): the slot holds expert %d (-1 = none of the 128); master says slot holds %d\n",
+                            pr.layer, (long long) pr.expert, pr.slot, k, (unsigned long long) tick, holds, master_of(L)->expert_of_slot[pr.slot]);
+                    }
+                }
+            }
         }
         cache->pending.clear();
     }
+    tp[3] = ggml_time_us();
 
     // 3. promote the most used experts that were served from RAM
     std::sort(cands.begin(), cands.end(), [](const cand & a, const cand & b) {
@@ -2743,8 +2971,8 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched) 
         m->use_count[victim] = 1;
         for (int k = 0; k < 3; k++) {
             ggml_backend_sched_expert_tensor * et = L[k];
-            if (et != nullptr && et->slots_view != nullptr) {
-                ggml_backend_tensor_set_async(cache->copy_backend, et->slots_view,
+            if (et != nullptr && et->slots_persist != nullptr) {
+                ggml_backend_tensor_set_async(cache->copy_backend, et->slots_persist,
                     (const uint8_t *) et->weight->data + (size_t) c.expert * et->expert_size, (size_t) victim * et->expert_size, et->expert_size);
                 cache->stats.bytes_h2d += et->expert_size;
             }
@@ -2753,9 +2981,39 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched) 
         n_promoted++;
     }
 
+    if (cache->check) {
+        for (auto & kv : cache->layers) {
+            ggml_backend_sched_expert_tensor * m = master_of(kv.second);
+            if (m == nullptr) {
+                continue;
+            }
+            for (int64_t e = 0; e < m->n_expert; e++) {
+                const int32_t sl = m->slot_of_expert[e];
+                if (sl >= 0 && m->expert_of_slot[sl] != (int32_t) e && cache->check_errors++ < 20) {
+                    GGML_LOG_ERROR("promote check: BOOKKEEPING layer %d expert %lld says slot %d but the slot holds expert %d (tick %llu)\n", kv.first, (long long) e, sl, m->expert_of_slot[sl], (unsigned long long) tick);
+                }
+            }
+        }
+    }
+    tp[4] = ggml_time_us();
     // 4. push the pointer tables (stream-ordered before the next graph)
     if (table_dirty) {
         ggml_backend_tensor_set_async(main, cache->ctl_ptr_view, cache->shadow.data(), 0, cache->ctl_ptr_bytes);
+    }
+    if (cache->debug_sync) {
+        ggml_backend_synchronize(cache->copy_backend);
+        ggml_backend_synchronize(main);
+    }
+    tp[5] = ggml_time_us();
+    if (cache->prof) {
+        for (int i = 0; i < 5; i++) {
+            cache->prof_ms[i] += (tp[i + 1] - tp[i]) / 1000.0;
+        }
+        if (++cache->prof_steps % 512 == 0) {
+            GGML_LOG_INFO("promote profile (ms/step over %lld steps): counters %.3f | scoring %.3f | commit-sync %.3f | decide+issue %.3f | table push %.3f\n",
+                (long long) cache->prof_steps, cache->prof_ms[0] / cache->prof_steps, cache->prof_ms[1] / cache->prof_steps,
+                cache->prof_ms[2] / cache->prof_steps, cache->prof_ms[3] / cache->prof_steps, cache->prof_ms[4] / cache->prof_steps);
+        }
     }
     cache->stats.host_ms += (ggml_time_us() - t_start) / 1000.0;
 }
@@ -2926,6 +3184,9 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
                         const size_t padding = std::min<size_t>(expert_size, 512);
                         const size_t padding_end = last_id < n_expert - 1 ? padding : 0;
 
+                        if (ggml_backend_sched_expert_cache_copy_resident(sched, input, input_cpy, split_backend, first_id, last_id, expert_size, padding_end)) {
+                            return;
+                        }
                         int src_fd = -1;
                         uint64_t src_off = 0;
                         if (ggml_backend_sched_expert_cache_source(sched->expert_cache, input, &src_fd, &src_off) &&

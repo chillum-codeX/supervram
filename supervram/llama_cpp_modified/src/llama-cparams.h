@@ -61,6 +61,7 @@ struct llama_cparams {
     int32_t      moe_expert_staging_mib;
     const char * moe_expert_trace;
     int32_t      moe_expert_zerocopy;
+    float        moe_expert_cache_bias;
 
     std::vector<bool> embeddings_layer_inp; // [n_layer()] extract input embeddings for layer
 

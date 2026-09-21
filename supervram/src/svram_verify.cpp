@@ -15,6 +15,7 @@
 #include <chrono>
 #include <algorithm>
 #include <cmath>
+#include <random>
 #include <iterator>
 #include <cstdint>
 #include <cstdio>
@@ -67,6 +68,16 @@ struct options {
     std::string prompt_suffix; // --prompt-suffix TEXT: appended after the truncated file text
     bool ignore_eos = false;   // --ignore-eos: never stop at an end-of-generation token (throughput tests)
     std::string progress;      // --progress FILE: append a line per prefill chunk
+    float bias = 0.0f;         // --bias F: cache-aware routing (lossy)
+    std::string warm;          // --warm FILE: fill the VRAM expert slots from a usage profile after the prompt, before decoding
+    float temp = 0.0f;         // --temp F (0 = greedy); with --top-k/--top-p/--repeat-penalty/--seed: sampled output that does not loop
+    int top_k = 40;
+    float top_p = 0.95f;
+    float repeat_penalty = 1.1f;
+    int repeat_last_n = 256;
+    unsigned seed = 1;
+    std::string ctk = "f16";   // --ctk/--ctv: KV cache types (f16, q8_0, q4_0)
+    std::string ctv = "f16";
     std::string dump_logits;
     std::string force_tokens; // teacher forcing: feed these token ids instead of the argmax
     std::string json;
@@ -102,6 +113,16 @@ bool parse(int argc, char ** argv, options & o) {
         else if (a == "--prompt-suffix") { if (!next(o.prompt_suffix)) return false; }
         else if (a == "--ignore-eos") { o.ignore_eos = true; }
         else if (a == "--progress") { if (!next(o.progress)) return false; }
+        else if (a == "--bias") { if (!next(v)) return false; o.bias = (float) std::atof(v.c_str()); }
+        else if (a == "--warm") { if (!next(o.warm)) return false; }
+        else if (a == "--temp") { if (!next(v)) return false; o.temp = (float) std::atof(v.c_str()); }
+        else if (a == "--top-k") { if (!next(v)) return false; o.top_k = std::atoi(v.c_str()); }
+        else if (a == "--top-p") { if (!next(v)) return false; o.top_p = (float) std::atof(v.c_str()); }
+        else if (a == "--repeat-penalty") { if (!next(v)) return false; o.repeat_penalty = (float) std::atof(v.c_str()); }
+        else if (a == "--repeat-last-n") { if (!next(v)) return false; o.repeat_last_n = std::atoi(v.c_str()); }
+        else if (a == "--seed") { if (!next(v)) return false; o.seed = (unsigned) std::atoi(v.c_str()); }
+        else if (a == "--ctk") { if (!next(o.ctk)) return false; }
+        else if (a == "--ctv") { if (!next(o.ctv)) return false; }
         else if (a == "--dump-logits") { if (!next(o.dump_logits)) return false; }
         else if (a == "--force-tokens") { if (!next(o.force_tokens)) return false; }
         else if (a == "--json") { if (!next(o.json)) return false; }
@@ -175,11 +196,15 @@ int main(int argc, char ** argv) {
     cparams.n_ctx = o.n_ctx;
     cparams.n_batch = o.n_batch;
     cparams.n_ubatch = o.n_ubatch;
+    auto kv_type = [](const std::string & n) { return n == "q8_0" ? GGML_TYPE_Q8_0 : n == "q4_0" ? GGML_TYPE_Q4_0 : GGML_TYPE_F16; };
+    cparams.type_k = kv_type(o.ctk);
+    cparams.type_v = kv_type(o.ctv);
     cparams.n_threads = o.threads;
     cparams.n_threads_batch = o.threads;
 #ifdef SVRAM_HAVE_EXPERT_CACHE
     if (o.storage == "cache" || o.zerocopy) {
         cparams.moe_expert_zerocopy = o.zerocopy ? 1 : 0;
+        cparams.moe_expert_cache_bias = o.bias;
         cparams.moe_expert_cache_bytes = (size_t) o.cache_mib << 20;
         cparams.moe_expert_cache_policy = o.cache_policy == "lfu" ? LLAMA_MOE_EXPERT_CACHE_POLICY_LFU : LLAMA_MOE_EXPERT_CACHE_POLICY_LRU;
         cparams.moe_expert_direct_io = o.direct_io ? 1 : 0;
@@ -271,6 +296,13 @@ int main(int argc, char ** argv) {
         }
     }
     const double prompt_ms = now_ms() - t_pp0;
+    double warm_ms = -1.0;
+#ifdef SVRAM_HAVE_EXPERT_CACHE
+    if (!o.warm.empty()) {
+        warm_ms = llama_moe_expert_cache_warm(ctx, o.warm.c_str());
+        std::printf("warm_start_ms=%.0f\n", warm_ms);
+    }
+#endif
 
     for (int step = 0; step < o.n_predict; ++step) {
         const float * logits = llama_get_logits_ith(ctx, -1);
@@ -290,6 +322,34 @@ int main(int argc, char ** argv) {
             break;
         }
         int32_t chosen = forced.empty() ? best : forced[step];
+        if (forced.empty() && o.temp > 0.0f) {
+            // sampled output: repetition penalty, top-k, temperature, top-p (fixed seed, so runs are repeatable)
+            static std::mt19937 rng(o.seed);
+            std::vector<float> l(logits, logits + n_vocab);
+            const int hist = std::min<int>((int) (tokens.size() + generated.size()), o.repeat_last_n);
+            for (int h = 0; h < hist; ++h) {
+                const size_t idx = tokens.size() + generated.size() - 1 - h;
+                const llama_token t = idx < tokens.size() ? tokens[idx] : generated[idx - tokens.size()];
+                l[t] = l[t] > 0.0f ? l[t] / o.repeat_penalty : l[t] * o.repeat_penalty;
+            }
+            if (o.ignore_eos) {
+                for (int32_t i = 0; i < n_vocab; ++i) if (is_eog[i]) l[i] = -1e30f;
+            }
+            std::vector<int32_t> idx(n_vocab);
+            for (int32_t i = 0; i < n_vocab; ++i) idx[i] = i;
+            const int k = std::max(1, std::min(o.top_k, (int) n_vocab));
+            std::partial_sort(idx.begin(), idx.begin() + k, idx.end(), [&](int32_t a, int32_t b) { return l[a] > l[b]; });
+            std::vector<double> pr(k);
+            double z = 0.0;
+            for (int i = 0; i < k; ++i) { pr[i] = std::exp((double) (l[idx[i]] - l[idx[0]]) / o.temp); z += pr[i]; }
+            double cum = 0.0; int keep = k;
+            for (int i = 0; i < k; ++i) { pr[i] /= z; cum += pr[i]; if (cum >= o.top_p) { keep = i + 1; break; } }
+            double zz = 0.0;
+            for (int i = 0; i < keep; ++i) zz += pr[i];
+            double u = std::uniform_real_distribution<double>(0.0, zz)(rng);
+            chosen = idx[keep - 1];
+            for (int i = 0; i < keep; ++i) { u -= pr[i]; if (u <= 0.0) { chosen = idx[i]; break; } }
+        }
         {
             double sum = 0.0;
             for (int32_t i = 0; i < n_vocab; ++i) sum += std::exp((double) logits[i] - (double) logits[mx]);
@@ -355,7 +415,7 @@ int main(int argc, char ** argv) {
         for (size_t i = 0; i < chosen_logprobs.size(); ++i) out << (i ? "," : "") << chosen_logprobs[i];
         out << "],\n  \"logits_hashes\": [";
         for (size_t i = 0; i < hashes.size(); ++i) out << (i ? "," : "") << '"' << hashes[i] << '"';
-        out << "],\n  \"prefill_chunk_ms\": [";
+        out << "],\n  \"warm_ms\": " << warm_ms << ",\n  \"prefill_chunk_ms\": [";
         for (size_t i = 0; i < prefill_chunk_ms.size(); ++i) out << (i ? "," : "") << prefill_chunk_ms[i];
         out << "],\n  \"step_ms\": [";
         for (size_t i = 0; i < step_ms.size(); ++i) out << (i ? "," : "") << step_ms[i];

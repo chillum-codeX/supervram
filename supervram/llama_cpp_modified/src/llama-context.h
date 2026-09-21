@@ -60,6 +60,7 @@ struct llama_context {
     void sched_set_expert_cache();
 
     bool get_moe_expert_cache_stats(struct ggml_backend_sched_expert_cache_stats * stats) const;
+    double moe_expert_cache_warm(const char * path);
     void reset_moe_expert_cache_stats();
 
     void synchronize();

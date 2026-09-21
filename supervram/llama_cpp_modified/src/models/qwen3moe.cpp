@@ -140,7 +140,7 @@ llama_model_qwen3moe::graph::graph(const llama_model & model, const llm_graph_pa
                     model.layers[il].ffn_up_exps,
                     model.layers[il].ffn_gate_exps,
                     model.layers[il].ffn_down_exps,
-                    nullptr,
+                    build_moe_cache_bias(il),
                     n_expert, n_expert_used,
                     LLM_FFN_SILU, true,
                     hparams.expert_weights_scale,
