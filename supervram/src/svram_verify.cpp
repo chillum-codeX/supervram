@@ -55,6 +55,7 @@ struct options {
     int n_ubatch = 64;
     std::string prompt = "The tallest mountain in the world is";
     std::string dump_logits;
+    std::string force_tokens; // teacher forcing: feed these token ids instead of the argmax
     std::string json;
     int threads = 12;
 };
@@ -78,6 +79,7 @@ bool parse(int argc, char ** argv, options & o) {
         else if (a == "--threads") { if (!next(v)) return false; o.threads = std::atoi(v.c_str()); }
         else if (a == "--prompt") { if (!next(o.prompt)) return false; }
         else if (a == "--dump-logits") { if (!next(o.dump_logits)) return false; }
+        else if (a == "--force-tokens") { if (!next(o.force_tokens)) return false; }
         else if (a == "--json") { if (!next(o.json)) return false; }
         else { std::fprintf(stderr, "unknown arg %s\n", a.c_str()); return false; }
     }
@@ -169,6 +171,18 @@ int main(int argc, char ** argv) {
         dump.open(o.dump_logits, std::ios::binary);
     }
 
+    std::vector<llama_token> forced;
+    if (!o.force_tokens.empty()) {
+        std::ifstream f(o.force_tokens);
+        long long t;
+        while (f >> t) forced.push_back((llama_token) t);
+        if (forced.empty()) {
+            std::fprintf(stderr, "no tokens in %s\n", o.force_tokens.c_str());
+            return 1;
+        }
+    }
+    std::vector<llama_token> argmax_tokens;
+    std::vector<float> chosen_logprobs;
     std::vector<llama_token> generated;
     std::vector<std::string> hashes;
     std::vector<double> step_ms;
@@ -193,12 +207,22 @@ int main(int argc, char ** argv) {
         for (int32_t i = 1; i < n_vocab; ++i) {
             if (logits[i] > logits[best]) best = i;
         }
-        generated.push_back(best);
-        if (llama_vocab_is_eog(vocab, best)) {
+        if (!forced.empty() && (size_t) step >= forced.size()) {
+            break;
+        }
+        int32_t chosen = forced.empty() ? best : forced[step];
+        {
+            double sum = 0.0;
+            for (int32_t i = 0; i < n_vocab; ++i) sum += std::exp((double) logits[i] - (double) logits[best]);
+            chosen_logprobs.push_back((float) ((double) logits[chosen] - (double) logits[best] - std::log(sum)));
+            argmax_tokens.push_back(best);
+        }
+        generated.push_back(chosen);
+        if (llama_vocab_is_eog(vocab, chosen)) {
             break;
         }
         const double t0 = now_ms();
-        if (llama_decode(ctx, llama_batch_get_one(&best, 1)) != 0) {
+        if (llama_decode(ctx, llama_batch_get_one(&chosen, 1)) != 0) {
             std::fprintf(stderr, "decode failed at step %d\n", step);
             return 1;
         }
@@ -246,6 +270,10 @@ int main(int argc, char ** argv) {
         out << "  \"load_ms\": " << load_ms << ",\n  \"prompt_ms\": " << prompt_ms << ",\n  \"decode_tps\": " << tps << ",\n";
         out << "  \"tokens\": [";
         for (size_t i = 0; i < generated.size(); ++i) out << (i ? "," : "") << generated[i];
+        out << "],\n  \"argmax_tokens\": [";
+        for (size_t i = 0; i < argmax_tokens.size(); ++i) out << (i ? "," : "") << argmax_tokens[i];
+        out << "],\n  \"chosen_logprobs\": [";
+        for (size_t i = 0; i < chosen_logprobs.size(); ++i) out << (i ? "," : "") << chosen_logprobs[i];
         out << "],\n  \"logits_hashes\": [";
         for (size_t i = 0; i < hashes.size(); ++i) out << (i ? "," : "") << '"' << hashes[i] << '"';
         out << "],\n  \"step_ms\": [";
