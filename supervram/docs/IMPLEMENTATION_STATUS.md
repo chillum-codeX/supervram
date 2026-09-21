@@ -42,9 +42,27 @@ Baselines (same tool, same settings): Q4_K_M full GPU 195-200 t/s, mmap 30 t/s; 
 - **Correctness (256 tokens, `-ub 1`):** the Q4 cache output equals full-GPU resident execution bit for bit (256/256 logits hashes and tokens). CPU-expert paths (Q4 mmap, Q8 `--cpu-moe`) differ from CUDA from step 0 (different kernels), and tokens diverge at step 5 (Q4) / 16 (Q8). Q8 has no GPU-resident reference because it does not fit.
 - **Timer bug:** the first `svram-verify` timings (including the earlier 32-token, 1-rep sweep in `results/rtx3090/ablations/`, `results/rtx3090/verify/` and `SUMMARY.json`) stopped the clock before the GPU finished, inflating GPU-heavy modes (resident showed 279-3600 t/s). Fixed in `src/svram_verify.cpp`. Those older `decode_tps` values are superseded; their hit rates and token/hash results are unaffected. `llama-bench` numbers were never affected.
 
+## Cold-SSD path: is the SSD really the backing tier? (`results/rtx3090/cold/`, `evidence_class: measured_rtx3090`)
+
+Why this exists: the ablation above ran with both models fully resident in the Linux page cache (`fincore`: 30.3 GiB and 17.3 GiB resident), so it measured GPU + RAM, not GPU + SSD. ElasticVRAM notes sec. 35 says that must not be presented as SSD-backed. `scripts/cold_run.py` evicts the model file from the page cache (`posix_fadvise DONTNEED`), optionally caps RAM with a `systemd-run --user` cgroup (`MemoryMax`, `MemorySwapMax=0`), and records SSD bytes read (`/sys/block/nvme0n1/stat`), peak RAM and page-cache residency afterwards.
+
+Q8_0 (30.3 GiB, does not fit VRAM), 16 GiB GPU cache, LRU, `-ub 1`, 256 tokens, cold start:
+
+| Expert source | RAM cap | Decode t/s | SSD read | Expert data in RAM | Peak cgroup |
+|---|---|---|---|---|---|
+| mmap page faults (patch 0001/0002) | none | 2.0 (3.5 second half) | 22 GiB at ~0.12 GB/s | 22 GiB page cache | 23.6 GiB |
+| mmap page faults | 4 GiB | 0.55 (only 32 tokens, cold-start dominated) | 14 GiB at ~0.12 GB/s | capped at 3.7 GiB | 4.0 GiB |
+| **O_DIRECT + pinned staging (patch 0003, `SVRAM_DIRECT_IO=1`)** | 4 GiB | **13.8 / 13.9 / 13.9 (3 reps; second half 14.5)** | 29.7 GiB, none cached | 0 (1.3 GiB page cache is the dense non-expert weights, loaded once) | 1.7 GiB |
+
+- The warm-page-cache Q8 number (about 40 t/s) is a GPU + RAM result. The honest GPU + SSD number on this machine today is about 14 t/s.
+- Direct I/O correctness: Q4 cache with direct reads matches full-GPU resident bit for bit (64/64 tokens and logits hashes).
+- Time is SSD-bound: 16.7 s of the 18.5 s decode is spent waiting for reads (`io_ms`). It reads about 119 MB per token (94 % hit rate, ~23 missed experts of ~5 MB), matching the arithmetic estimate.
+- SSD ceiling: `scripts/ssd_expert_read_bench.py` measures the WD SN550 at about 2.4 GB/s for expert-sized (1.6 MB) O_DIRECT reads at queue depth >= 8 (1.6 GB/s at QD1). Bandwidth-only ceiling for Q8_0: about 21 t/s at 94 % hits, 42 t/s at 97 %, 62 t/s at 98 %, 125 t/s at 99 %. The direct path reaches about 1.8 GB/s during waits, roughly 70 % of that ceiling.
+- Estimated parity (not measured): a native 48 GB card at 3090-class bandwidth would decode Q8_0 at roughly 100 t/s (about twice Q4's 195-200 t/s). 14 t/s is therefore about 0.14x, below the notes' 0.5x "basic viability" line. Reaching 0.5x needs a hit rate near 97.5 % or better, fewer bytes per expert, or more SSD bandwidth.
+
 ## Remaining gaps
 
 - Prompt ubatches that route more distinct experts than `n_slots` return a hard error (observed as llama-bench warmup `res = -3` at `-ub 16`). Use `-ub 1` or a larger cache for decode; prompt processing is not a v1 win.
 - No next-token prefetch, no GDS copy backend, no llama-server `/metrics` cache stats (stats are in the server task JSON only), and only the 20-run cache-size x policy ablation above, not the 720-run matrix (no prefetch/predictor axes, no repetitions).
-- Host to device copies are from mmap/pageable memory (driver-staged). Pinned staging ring not implemented.
+- Direct I/O (`SVRAM_DIRECT_IO=1`, Linux only, env-var controlled, no CLI flag yet) uses one pinned staging buffer with a synchronize before each reuse: no double buffering and no prefetch, so reads never overlap compute. The default path is still mmap.
 - CUDA graphs were disabled (`GGML_CUDA_DISABLE_GRAPHS=1`) for bring-up.

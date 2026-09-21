@@ -7,7 +7,9 @@
 5. Linux page cache is not a hard RAM budget. mmap/cache minimize eager reads but do not cap system RAM.
 6. BAR1 is 256 MiB; Resizable BAR is not in effect. Idle PCIe is gen2 x16.
 7. CUDA graphs were disabled for bring-up (`GGML_CUDA_DISABLE_GRAPHS=1`).
-8. No prefetch, no pinned staging ring, no llama-server cache metrics.
+8. No prefetch, no double-buffered staging ring (one pinned staging buffer, synchronized before reuse), no llama-server cache metrics.
 9. Cross-framework throughput comparisons still require matching quantization, context, batch and output length.
 10. Early `svram-verify` decode timings (before the `llama_synchronize` fix) were inflated; only the 256-token sweep in `results/rtx3090/ablations-long/` and `llama-bench` numbers are valid.
-11. The ablation covers decode at `-ub 1` from a warm page cache with 3 repetitions and one prompt; cold-cache SSD behavior, long contexts and prompt processing are not covered.
+11. The ablation covers decode at `-ub 1` from a warm page cache with 3 repetitions and one prompt; long contexts and prompt processing are not covered.
+12. Direct I/O is Linux-only and enabled with `SVRAM_DIRECT_IO=1` (also `SVRAM_IO_THREADS`, `SVRAM_STAGING_MIB`); there is no CLI flag. The 13.9 t/s cold result is one model, one prompt, decode only, and about 0.14x of an estimated (unmeasured) native 48 GB card.
+13. The dense non-expert weights (about 1.3 GiB for Q8_0) still pass through the page cache once at load time; expert data does not.

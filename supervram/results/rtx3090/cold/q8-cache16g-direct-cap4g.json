@@ -1,0 +1,57 @@
+{
+  "name": "q8-cache16g-direct-cap4g",
+  "evidence_class": "measured_rtx3090",
+  "command": [
+    "systemd-run",
+    "--user",
+    "--scope",
+    "-q",
+    "-p",
+    "MemoryMax=4G",
+    "-p",
+    "MemorySwapMax=0",
+    "--",
+    "/home/truppy/Downloads/workspace/project/supervram/build/svram-verify",
+    "--model",
+    "/home/truppy/models/Qwen3-30B-A3B-Q8_0.gguf",
+    "--json",
+    "results/rtx3090/cold/q8-cache16g-direct-cap4g.verify.json",
+    "--storage",
+    "cache",
+    "--cache-mib",
+    "16384",
+    "--cache-policy",
+    "lru",
+    "--n-predict",
+    "256",
+    "--n-ubatch",
+    "1"
+  ],
+  "returncode": 0,
+  "disk": "nvme0n1",
+  "ram_cap": "4G",
+  "evicted_before": true,
+  "model_page_cache_resident_gib_before": 0.0,
+  "model_page_cache_resident_gib_after": 1.29,
+  "ssd_read_gib": 29.68,
+  "wall_s": 25.8,
+  "peak_rss_anon_gib": 0.21,
+  "peak_rss_file_gib": 1.32,
+  "peak_cgroup_gib": 1.74,
+  "stdout_tail": [
+    "mode=cache ngl=999 cpu_moe=0 n_cpu_moe=0 cache_mib=16384 prompt_tokens=7 generated=256 load_ms=1767 prompt_ms=4082.1 decode_tps=13.82",
+    "cache_stats accesses=302832 hits=284634 misses=18198 evictions=7974 hit_rate=94.0 bytes_h2d=30411915264 n_slots=10224 host_ms=17326.2",
+    "direct_io_stats bytes_ssd=30486454272 io_ms=16743.2"
+  ],
+  "cache_stats": [
+    "cache_stats accesses=302832 hits=284634 misses=18198 evictions=7974 hit_rate=94.0 bytes_h2d=30411915264 n_slots=10224 host_ms=17326.2",
+    "direct_io_stats bytes_ssd=30486454272 io_ms=16743.2"
+  ],
+  "env": {
+    "SVRAM_DIRECT_IO": "1"
+  },
+  "stderr_tail": [],
+  "decode_tps_all": 13.8153,
+  "decode_tps_second_half": 14.44,
+  "tokens_generated": 256
+}

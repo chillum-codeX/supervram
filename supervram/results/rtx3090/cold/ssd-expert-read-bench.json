@@ -1,0 +1,43 @@
+{
+  "model": "/home/truppy/models/Qwen3-30B-A3B-Q8_0.gguf",
+  "chunk_bytes": 1671168,
+  "odirect": true,
+  "results": [
+    {
+      "queue_depth": 1,
+      "GB_per_s": 1.621,
+      "read_latency_ms_p50": 1.03,
+      "read_latency_ms_p99": 1.22
+    },
+    {
+      "queue_depth": 2,
+      "GB_per_s": 2.092,
+      "read_latency_ms_p50": 1.6,
+      "read_latency_ms_p99": 2.24
+    },
+    {
+      "queue_depth": 4,
+      "GB_per_s": 2.307,
+      "read_latency_ms_p50": 2.79,
+      "read_latency_ms_p99": 4.91
+    },
+    {
+      "queue_depth": 8,
+      "GB_per_s": 2.398,
+      "read_latency_ms_p50": 5.38,
+      "read_latency_ms_p99": 9.03
+    },
+    {
+      "queue_depth": 16,
+      "GB_per_s": 2.388,
+      "read_latency_ms_p50": 11.25,
+      "read_latency_ms_p99": 17.46
+    },
+    {
+      "queue_depth": 32,
+      "GB_per_s": 2.376,
+      "read_latency_ms_p50": 18.5,
+      "read_latency_ms_p99": 47.88
+    }
+  ]
+}
