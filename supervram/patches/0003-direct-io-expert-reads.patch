@@ -19,12 +19,14 @@ index 26f0488..a7feebf 100644
      // reserve/alloc of a graph that uses host expert weights. Requires a scheduler without pipeline copies.
      GGML_API void ggml_backend_sched_set_expert_cache(ggml_backend_sched_t sched, const struct ggml_backend_sched_expert_cache_params * params);
 diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
-index ac91277..a2e0182 100644
+index ac91277..d16f3eb 100644
 --- a/ggml/src/ggml-backend.cpp
 +++ b/ggml/src/ggml-backend.cpp
-@@ -22,6 +22,15 @@
+@@ -21,7 +21,17 @@
+ #include <string.h>
  #include <algorithm>
  #include <unordered_map>
++#include <unordered_set>
  #include <vector>
 +#include <string>
 +#include <mutex>
@@ -38,7 +40,7 @@ index ac91277..a2e0182 100644
  
  #ifdef __APPLE__
  #include <sys/types.h>
-@@ -786,6 +795,102 @@ struct ggml_backend_sched_split {
+@@ -786,6 +796,102 @@ struct ggml_backend_sched_split {
  // expert cache (SuperVRAM): compact device slots for host-resident MoE expert weights
  #define GGML_SCHED_EXPERT_CACHE_PAD 512 // extra zeroed bytes after the last slot (MMQ reads a little past the end)
  
@@ -141,10 +143,12 @@ index ac91277..a2e0182 100644
  struct ggml_backend_sched_expert_tensor {
      struct ggml_tensor *  weight     = nullptr; // host weight {ne0, ne1, n_expert}
      int                   backend_id = -1;      // device backend that executes the consuming MUL_MAT_ID
-@@ -807,6 +912,10 @@ struct ggml_backend_sched_expert_tensor {
+@@ -807,6 +913,12 @@ struct ggml_backend_sched_expert_tensor {
      struct ggml_tensor * slots_view = nullptr;  // {ne0, ne1, n_slots} on the device, pre-allocated in `buffer`
      struct ggml_tensor * ids_remap  = nullptr;  // same layout as the node's ids tensor, pre-allocated in `buffer`
      struct ggml_tensor * ids_orig   = nullptr;  // the node's original ids tensor (logical expert ids)
++
++    std::vector<int32_t> remap_host;            // per-tensor: the id upload of one weight must not overwrite another's
 +
 +    // direct-I/O source (-1 when the weight is read through the mmap)
 +    int      src_fd     = -1;
@@ -152,7 +156,7 @@ index ac91277..a2e0182 100644
  };
  
  struct ggml_backend_sched_expert_cache {
-@@ -815,6 +924,38 @@ struct ggml_backend_sched_expert_cache {
+@@ -815,6 +927,38 @@ struct ggml_backend_sched_expert_cache {
      std::unordered_map<struct ggml_tensor *, ggml_backend_sched_expert_tensor> tensors;
      bool layout_dirty = true;
  
@@ -191,7 +195,7 @@ index ac91277..a2e0182 100644
      // scratch
      std::vector<int32_t> ids_host;
      std::vector<int32_t> remap_host;
-@@ -954,6 +1095,45 @@ static void ggml_backend_sched_expert_cache_free_buffers(struct ggml_backend_sch
+@@ -954,6 +1098,45 @@ static void ggml_backend_sched_expert_cache_free_buffers(struct ggml_backend_sch
      }
  }
  
@@ -237,7 +241,7 @@ index ac91277..a2e0182 100644
  // (re)allocate the slot buffers for all registered tensors; called at the start of split_graph when the set of
  // cached tensors or the ids capacity changed
  static void ggml_backend_sched_expert_cache_layout(ggml_backend_sched_t sched) {
-@@ -962,6 +1142,7 @@ static void ggml_backend_sched_expert_cache_layout(ggml_backend_sched_t sched) {
+@@ -962,6 +1145,7 @@ static void ggml_backend_sched_expert_cache_layout(ggml_backend_sched_t sched) {
          return;
      }
      cache->layout_dirty = false;
@@ -245,26 +249,31 @@ index ac91277..a2e0182 100644
  
      // all backends must be idle: the previous graph may still be reading the old slot buffers
      for (int i = 0; i < sched->n_backends; i++) {
-@@ -1086,6 +1267,89 @@ static void ggml_backend_sched_expert_cache_bind_ids(ggml_backend_sched_t sched,
+@@ -1086,10 +1270,114 @@ static void ggml_backend_sched_expert_cache_bind_ids(ggml_backend_sched_t sched,
      node->src[2] = remap;
  }
  
 +struct ggml_expert_miss {
++    ggml_backend_sched_expert_tensor * et;
 +    int64_t expert;
 +    int     slot;
 +};
 +
-+// direct I/O: read the missed experts with parallel O_DIRECT reads into the pinned staging buffer, then copy each
-+// one into its device slot. Reads are 4 KiB aligned (a few KiB of padding per expert); the copy skips the padding.
++// direct I/O: read the missed experts (of possibly several weights) with parallel O_DIRECT reads into the pinned
++// staging buffer, then copy each one into its device slot. Reads are 4 KiB aligned (a few KiB of padding per
++// expert); the copy skips the padding. Batching gate/up/down of a layer keeps more reads in flight.
 +static bool ggml_backend_sched_expert_cache_read_direct(
-+        struct ggml_backend_sched_expert_cache * cache, ggml_backend_sched_expert_tensor & et,
-+        ggml_backend_t split_backend, const std::vector<ggml_expert_miss> & misses) {
++        struct ggml_backend_sched_expert_cache * cache, ggml_backend_t split_backend, const std::vector<ggml_expert_miss> & misses) {
 +#if defined(__linux__)
-+    const size_t align  = 4096;
-+    const size_t stride = ((et.expert_size + align - 1) & ~(align - 1)) + align; // room for head/tail padding
++    const size_t align = 4096;
++    auto stride_of = [&](const ggml_expert_miss & m) { return ((m.et->expert_size + align - 1) & ~(align - 1)) + align; }; // room for head/tail padding
++    size_t max_stride = 0;
++    for (const auto & m : misses) {
++        max_stride = std::max(max_stride, stride_of(m));
++    }
 +
 +    if (cache->staging == nullptr) {
-+        const size_t bytes = std::max(cache->staging_bytes, stride);
++        const size_t bytes = std::max(cache->staging_bytes, max_stride);
 +        uint8_t * raw = nullptr;
 +        ggml_backend_dev_t dev = ggml_backend_get_device(split_backend);
 +        ggml_backend_buffer_type_t buft = dev ? ggml_backend_dev_host_buffer_type(dev) : nullptr;
@@ -286,13 +295,22 @@ index ac91277..a2e0182 100644
 +        GGML_LOG_INFO("%s: expert cache: direct I/O, %d threads, %zu MiB %s staging\n", __func__,
 +            cache->io_threads, bytes / 1024 / 1024, cache->staging_buf ? "pinned" : "pageable");
 +    }
++    if (max_stride > cache->staging_bytes) {
++        GGML_LOG_ERROR("%s: expert cache: staging buffer too small for one expert\n", __func__);
++        return false;
++    }
 +    if (cache->pool == nullptr) {
 +        cache->pool = new ggml_expert_io_pool(cache->io_threads);
 +    }
 +
-+    const size_t n_stage = std::max<size_t>(1, cache->staging_bytes / stride);
-+    for (size_t i0 = 0; i0 < misses.size(); i0 += n_stage) {
-+        const size_t n = std::min(n_stage, misses.size() - i0);
++    size_t i0 = 0;
++    while (i0 < misses.size()) {
++        // take as many misses as fit into the staging buffer
++        size_t n = 0, used = 0;
++        while (i0 + n < misses.size() && used + stride_of(misses[i0 + n]) <= cache->staging_bytes) {
++            used += stride_of(misses[i0 + n]);
++            n++;
++        }
 +
 +        // the previous async copies may still be reading the staging buffer
 +        if (cache->staging_busy) {
@@ -301,41 +319,54 @@ index ac91277..a2e0182 100644
 +        }
 +
 +        std::vector<ggml_expert_io_job> jobs;
-+        std::vector<size_t> head(n);
++        std::vector<size_t> pos(n), head(n);
 +        jobs.reserve(n);
++        size_t cur = 0;
 +        for (size_t k = 0; k < n; k++) {
-+            const uint64_t off = et.src_offset + (uint64_t) misses[i0 + k].expert * et.expert_size;
++            const ggml_expert_miss & m = misses[i0 + k];
++            const ggml_backend_sched_expert_tensor & et = *m.et;
++            const uint64_t off = et.src_offset + (uint64_t) m.expert * et.expert_size;
 +            const uint64_t a   = off & ~(uint64_t) (align - 1);
 +            const uint64_t end = (off + et.expert_size + align - 1) & ~(uint64_t) (align - 1);
++            pos[k]  = cur;
 +            head[k] = (size_t) (off - a);
-+            jobs.push_back({ et.src_fd, cache->staging + k * stride, a, (size_t) (end - a), head[k] + et.expert_size });
++            jobs.push_back({ et.src_fd, cache->staging + cur, a, (size_t) (end - a), head[k] + et.expert_size });
 +            cache->stats.bytes_ssd += end - a;
++            cur += stride_of(m);
 +        }
 +
 +        const int64_t t_io = ggml_time_us();
 +        if (!cache->pool->run(std::move(jobs))) {
-+            GGML_LOG_ERROR("%s: expert cache: direct read failed for %s\n", __func__, et.weight->name);
++            GGML_LOG_ERROR("%s: expert cache: direct read failed for %s\n", __func__, misses[i0].et->weight->name);
 +            return false;
 +        }
 +        cache->stats.io_ms += (ggml_time_us() - t_io) / 1000.0;
 +
 +        for (size_t k = 0; k < n; k++) {
-+            ggml_backend_tensor_set_async(split_backend, et.slots_view,
-+                cache->staging + k * stride + head[k], (size_t) misses[i0 + k].slot * et.expert_size, et.expert_size);
++            const ggml_expert_miss & m = misses[i0 + k];
++            ggml_backend_tensor_set_async(split_backend, m.et->slots_view,
++                cache->staging + pos[k] + head[k], (size_t) m.slot * m.et->expert_size, m.et->expert_size);
 +        }
 +        cache->staging_busy = true;
++        i0 += n;
 +    }
 +    return true;
 +#else
-+    GGML_UNUSED(cache); GGML_UNUSED(et); GGML_UNUSED(split_backend); GGML_UNUSED(misses);
++    GGML_UNUSED(cache); GGML_UNUSED(split_backend); GGML_UNUSED(misses);
 +    return false;
 +#endif
 +}
 +
  // compute time: make the experts selected by `ids` resident in the slots and upload the remapped ids
- static enum ggml_status ggml_backend_sched_expert_cache_load(
+-static enum ggml_status ggml_backend_sched_expert_cache_load(
++static enum ggml_status ggml_backend_sched_expert_cache_plan(
          ggml_backend_sched_t sched, ggml_backend_sched_expert_tensor & et, ggml_backend_t split_backend,
-@@ -1124,6 +1388,17 @@ static enum ggml_status ggml_backend_sched_expert_cache_load(
+-        struct ggml_tensor ** prev_ids_tensor) {
++        struct ggml_tensor ** prev_ids_tensor, std::vector<ggml_expert_miss> & direct_misses) {
+     struct ggml_backend_sched_expert_cache * cache = sched->expert_cache;
+     struct ggml_tensor * ids = et.ids_orig;
+     GGML_ASSERT(ids != nullptr && et.slots_view != nullptr && et.ids_remap != nullptr);
+@@ -1124,6 +1412,17 @@ static enum ggml_status ggml_backend_sched_expert_cache_load(
              }
          }
      }
@@ -353,35 +384,164 @@ index ac91277..a2e0182 100644
      if (n_used > et.n_slots) {
          GGML_LOG_ERROR("%s: expert cache: %s requires %lld distinct experts but only %d slots are available; "
              "increase the cache size or reduce the batch size (-ub)\n", __func__, et.weight->name, (long long) n_used, et.n_slots);
-@@ -1148,6 +1423,7 @@ static enum ggml_status ggml_backend_sched_expert_cache_load(
-     const uint8_t * src_base = (const uint8_t *) et.weight->data;
-     int64_t n_miss = 0;
-     int64_t n_evict = 0;
-+    std::vector<ggml_expert_miss> direct_misses;
-     int next_scan = 0; // empty-slot scan cursor
-     for (int64_t e = 0; e < n_expert; e++) {
-         if (!cache->used[e] || et.slot_of_expert[e] >= 0) {
-@@ -1193,10 +1469,17 @@ static enum ggml_status ggml_backend_sched_expert_cache_load(
+@@ -1193,20 +1492,24 @@ static enum ggml_status ggml_backend_sched_expert_cache_load(
          et.last_use[victim]       = et.tick;
          et.use_count[victim]      = 1;
  
 -        ggml_backend_tensor_set_async(split_backend, et.slots_view,
 -            src_base + (size_t) e * et.expert_size, (size_t) victim * et.expert_size, et.expert_size);
 +        if (et.src_fd >= 0) {
-+            direct_misses.push_back({ e, victim });
++            direct_misses.push_back({ &et, e, victim });
 +        } else {
 +            ggml_backend_tensor_set_async(split_backend, et.slots_view,
 +                src_base + (size_t) e * et.expert_size, (size_t) victim * et.expert_size, et.expert_size);
 +        }
          n_miss++;
      }
-+    if (!direct_misses.empty() && !ggml_backend_sched_expert_cache_read_direct(cache, et, split_backend, direct_misses)) {
-+        return GGML_STATUS_FAILED;
-+    }
  
      // remapped ids with the same layout as the original tensor
-     cache->remap_host.assign(cache->ids_host.size(), 0);
-@@ -2336,6 +2619,19 @@ void ggml_backend_sched_set_expert_cache(ggml_backend_sched_t sched, const struc
+-    cache->remap_host.assign(cache->ids_host.size(), 0);
++    et.remap_host.assign(cache->ids_host.size(), 0);
+     for (int64_t i1 = 0; i1 < ids->ne[1]; i1++) {
+         for (int64_t i0 = 0; i0 < ids->ne[0]; i0++) {
+             const size_t idx = i1 * ids->nb[1]/sizeof(int32_t) + i0 * ids->nb[0]/sizeof(int32_t);
+-            cache->remap_host[idx] = et.slot_of_expert[cache->ids_host[idx]];
++            et.remap_host[idx] = et.slot_of_expert[cache->ids_host[idx]];
+         }
+     }
+-    ggml_backend_tensor_set_async(split_backend, et.ids_remap, cache->remap_host.data(), 0, ggml_nbytes(ids));
++    ggml_backend_tensor_set_async(split_backend, et.ids_remap, et.remap_host.data(), 0, ggml_nbytes(ids));
+ 
+     cache->stats.n_steps++;
+     cache->stats.accesses    += n_used;
+@@ -1221,6 +1524,28 @@ static enum ggml_status ggml_backend_sched_expert_cache_load(
+     return GGML_STATUS_SUCCESS;
+ }
+ 
++// compute time, once per split: make the experts needed by every cached weight of the split resident. All misses
++// (gate/up/down of a layer are missed together) go out as one batch of reads.
++static enum ggml_status ggml_backend_sched_expert_cache_load_group(
++        ggml_backend_sched_t sched, const std::vector<ggml_backend_sched_expert_tensor *> & group, ggml_backend_t split_backend,
++        struct ggml_tensor ** prev_ids_tensor) {
++    std::vector<ggml_expert_miss> direct_misses;
++    for (ggml_backend_sched_expert_tensor * et : group) {
++        enum ggml_status st = ggml_backend_sched_expert_cache_plan(sched, *et, split_backend, prev_ids_tensor, direct_misses);
++        if (st != GGML_STATUS_SUCCESS) {
++            return st;
++        }
++    }
++    if (!direct_misses.empty()) {
++        const int64_t t_start = ggml_time_us();
++        if (!ggml_backend_sched_expert_cache_read_direct(sched->expert_cache, split_backend, direct_misses)) {
++            return GGML_STATUS_FAILED;
++        }
++        sched->expert_cache->stats.host_ms += (ggml_time_us() - t_start) / 1000.0;
++    }
++    return GGML_STATUS_SUCCESS;
++}
++
+ // returns the priority of the backend, lower id is higher priority
+ static int ggml_backend_sched_backend_id(ggml_backend_sched_t sched, ggml_backend_t backend) {
+     for (int i = 0; i < sched->n_backends; i++) {
+@@ -2035,6 +2360,7 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
+     struct ggml_backend_sched_split * splits = sched->splits;
+ 
+     ggml_tensor * prev_ids_tensor = nullptr;
++    std::unordered_set<ggml_backend_sched_expert_tensor *> expert_cache_preloaded; // loaded early with an earlier split of the same layer
+     std::vector<int32_t> ids;
+     std::vector<ggml_bitset_t> used_ids;
+ 
+@@ -2055,12 +2381,70 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
+             }
+         }
+ 
++        // expert cache: a cached MUL_MAT_ID starts its own split, so gate/up/down of a layer are three consecutive splits
++        // that share one ids tensor. Make all of them resident here with one wait and one batch of reads.
++        if (sched->expert_cache) {
++            auto cached_inputs = [&](int sid, std::vector<ggml_backend_sched_expert_tensor *> & out) {
++                struct ggml_backend_sched_split * sp = &sched->splits[sid];
++                for (int k = 0; k < sp->n_inputs; k++) {
++                    auto it = sched->expert_cache->tensors.find(sp->inputs[k]);
++                    if (it != sched->expert_cache->tensors.end() &&
++                        it->second.slots_view == tensor_copy(sp->inputs[k], sp->backend_id, sched->cur_copy)) {
++                        out.push_back(&it->second);
++                    }
++                }
++            };
++            std::vector<ggml_backend_sched_expert_tensor *> cache_group;
++            cached_inputs(split_id, cache_group);
++            bool already_loaded = false;
++            for (auto * et : cache_group) {
++                already_loaded |= expert_cache_preloaded.erase(et) > 0;
++            }
++            if (!cache_group.empty() && !already_loaded) {
++                struct ggml_tensor * group_ids = cache_group[0]->ids_orig;
++                for (int j = split_id + 1; j < sched->n_splits && j <= split_id + 8; j++) {
++                    if (sched->splits[j].backend_id != split_backend_id) {
++                        break;
++                    }
++                    std::vector<ggml_backend_sched_expert_tensor *> next;
++                    cached_inputs(j, next);
++                    if (next.empty()) {
++                        continue;
++                    }
++                    if (next[0]->ids_orig != group_ids) {
++                        break;
++                    }
++                    for (auto * et : next) {
++                        cache_group.push_back(et);
++                        expert_cache_preloaded.insert(et);
++                    }
++                }
++                // wait for the split backend to finish using the slots before overwriting them
++                if (sched->events[split_backend_id][sched->cur_copy] != NULL) {
++                    ggml_backend_event_wait(split_backend, sched->events[split_backend_id][sched->cur_copy]);
++                } else {
++                    ggml_backend_synchronize(split_backend);
++                }
++                enum ggml_status st = ggml_backend_sched_expert_cache_load_group(sched, cache_group, split_backend, &prev_ids_tensor);
++                if (st != GGML_STATUS_SUCCESS) {
++                    return st;
++                }
++            }
++        }
++
+         // copy the input tensors to the split backend
+         for (int input_id = 0; input_id < split->n_inputs; input_id++) {
+             ggml_backend_t input_backend = ggml_backend_sched_get_tensor_backend(sched, split->inputs[input_id]);
+             struct ggml_tensor * input = split->inputs[input_id];
+             struct ggml_tensor * input_cpy = tensor_copy(input, split_backend_id, sched->cur_copy);
+ 
++            if (sched->expert_cache) {
++                auto it = sched->expert_cache->tensors.find(input);
++                if (it != sched->expert_cache->tensors.end() && it->second.slots_view == input_cpy) {
++                    continue; // handled above
++                }
++            }
++
+             if (input->flags & GGML_TENSOR_FLAG_INPUT) {
+                 // inputs from the user must be copied immediately to prevent the user overwriting the data before the copy is done
+                 if (sched->events[split_backend_id][sched->cur_copy] != NULL) {
+@@ -2077,18 +2461,6 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
+                     ggml_backend_synchronize(split_backend);
+                 }
+ 
+-                // expert cache: copy only missing experts into the compact slot buffer and remap the ids
+-                if (sched->expert_cache) {
+-                    auto it = sched->expert_cache->tensors.find(input);
+-                    if (it != sched->expert_cache->tensors.end() && it->second.slots_view == input_cpy) {
+-                        enum ggml_status st = ggml_backend_sched_expert_cache_load(sched, it->second, split_backend, &prev_ids_tensor);
+-                        if (st != GGML_STATUS_SUCCESS) {
+-                            return st;
+-                        }
+-                        continue;
+-                    }
+-                }
+-
+                 // when offloading MoE weights, we can reduce the amount of data copied by copying only the experts that are used
+                 ggml_tensor * node = split->graph.nodes[0];
+                 if (split->graph.n_nodes > 0 &&
+@@ -2336,6 +2708,19 @@ void ggml_backend_sched_set_expert_cache(ggml_backend_sched_t sched, const struc
      sched->expert_cache->params = *params;
      memset(&sched->expert_cache->stats, 0, sizeof(sched->expert_cache->stats));
      sched->expert_cache->layout_dirty = true;
