@@ -17,26 +17,30 @@ See `results/rtx3090/SUMMARY.json`, `results/rtx3090/hardware-probe.json`, `resu
 - GPU: GeForce RTX 3090 24 GiB, driver 595.91.07, CUDA 12.6, compute 8.6. BAR1 256 MiB. Idle PCIe gen2 x16 (max gen3). IOMMU off. `/home` is ext4 on WD SN550 NVMe. Sequential O_DIRECT about 2.0 GB/s.
 - cuFile: driver opens, reads match pread, about 1.8 GB/s, `verdict: cufile_compat_mode_host_bounce`. `nvidia-fs` absent; this is not SSD-to-VRAM DMA.
 - Tiny generated Qwen3 MoE: resident/mmap/cache token ids and logits hashes identical; cache hit rate 71% on a 2-token run.
-- Qwen3-30B-A3B Q4_K_M: greedy 8 tokens identical across resident/mmap/cache. Resident vs cache logits hashes identical. Decode (short verify): resident 279 t/s, mmap 29 t/s, cold cache 17 t/s.
+- Qwen3-30B-A3B Q4_K_M: greedy 8 tokens identical across resident/mmap/cache. Resident vs cache logits hashes identical. Decode numbers: see the ablation section (the early short `svram-verify` timings were inflated by a timer bug).
 - Qwen3-30B-A3B Q8_0 (exceeds VRAM): greedy 8 tokens identical across `--cpu-moe`, mmap, cache. Logits hashes differ (CPU vs CUDA kernels), as documented.
 - llama-bench, 3 reps: Q4 pp512/tg128 resident 4273 / 171 t/s; `--n-cpu-moe 24` 591 / 57; mmap 341 / 34; cache decode-only tg128 47 t/s (8 GiB, 62 slots/tensor). Q8 `--n-cpu-moe 48` / mmap about 65 pp64 / 23 tg64; cache decode-only tg64 24.6 t/s (12 GiB, 53 slots/tensor).
 
-## Cache-size ablation (`results/rtx3090/ablations/`, `evidence_class: measured_rtx3090`)
+## Cache-size ablation (`results/rtx3090/ablations-long/`, `evidence_class: measured_rtx3090`)
 
-Scope: 20 runs, **one repetition each**, `svram-verify` cold-start greedy decode of 32 tokens after a 7-token prompt, `-ub 1`. This is a cache-size x policy sweep only. It is **not** the 720-run matrix in `RTX3090_PROTOCOL.md`: no prefetch depths, no predictors, no pp512, no repetitions, so no variance estimate.
+Scope: `svram-verify`, greedy decode of 256 tokens after a 7-token prompt, `-ub 1`, models warm in the page cache, **3 repetitions** per configuration (mean shown; min-max in `aggregate.json`, spreads are within about 3 %). Decode only: prompt batches with more distinct experts than slots are unsupported in v1. Cache-size x policy only: no prefetch or predictor axes, so this is not the 720-run matrix in `RTX3090_PROTOCOL.md`.
 
-| Cache (GiB) | Q4_K_M LRU / LFU decode t/s | Q4 hit rate | Q8_0 LRU / LFU decode t/s | Q8 hit rate |
+Baselines (same tool, same settings): Q4_K_M full GPU 195-200 t/s, mmap 30 t/s; Q8_0 `--cpu-moe` 22.7-24.4 t/s, mmap 23.9 t/s.
+
+| Cache (GiB) | Q4 LRU / LFU decode t/s | Q4 hit rate | Q8 LRU / LFU decode t/s | Q8 hit rate |
 |---|---|---|---|---|
-| 4  | 18.2 / 19.8 | 71.5 / 73.9 % | 10.1 / 10.1 | 64.8 / 64.4 % |
-| 8  | 27.5 / 27.7 | 81.2 / 81.1 % | 15.5 / 15.5 | 76.5 / 76.5 % |
-| 12 | 28.2 / 28.0 | 81.3 / 81.3 % | 19.8 / 20.1 | 81.0 / 81.2 % |
-| 16 | 28.1 / 28.0 | 81.3 / 81.3 % | 20.4 / 20.6 | 81.6 / 81.6 % |
-| 20 | 28.0 / 27.7 | 81.3 / 81.3 % | failed (CUDA OOM) | - |
+| 4  | 18.3 / 17.1 | 72.1 / 69.3 % | 8.8 / 8.5 | 59.0 / 57.2 % |
+| 8  | 42.4 / 36.9 | 91.3 / 89.4 % | 15.1 / 14.2 | 78.3 / 76.8 % |
+| 12 | 60.9 / 60.6 | 95.1 / 95.0 % | 26.4 / 26.1 | 89.2 / 89.1 % |
+| 16 | 63.0 / 63.1 | 95.4 / 95.4 % | 40.2 / 39.7 | 94.0 / 93.9 % |
+| 20 | 63.5 / 63.0 | 95.4 / 95.4 % | failed (CUDA OOM) | - |
 
-- Hit rate plateaus at about 81 % once the cache holds every expert touched (0 evictions at >= 12 GiB on Q4). The remaining ~19 % are compulsory misses of a cold 32-token run, so this plateau says nothing about steady-state hit rate on long generations.
-- LRU vs LFU differ by less than run-to-run noise would allow us to resolve with one repetition; no policy winner is claimed.
-- Q8_0 at 20 GiB fails with a genuine `cudaMalloc` OOM in `ggml_backend_sched_expert_cache_layout` (20 GiB of slots plus dense/KV/compute buffers exceed 24 GiB). The failures are kept in the manifest and status files, not dropped.
-- Decode is far below full residency on Q4 (28 vs 279 t/s) and, cold, stays slightly below `--cpu-moe` on Q8 even at 16 GiB (20.4 vs 21.6 t/s in the verify run). Warm `llama-bench` tg64 gave cache 24.6 vs `--cpu-moe` 23.1 t/s, a ~6 % edge from a 3-rep run. The cache is not yet a demonstrated win over `--cpu-moe`.
+- **Q8_0 (does not fit in VRAM):** with a 16 GiB cache the cache path decodes at about 40 t/s against 22.7-24.4 t/s for `--cpu-moe`, roughly 1.7x, at a 94 % hit rate. Below 12 GiB it is slower than `--cpu-moe`. `llama-bench` with a 12 GiB cache (24.6 t/s) agrees with the 12 GiB row here (26.4 t/s).
+- **Q4_K_M (fits in VRAM):** the cache plateaus at about 63 t/s, a third of full-GPU speed, with 95 % hits and zero evictions from 12 GiB up. The ceiling is therefore per-step overhead (per-layer routing-id readback and synchronization), not misses. This is an inference from the plateau, not a profiled result.
+- **Policy:** LRU beats LFU when the cache is small (8 GiB Q4: 42.4 vs 36.9 t/s, ranges do not overlap); they are equal once the working set fits.
+- Q8_0 at 20 GiB fails with a genuine `cudaMalloc` OOM (`results/rtx3090/ablations-long/q8/OOM-20480MiB-excerpt.txt`); the failures are in the manifests.
+- **Correctness (256 tokens, `-ub 1`):** the Q4 cache output equals full-GPU resident execution bit for bit (256/256 logits hashes and tokens). CPU-expert paths (Q4 mmap, Q8 `--cpu-moe`) differ from CUDA from step 0 (different kernels), and tokens diverge at step 5 (Q4) / 16 (Q8). Q8 has no GPU-resident reference because it does not fit.
+- **Timer bug:** the first `svram-verify` timings (including the earlier 32-token, 1-rep sweep in `results/rtx3090/ablations/`, `results/rtx3090/verify/` and `SUMMARY.json`) stopped the clock before the GPU finished, inflating GPU-heavy modes (resident showed 279-3600 t/s). Fixed in `src/svram_verify.cpp`. Those older `decode_tps` values are superseded; their hit rates and token/hash results are unaffected. `llama-bench` numbers were never affected.
 
 ## Remaining gaps
 

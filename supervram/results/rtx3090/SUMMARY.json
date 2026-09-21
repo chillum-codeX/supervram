@@ -21,7 +21,16 @@
     "Qwen3-30B-A3B-Q4_K_M": {
       "n_predict": 8,
       "n_ubatch": 8,
-      "tokens": [10423, 86478, 11, 7407, 304, 13622, 13, 11445],
+      "tokens": [
+        10423,
+        86478,
+        11,
+        7407,
+        304,
+        13622,
+        13,
+        11445
+      ],
       "text": " Mount Everest, located in Asia. Its",
       "resident_mmap_tokens_identical": true,
       "resident_cache_tokens_identical": true,
@@ -29,18 +38,35 @@
       "resident_mmap_logits_hashes_identical": false,
       "cache_hit_rate": 0.538,
       "cache_slots_total": 8928,
-      "decode_tps": {"resident": 279.44, "mmap": 29.11, "cache": 16.81}
+      "decode_tps": {
+        "resident": 279.44,
+        "mmap": 29.11,
+        "cache": 16.81
+      }
     },
     "Qwen3-30B-A3B-Q8_0": {
       "n_predict": 8,
       "n_ubatch": 8,
-      "tokens": [10423, 86478, 11, 892, 374, 220, 23, 11],
+      "tokens": [
+        10423,
+        86478,
+        11,
+        892,
+        374,
+        220,
+        23,
+        11
+      ],
       "text": " Mount Everest, which is 8,",
       "cpu_moe_mmap_cache_tokens_identical": true,
       "cpu_moe_cache_logits_hashes_identical": false,
       "cache_hit_rate": 0.534,
       "cache_slots_total": 7632,
-      "decode_tps": {"cpu_moe": 21.62, "mmap": 20.82, "cache": 11.28}
+      "decode_tps": {
+        "cpu_moe": 21.62,
+        "mmap": 20.82,
+        "cache": 11.28
+      }
     }
   },
   "llama_bench": {
@@ -49,7 +75,7 @@
     "q4_resident_pp512_ts": 4272.58,
     "q4_resident_tg128_ts": 171.06,
     "q4_n_cpu_moe_24_pp512_ts": 590.63,
-    "q4_n_cpu_moe_24_tg128_ts": 56.70,
+    "q4_n_cpu_moe_24_tg128_ts": 56.7,
     "q4_mmap_pp512_ts": 340.53,
     "q4_mmap_tg128_ts": 33.77,
     "q4_cache_tg128_ts": 47.09,
@@ -62,5 +88,6 @@
   "cache_layout": {
     "q4_8giB": "144 tensors, 62 slots/tensor, 8253 MiB device",
     "q8_12giB": "144 tensors, 53 slots/tensor, 12308 MiB device"
-  }
+  },
+  "svram_verify_timing_caveat": "decode_tps values from svram-verify in this file (and results/rtx3090/verify, /ablations) were measured before the llama_synchronize timer fix and are inflated for GPU-heavy modes; see results/rtx3090/ablations-long/aggregate.json. llama_bench values are unaffected."
 }

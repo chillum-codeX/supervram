@@ -1,0 +1,5 @@
+# bulky per-run logs (full stdout/stderr); kept locally, summarized by run JSON + manifest.csv
+*.status.json
+manifest.json
+*.err
+*.out

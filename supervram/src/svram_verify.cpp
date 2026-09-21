@@ -178,6 +178,7 @@ int main(int argc, char ** argv) {
         std::fprintf(stderr, "prompt decode failed\n");
         return 1;
     }
+    llama_synchronize(ctx); // llama_decode returns once GPU work is queued; time the completed step
     const double prompt_ms = now_ms() - t_pp0;
 
     for (int step = 0; step < o.n_predict; ++step) {
@@ -201,6 +202,7 @@ int main(int argc, char ** argv) {
             std::fprintf(stderr, "decode failed at step %d\n", step);
             return 1;
         }
+        llama_synchronize(ctx);
         step_ms.push_back(now_ms() - t0);
     }
 

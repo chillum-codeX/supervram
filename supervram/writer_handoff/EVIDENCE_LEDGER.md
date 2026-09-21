@@ -12,7 +12,7 @@
 - Qwen3-30B-A3B Q8_0: greedy 8-token ids identical across `--cpu-moe`, mmap, cache; logits hashes differ (CPU vs CUDA).
 - llama-bench (3 reps): see `results/rtx3090/SUMMARY.json`. Cache decode-only Q4 tg128 47.1 t/s vs mmap 33.8 vs full GPU 171; Q8 cache tg64 24.6 vs cpu-moe/mmap ~23.1.
 
-- Cache-size x policy ablation, 20 runs x 1 rep, 32-token cold decode (`results/rtx3090/ablations/`): hit rate plateaus ~81 % (compulsory misses); LRU/LFU indistinguishable at n=1; Q4 decode 18-28 t/s, Q8 10-20 t/s; Q8 at 20 GiB cache is a real CUDA OOM.
+- Cache-size x policy ablation, 3 reps x 256-token decode (`results/rtx3090/ablations-long/`): Q8_0 with a 16 GiB cache decodes ~40 t/s vs 22.7-24.4 for `--cpu-moe` (94 % hits); Q4_K_M cache plateaus ~63 t/s vs 195-200 full GPU (per-step overhead); LRU >= LFU when cache-constrained; Q4 cache output bit-identical to full-GPU resident. Earlier `svram-verify` decode_tps values were inflated by a timer bug and are superseded.
 
 ## Deterministic synthetic trace replay
 
