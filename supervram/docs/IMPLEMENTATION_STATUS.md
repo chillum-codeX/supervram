@@ -120,6 +120,35 @@ Speed, same cold-start protocol (evicted, direct I/O, 4 GiB RAM cap, 1,536 token
 - **Parity does not improve at equal cached fraction.** Q4_K_M running fully in VRAM is 195-200 t/s, so 41.4 t/s is about 0.21x of the same model's native speed; Q8_0 was about 0.32x of an unmeasured native estimate. Quantizing raises absolute speed and lets more of the model fit; it does not by itself close the ratio while ~45 % of the experts come from a 2.4 GB/s SSD.
 - **Correction:** earlier text said the Q4 cache "plateaus at about 63 t/s ... per-step overhead". That figure was a 256-token average including cache fill and predates the one-sync-per-layer change. Warm, with everything resident, the current build decodes about 106 t/s (mmap path, tokens 512+) to 127 t/s (direct path), i.e. about 0.64x of full-GPU residency (195-200 t/s); the remaining cache-path cost is about 2.7 ms/token.
 
+## Larger model: 43 GiB (46 GB) through the cold SSD path (`results/rtx3090/cold/big46g-*`)
+
+ElasticVRAM notes Experiment 3/8 ask for a model in the 35-48 GB range. No such Qwen3 MoE is on this machine and nothing was downloaded, so a **synthetic** one was built locally: `llama-quantize` from the Q8_0 GGUF with the experts of layers 0-23 stored as F16 (dequantized Q8 values) and layers 24-47 plus all dense weights left as Q8_0 (`Qwen3-30B-A3B-synthetic-F16x24-Q8x24.gguf`, 42.9 GiB). Its size and read pattern match a real model of that size; **its quality is only Q8-level, and it is not a real F16 model**, so use it for throughput and capacity, not quality.
+
+Cold start, direct I/O, 4 GiB RAM cap, 16 GiB GPU cache, `-ub 1`, 1,536 tokens, same prompt as the earlier long runs:
+
+| Model | Size | Cache slots per tensor (of 128) | Hit rate | SSD read per token | Decode t/s | SSD wait |
+|---|---|---|---|---|---|---|
+| Qwen3-30B-A3B Q8_0 | 30.3 GiB | 71 (55 %) | 97.4 % | 50 MB | 31.8 (steady) | 72 % |
+| **synthetic F16x24 + Q8x24** | **42.9 GiB** | **49 (38 %)** | **90.9 %** | **272 MB** | **6.6** (6.1-7.0) | **81 %** (2.2 GB/s) |
+
+- Peak RAM (capped cgroup) 1.69 GiB; only 1.33 GiB of the model file is in the page cache (dense weights). No expert data is held in RAM.
+- Correctness: cache output is bit-identical (64 tokens, tokens and logits hashes) across 8 vs 16 GiB caches and direct vs mmap reads; the text is coherent and factually right. CPU-expert and GPU paths diverge at token 3 (F16 rounding), as with Q8.
+- Going from 30 to 43 GiB with the same 16 GiB cache drops the cached fraction from 55 % to 38 %, misses rise 3.5x and bytes per miss 1.5x, so SSD traffic per token grows 5.4x and decode falls 4.8x. The SSD is saturated (2.2 GB/s) in both cases.
+- Estimated parity (unmeasured; a native card would read about 4.1 GB per token here vs about 3.2 GB for Q8, so roughly 78 t/s): about 0.08x. Parity falls quickly as the model outgrows the cache: about 0.32x at 30 GiB, about 0.08x at 43 GiB.
+- Consequence for the notes' hypothesis: "the active working set fits in VRAM" holds only partly. The routing working set of this model at 16 GiB is well above the cache once the cached fraction drops below about 55 %, so hit rate, not policy or overlap, is what decides throughput.
+
+Measurement fix: `scripts/cold_run.py` sampled the launching session's cgroup (47 GiB) before `systemd-run` moved the process into the capped scope, once producing a bogus peak; it now ignores samples from outside the scope. The 43 GiB run was repeated with the fixed script (6.60 vs 6.61 t/s).
+
+## Drives on this machine
+
+| Device | Model | Link | State | Measured |
+|---|---|---|---|---|
+| nvme0n1 | WD SN550 1 TB (`/home`, `/`, swap) | PCIe 3.0 x4 | mounted ext4 | ~2.4 GB/s for expert-sized O_DIRECT reads |
+| nvme1n1 | Intel SSDPEKNW010T8 1 TB | PCIe 3.0 x4 | not mounted, NTFS (looks like a Windows drive), `root:disk` only | not measured (no read permission without root) |
+| sda | Seagate 2 TB HDD | SATA | NTFS | not tested (rotational) |
+
+There is no PCIe 4 drive here, so the faster-drive test could not be run. The Intel drive could only add bandwidth in parallel; whether it does depends on how both are wired to the CPU. A read-only benchmark (`scripts/ssd_expert_read_bench.py` now accepts block devices and several targets) would answer that, but needs root to open `/dev/nvme1n1`; it was not run.
+
 ## Remaining gaps
 
 - Prompt ubatches that route more distinct experts than `n_slots` return a hard error (observed as llama-bench warmup `res = -3` at `-ub 16`). Use `-ub 1` or a larger cache for decode; prompt processing is not a v1 win.
