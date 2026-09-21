@@ -69,6 +69,8 @@ struct options {
     bool ignore_eos = false;   // --ignore-eos: never stop at an end-of-generation token (throughput tests)
     std::string progress;      // --progress FILE: append a line per prefill chunk
     float bias = 0.0f;         // --bias F: cache-aware routing (lossy)
+    bool bias_mul = false;     // --bias-mul: multiplicative bias (relative margin)
+    bool tokenize_only = false; // --tokenize-only: with --dump-prompt-tokens, stop after writing the tokens
     std::string dump_prompt;   // --dump-prompt-tokens FILE: write the tokenized prompt (ids, space separated)
     std::string warm;          // --warm FILE: fill the VRAM expert slots from a usage profile after the prompt, before decoding
     float temp = 0.0f;         // --temp F (0 = greedy); with --top-k/--top-p/--repeat-penalty/--seed: sampled output that does not loop
@@ -114,7 +116,9 @@ bool parse(int argc, char ** argv, options & o) {
         else if (a == "--prompt-suffix") { if (!next(o.prompt_suffix)) return false; }
         else if (a == "--ignore-eos") { o.ignore_eos = true; }
         else if (a == "--progress") { if (!next(o.progress)) return false; }
+        else if (a == "--bias-mul") { o.bias_mul = true; }
         else if (a == "--bias") { if (!next(v)) return false; o.bias = (float) std::atof(v.c_str()); }
+        else if (a == "--tokenize-only") { o.tokenize_only = true; }
         else if (a == "--dump-prompt-tokens") { if (!next(o.dump_prompt)) return false; }
         else if (a == "--warm") { if (!next(o.warm)) return false; }
         else if (a == "--temp") { if (!next(v)) return false; o.temp = (float) std::atof(v.c_str()); }
@@ -207,6 +211,7 @@ int main(int argc, char ** argv) {
     if (o.storage == "cache" || o.zerocopy) {
         cparams.moe_expert_zerocopy = o.zerocopy ? 1 : 0;
         cparams.moe_expert_cache_bias = o.bias;
+        cparams.moe_expert_cache_bias_mul = o.bias_mul ? 1 : 0;
         cparams.moe_expert_cache_bytes = (size_t) o.cache_mib << 20;
         cparams.moe_expert_cache_policy = o.cache_policy == "lfu" ? LLAMA_MOE_EXPERT_CACHE_POLICY_LFU : LLAMA_MOE_EXPERT_CACHE_POLICY_LRU;
         cparams.moe_expert_direct_io = o.direct_io ? 1 : 0;
@@ -255,6 +260,9 @@ int main(int argc, char ** argv) {
     if (!o.dump_prompt.empty()) {
         std::ofstream dp(o.dump_prompt);
         for (size_t i = 0; i < tokens.size(); ++i) dp << (i ? " " : "") << tokens[i];
+    }
+    if (o.tokenize_only) {
+        return 0;
     }
     if (n_prompt + o.n_predict > o.n_ctx) {
         std::fprintf(stderr, "warning: prompt (%d) + n_predict (%d) exceeds n_ctx (%d)\n", n_prompt, o.n_predict, o.n_ctx);

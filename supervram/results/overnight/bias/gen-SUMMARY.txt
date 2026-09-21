@@ -1,0 +1,12 @@
+GEN docs bias 0: unbiased-model log-prob -1.6117 | repeated 8-grams 4.1% | distinct 2-grams 83.1%
+GEN docs bias 0.005: unbiased-model log-prob -1.4434 | repeated 8-grams 0.0% | distinct 2-grams 89.2%
+GEN docs bias 0.01: unbiased-model log-prob -1.5459 | repeated 8-grams 0.8% | distinct 2-grams 85.9%
+GEN docs bias 0.02: unbiased-model log-prob -1.3244 | repeated 8-grams 7.2% | distinct 2-grams 79.0%
+GEN code bias 0: unbiased-model log-prob -1.6974 | repeated 8-grams 4.1% | distinct 2-grams 80.2%
+GEN code bias 0.005: unbiased-model log-prob -1.6632 | repeated 8-grams 1.2% | distinct 2-grams 84.6%
+GEN code bias 0.01: unbiased-model log-prob -1.3713 | repeated 8-grams 0.7% | distinct 2-grams 82.7%
+GEN code bias 0.02: unbiased-model log-prob -1.6881 | repeated 8-grams 0.5% | distinct 2-grams 82.8%
+GEN pydoc bias 0: unbiased-model log-prob -1.8613 | repeated 8-grams 0.0% | distinct 2-grams 94.9%
+GEN pydoc bias 0.005: unbiased-model log-prob -1.8997 | repeated 8-grams 0.1% | distinct 2-grams 93.0%
+GEN pydoc bias 0.01: unbiased-model log-prob -2.0434 | repeated 8-grams 0.0% | distinct 2-grams 92.7%
+GEN pydoc bias 0.02: unbiased-model log-prob -1.9169 | repeated 8-grams 2.8% | distinct 2-grams 89.2%

@@ -1,0 +1,116 @@
+warm_start_ms=1791 (before prefill)
+mode=resident ngl=999 cpu_moe=0 n_cpu_moe=0 cache_mib=14336 prompt_tokens=32000 generated=1024 load_ms=2380 prompt_ms=23215.9 decode_tps=42.82
+cache_stats accesses=392896 hits=383271 misses=9625 evictions=6822 hit_rate=97.6 bytes_h2d=34202124288 n_slots=8928 host_ms=98.7
+direct_io_stats bytes_ssd=0 io_ms=0.0
+tokens=18,13,17,66818,21,19,2630,436,28048,1993,89,271,2195,4139,279,4583,3946,2319,504,271,262,3703,1110,36651,3057,79387,3621,905,76098,43996,14,2589,54883,51747,3140,84197,30,4366,28,17,13,18,13,17,271,1806,9964,14,3850,277,279,18132,1119,271,565,19242,279,5535,27228,6113,26623,12062,14069,271,49244,990,279,50981,1495,2319,320,98868,369,20694,8,504,271,262,3703,1110,5204,905,2687,6861,55419,40224,8819,7530,327,6113,35478,58187,33630,5457,21,13,21,13,15,13,15,7530,327,6113,35478,8273,21,13,21,13,15,13,15,66818,21,19,2630,436,28048,1993,89,271,2195,4139,279,4583,3946,2319,504,271,262,3703,1110,36651,3057,79387,3621,905,76098,43996,14,20335,6113,84197,30,4366,28,21,13,21,13,15,13,15,271,1806,9964,14,3850,277,279,18132,1119,271,565,19242,279,5535,2410,54883,22670,5579,271,11377,279,5579,504,271,262,3703,1110,36651,3057,79387,3621,905,76098,43996,14,13164,2646,6348,1557,5469,271,6025,279,27498,13713,323,34592,4486,1281,2704,429,279,22670,3671,4933,705,304,279,1565,6985,10567,63,320,7995,364,7020,2410,17425,63,692,565,19242,279,5535,61402,451,6325,5579,271,11377,279,5579,504,271,262,3703,1110,36651,3057,79387,3621,905,76098,43996,14,31029,3621,2039,8065,271,6025,279,27498,13713,323,34592,4486,1281,2704,429,279,27228,6113,451,6325,3671,4933,705,304,279,1565,6985,10567,3989,7,7995,1565,8813,4176,8603,1087,63,3593,2679,279,3671,374,537,2500,498,646,1430,26632,678,6813,28654,80,14271,68622,4385,76,23,18,23,15,7808,1565,80,14271,68622,4385,76,23,18,23,15,9927,32881,20083,624,785,6813,525,27432,1119,271,565,18567,451,6325,5579,1273,32628,271,5501,5185,429,279,2701,7354,525,2567,1172,369,279,27228,6113,451,6325,624,2589,54883,22670,19163,1558,537,1373,1273,32628,382,14374,18567,7032,622,287,271,10253,1565,91490,3587,63,311,7283,1273,27953,287,271,3759,76108,15004,1231,1184,311,387,8386,369,419,311,975,692,8078,2704,1273,27953,287,374,8970,1283,34592,271,2461,5107,3565,1490,5100,8474,518,271,256,3703,1110,12675,27619,905,13606,25682,75349,2832,37750,86647,56951,51257,16839,7752,287,88289,12,21138,48689,271,14374,4230,4345,15748,271,785,7375,2567,369,419,10324,525,2500,438,949,315,5515,26623,323,5515,14577,20951,892,1265,387,198,49573,438,949,315,279,10292,20185,18563,624,6865,525,11136,7407,518,271,5801,2007,220,16,15,13,15,13,17,21,16,15,15,13,15,448,4396,2319,3593,1249,1855,4345,656,92553,15748,1598,279,2701,11293,320,49898,504,5439,476,2355,74862,7731,5801,2007,1565,5050,1474,63,448,697,5934,3593,2212,419,15748,311,1565,1282,27145,18854,50210,67315,63,323,1565,1282,27145,71614,63,10533,624,1986,646,387,2814,1667,1565,12246,17771,63,31402,10567,5392,624,5979,4205,389,279,15748,3553,11,3293,1565,2403,46471,1464,13213,63,323,1795,279,50932,311,1159,279,15748,504,279,198,47,16381,1034,498,3465,3403,382,2461,5107,3565,1490,5100,8474,518,271,262,3703,1110,12675,27619,905,13606,25682,75349,2832,37750,86647,56951,31114,16741,4686,16839,27953,287,271,8078,2704,311,3581,279,393,16381,1034,11,498,686,1184,432,369,279,1936,15966,624,5501,5185,429,279,1852,15748,646,387,1483,369,15971,894,1372,315,22111,382,565,7854,27228,6113,19163,448,8499,472,4239,27132,20186,271,785,8084,27228,6113,19163,1936,10324,369,5515,389,82055,374,279,1852,438,369,1008,15409,624,11209,11,5107,5003,525,2567,369,23163,323,15971,472,4239,55158,20186,382,12522,279,1936,374,4583,472,4239,27132,20186,686,387,10275,1075,419,271,785,659,4616,1034,11,279,11957,323,6169,15748,13713,646,387,23933,448,271,29,508,0,98743,921,29,1096,1936,9705,374,3151,1172,311,431,27629,19625,3089,580,21780,51,5627,33545,382,565,7854,93676,7208,23490,320,1958,435,3427,85,21,19,692,16,13,31166,13474,8819,1752,431,1637,19589,198,5817,88141,57357,3703,1110,5204,905,26734,580,18712,11476,75027,8819,58187,33630,5457,16,13,17,13,19,26734,580,18712,40224,8819,46375,2371,55576,6558,23,21,62,21,19,8273,16,13,17,13,19,28048,1993,89,198,5817,58629,17,13,7854,198,38214,374,279,1936,5316,25,432,7460,34888,431,27629,19625,4621,11221,369,30803,13,29279,279,1565,22254,2668,29741,2568,1637,19589,21,19,17747,1706,2716,952,63,28672,2999,374,8970,13,576,5023,7248,25262,2319,374,1565,49,1637,19589,21,19,17747,1706,2716,952,62,5660,16,63,323,1565,49,1637,19589,21,19,17747,1706,2716,952,62,5660,17,7808,12159,311,279,1565,49,1637,19589,21,19,17747,1706,2716,952,62,5660,36436,63,28672,2999,13,45631,32383,525,4512,304,279,1565,81,3427,85,21,19,22238,580,18712,46375,85716,2371,638,520,6927,63,1034,13,5209,5978,498,614,10275,279,431,27629,19625,19415,323,738,279,4573,3890,4566,1565,1533,431,1637,19589,16197,7944,1165,21732,80910,2638,5541,382,565,43120,198,2610,646,990,1207,83606,311,2736,78841,389,2477,10911,27629,19625,77235,382,16,13,8577,1207,83606,198,5817,88141,57357,3703,1110,16019,8572,580,18712,905,26734,580,18712,12,2143,33894,33063,4437,67,4886,51608,33063,8273,15,13,15,13,16,19,28048,20963,198
+logits_hash_step0=4ddfac0c0253e024
+text=3.2-arm64-wos.tar.xz
+
+Or download the complete official version from
+
+    https://softwarecenter.qualcomm.com/catalog/item/Adreno_OpenCL_SDK?version=2.3.2
+
+Unzip/untar the archive into
+
+## Install the latest Hexagon SDK Community Edition
+
+Either use the trimmed down version (optimized for CI) from
+
+    https://github.com/snapdragon-toolchain/hexagon-sdk/releases/download/v6.6.0.0/hexagon-sdk-v6.6.0.0-arm64-wos.tar.xz
+
+Or download the complete official version from
+
+    https://softwarecenter.qualcomm.com/catalog/item/Hexagon_SDK?version=6.6.0.0
+
+Unzip/untar the archive into
+
+## Install the latest Adreno GPU driver
+
+Download the driver from
+
+    https://softwarecenter.qualcomm.com/catalog/item/Windows_Graphics_Driver
+
+After the automated installation and reboot please make sure that the GPU device shows up in the `Device Manager` (under 'Display Adapters`)
+
+## Install the latest Qualcomm NPU driver
+
+Download the driver from
+
+    https://softwarecenter.qualcomm.com/catalog/item/Qualcomm_HND
+
+After the automated installation and reboot please make sure that the Hexagon NPU device shows up in the `Device Manager`
+(under `Neural Processors`).
+
+If the device is not available you can try installing all components (`qcnspmcdm8380`, `qcnspmcdm8380_ext`) manually.
+The components are extracted into
+
+## Enable NPU driver test signatures
+
+Please note that the following steps are required only for the Hexagon NPU.
+Adreno GPU backend does not require test signatures.
+
+### Enable testsigning
+
+Use `bcdedit` to enable test-signing
+
+(Secure Boot may need to be disabled for this to work)
+
+Make sure test-signing is enabled after reboot
+
+For additional details see Microsoft guide at
+
+   https://learn.microsoft.com/en-us/windows-hardware/drivers/install/the-testsigning-boot-configuration-option
+
+### Create personal certificate
+
+The tools required for this procedure are available as part of Windows SDK and Windows Driver Kit which should be
+installed as part of the MS Visual Studio.
+They are typically located at
+
+(replace 10.0.26100.0 with correct version).
+
+To create personal self-signed certificate run the following commands (either from cmd or power-shell):
+
+(replace `MyUser` with your username).
+
+Add this certificate to `Trusted Root Certification Authorities` and `Trusted Publishers` stores.
+This can be done using `certlm` Certificate Manager tool.
+Right click on the certificate store, select `All Tasks -> Import` and follow the prompts to import the certificate from the
+PFX file you created above.
+
+For additional details see Microsoft guide at
+
+    https://learn.microsoft.com/en-us/windows-hardware/drivers/install/introduction-to-test-signing
+
+Make sure to save the PFX file, you will need it for the build procedures.
+Please note that the same certificate can be used for signing any number of builds.
+
+## Build Hexagon backend with signed HTP ops libraries
+
+The overall Hexagon backend build procedure for Windows on Snapdragon is the same as for other platforms.
+However, additional settings are required for generating and signing HTP Ops libraries.
+
+Once the build is complete HTP ops libraries will be installed like this
+
+The .cat file, the signature and proper certificate installation can be verified with
+
+> [!IMPORTANT]
+> This build documentation is specific only to RISC-V SpacemiT SOCs.
+
+## Build llama.cpp locally (for riscv64)
+
+1. Prepare Toolchain For RISCV
+~~~
+wget https://github.com/spacemit-com/toolchain/releases/download/v1.2.4/spacemit-toolchain-linux-glibc-x86_64-v1.2.4.tar.xz
+~~~
+
+2. Build
+Below is the build script: it requires utilizing RISC-V vector instructions for acceleration. Ensure the `GGML_CPU_RISCV64_SPACEMIT` compilation option is enabled. The currently supported optimization version is `RISCV64_SPACEMIT_IME1` and `RISCV64_SPACEMIT_IME2`, corresponding to the `RISCV64_SPACEMIT_IME_SPEC` compilation option. Compiler configurations are defined in the `riscv64-spacemit-linux-gnu-gcc.cmake` file. Please ensure you have installed the RISC-V compiler and set the environment variable via `export RISCV_ROOT_PATH={your_compiler_path}`.
+
+## Simulation
+You can use QEMU to perform emulation on non-RISC-V architectures.
+
+1. Download QEMU
+~~~
+wget https://archive.spacemit.com/spacemit-ai/qemu/jdsk-qemu-v0.0.14.tar.gz
+

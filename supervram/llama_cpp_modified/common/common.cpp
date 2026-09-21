@@ -1756,6 +1756,7 @@ struct llama_context_params common_context_params_to_llama(const common_params &
     cparams.moe_expert_trace        = params.moe_expert_trace.empty() ? nullptr : params.moe_expert_trace.c_str();
     cparams.moe_expert_zerocopy     = params.moe_expert_zerocopy ? 1 : 0;
     cparams.moe_expert_cache_bias   = params.moe_expert_cache_bias;
+    cparams.moe_expert_cache_bias_mul = params.moe_expert_cache_bias_mul ? 1 : 0;
     if (params.moe_expert_storage == LLAMA_MOE_EXPERT_STORAGE_CACHE && cparams.moe_expert_cache_bytes == 0) {
         cparams.moe_expert_cache_bytes = 8ull << 30;
     }

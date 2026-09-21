@@ -190,8 +190,8 @@ public:
 // selection only (the mixing weights still come from the unbiased router probabilities)
 class llm_graph_input_moe_bias : public llm_graph_input_i {
 public:
-    llm_graph_input_moe_bias(ggml_backend_sched_t sched, float beta, int64_t n_expert, int64_t n_layer)
-        : sched(sched), beta(beta), n_expert(n_expert), n_layer(n_layer) {}
+    llm_graph_input_moe_bias(ggml_backend_sched_t sched, float beta, bool mul, int64_t n_expert, int64_t n_layer)
+        : sched(sched), beta(beta), mul(mul), n_expert(n_expert), n_layer(n_layer) {}
     virtual ~llm_graph_input_moe_bias() = default;
 
     void set_input(const llama_ubatch * ubatch) override;
@@ -201,6 +201,7 @@ public:
 
     ggml_backend_sched_t sched;
     const float   beta;
+    const bool    mul;   // multiplicative: the bias tensor holds 1 + beta for resident experts and 1 otherwise
     const int64_t n_expert;
     const int64_t n_layer;
 };

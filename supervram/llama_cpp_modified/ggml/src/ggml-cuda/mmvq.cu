@@ -580,6 +580,11 @@ static constexpr __host__ __device__ int calc_rows_per_block(int ncols_dst, int 
     return 1;
 }
 
+// L2 prefetch for the zero-copy expert tier (weights read from pinned host RAM over PCIe)
+static __device__ __forceinline__ void mmvq_zc_prefetch(const void * p) {
+    asm volatile("prefetch.global.L2 [%0];" :: "l"(p));
+}
+
 template <ggml_type type, int ncols_dst, bool has_fusion, bool small_k = false, bool halve_iters = false>
 __launch_bounds__(calc_nwarps(type, ncols_dst, get_device_table_id(), small_k, halve_iters)*ggml_cuda_get_physical_warp_size(), 1)
 static __global__ void mul_mat_vec_q(
@@ -733,6 +738,27 @@ static __global__ void mul_mat_vec_q(
             }
         }
 #endif
+
+        // zero-copy expert tier: the weights may sit in pinned host RAM (read over PCIe). Ask for upcoming blocks early so many
+        // PCIe requests are in flight; this hides the read latency that the narrow 2-byte loads of small quant blocks cannot.
+        if (per_expert_ptr) {
+#ifndef MMVQ_ZC_PF_DIST
+#define MMVQ_ZC_PF_DIST 8
+#endif
+            const int kbx_pf = kbx + MMVQ_ZC_PF_DIST*blocks_per_iter;
+            if (kbx_pf < blocks_per_row_x) {
+#pragma unroll
+                for (int i = 0; i < rows_per_cuda_block; ++i) {
+                    const size_t off_pf = (size_t)(kbx_offset + i*stride_row_x + kbx_pf) * ggml_cuda_type_traits<type>::bs;
+                    mmvq_zc_prefetch((const char *) vx + off_pf);
+                    if constexpr (has_fusion) {
+                        if (use_gate) {
+                            mmvq_zc_prefetch((const char *) vgate + off_pf);
+                        }
+                    }
+                }
+            }
+        }
 
 #pragma unroll
         for (int j = 0; j < ncols_dst; ++j) {

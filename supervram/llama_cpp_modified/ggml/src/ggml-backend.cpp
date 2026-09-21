@@ -23,6 +23,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <map>
+#include <thread>
+#include <condition_variable>
 #include <vector>
 #include <string>
 #include <mutex>
@@ -951,6 +953,14 @@ struct ggml_backend_sched_expert_cache {
     std::vector<int64_t>  shadow;               // host copy of the pointer tables
     std::vector<uint32_t> counts, prev_counts;
     ggml_backend_t copy_backend = nullptr;      // second stream: background promotion copies
+    // helper thread that enqueues the promotion copies (a CUDA copy call can block for as long as the copy engine queue is full)
+    struct ggml_promote_job { struct ggml_tensor * dst; const void * src; size_t off; size_t size; };
+    std::thread              worker;
+    std::mutex               wmtx;
+    std::condition_variable  wcv, wcv_idle;
+    std::vector<ggml_promote_job> wjobs;
+    bool                     wbusy = false;
+    bool                     wstop = false;
     struct ggml_tensor * xfer_src = nullptr;    // descriptors for device-to-device slot copies (data pointers are set per copy)
     struct ggml_tensor * xfer_dst = nullptr;
     double   prof_ms[8]     = {0};              // SVRAM_PROMOTE_PROFILE: time per promotion-step section
@@ -980,6 +990,14 @@ struct ggml_backend_sched_expert_cache {
 #endif
 
     ~ggml_backend_sched_expert_cache() {
+        if (worker.joinable()) {
+            {
+                std::lock_guard<std::mutex> lock(wmtx);
+                wstop = true;
+            }
+            wcv.notify_all();
+            worker.join();
+        }
         if (copy_backend) {
             ggml_backend_free(copy_backend);
         }
@@ -1267,6 +1285,8 @@ static void ggml_backend_sched_expert_cache_ctl_init(ggml_backend_sched_t sched)
     cache->debug_sync = getenv("SVRAM_PROMOTE_SYNC") != nullptr;
 }
 
+static void ggml_backend_sched_expert_cache_wait_idle(struct ggml_backend_sched_expert_cache * cache);
+
 // zero-copy tier warm start: fill the VRAM slots from a usage profile ("<layer> <expert> <weight>" per line) so the first
 // tokens already hit. Returns the time in ms, or -1 on failure.
 double ggml_backend_sched_expert_cache_warm(ggml_backend_sched_t sched, const char * path) {
@@ -1303,6 +1323,7 @@ double ggml_backend_sched_expert_cache_warm(ggml_backend_sched_t sched, const ch
         }
     }
     // start from a clean state: finish copies that are still in flight, forget pending promotions, point every expert at its host copy
+    ggml_backend_sched_expert_cache_wait_idle(cache);
     ggml_backend_synchronize(cache->copy_backend);
     cache->pending.clear();
     for (auto & kv : cache->layers) {
@@ -1370,7 +1391,24 @@ double ggml_backend_sched_expert_cache_warm(ggml_backend_sched_t sched, const ch
 void ggml_backend_sched_expert_cache_fill_bias(ggml_backend_sched_t sched, float beta, float * out, int n_layer, int n_expert) {
     GGML_ASSERT(sched);
     struct ggml_backend_sched_expert_cache * cache = sched->expert_cache;
-    if (cache == nullptr || !cache->zero_copy) {
+    if (cache == nullptr) {
+        return;
+    }
+    if (!cache->zero_copy) {
+        // classic slot cache (misses are read from RAM or the SSD): the down-projection weight of each layer carries the residency
+        for (auto & it : cache->tensors) {
+            const ggml_backend_sched_expert_tensor & et = it.second;
+            int layer = -1;
+            sscanf(et.weight->name, "blk.%d.", &layer);
+            if (layer < 0 || layer >= n_layer || strstr(et.weight->name, "down_exps") == nullptr) {
+                continue;
+            }
+            for (int e = 0; e < n_expert && e < (int) et.slot_of_expert.size(); e++) {
+                if (et.slot_of_expert[e] >= 0) {
+                    out[(size_t) layer * n_expert + e] = beta;
+                }
+            }
+        }
         return;
     }
     for (auto & kv : cache->layers) {
@@ -2802,6 +2840,56 @@ static bool ggml_backend_sched_expert_cache_copy_resident(ggml_backend_sched_t s
     return true;
 }
 
+// promotion copies: enqueue them from a helper thread so the token loop never waits on the CUDA copy queue
+static void ggml_backend_sched_expert_cache_worker_loop(struct ggml_backend_sched_expert_cache * cache) {
+    for (;;) {
+        std::vector<ggml_backend_sched_expert_cache::ggml_promote_job> jobs;
+        {
+            std::unique_lock<std::mutex> lock(cache->wmtx);
+            cache->wcv.wait(lock, [&] { return cache->wstop || !cache->wjobs.empty(); });
+            if (cache->wstop) {
+                return;
+            }
+            jobs.swap(cache->wjobs);
+            cache->wbusy = true;
+        }
+        for (const auto & j : jobs) {
+            ggml_backend_tensor_set_async(cache->copy_backend, j.dst, j.src, j.off, j.size);
+        }
+        ggml_backend_synchronize(cache->copy_backend); // the copies are complete when the worker reports idle
+        {
+            std::lock_guard<std::mutex> lock(cache->wmtx);
+            cache->wbusy = false;
+        }
+        cache->wcv_idle.notify_all();
+    }
+}
+
+static void ggml_backend_sched_expert_cache_submit(struct ggml_backend_sched_expert_cache * cache, std::vector<ggml_backend_sched_expert_cache::ggml_promote_job> && jobs) {
+    if (jobs.empty()) {
+        return;
+    }
+    if (!cache->worker.joinable()) {
+        cache->worker = std::thread(ggml_backend_sched_expert_cache_worker_loop, cache);
+    }
+    {
+        std::lock_guard<std::mutex> lock(cache->wmtx);
+        for (auto & j : jobs) {
+            cache->wjobs.push_back(j);
+        }
+    }
+    cache->wcv.notify_one();
+}
+
+// wait until every submitted copy has been enqueued and has completed
+static void ggml_backend_sched_expert_cache_wait_idle(struct ggml_backend_sched_expert_cache * cache) {
+    if (!cache->worker.joinable()) {
+        return;
+    }
+    std::unique_lock<std::mutex> lock(cache->wmtx);
+    cache->wcv_idle.wait(lock, [&] { return cache->wjobs.empty() && !cache->wbusy; });
+}
+
 // zero-copy tier, once per token boundary (the previous graph is complete, the next one is not launched yet):
 // 1. read the use counters the kernels incremented, 2. commit last boundary's copies (flip their table entries to the VRAM
 // slots), 3. copy the most used experts that were served from RAM into VRAM slots on a second stream, so the copies overlap
@@ -2878,7 +2966,7 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched) 
     // 2. commit the copies issued at the previous boundary
     bool table_dirty = false;
     if (!cache->pending.empty()) {
-        ggml_backend_synchronize(cache->copy_backend);
+        ggml_backend_sched_expert_cache_wait_idle(cache);
         for (const auto & pr : cache->pending) {
             auto & L = cache->layers[pr.layer];
             for (int k = 0; k < 3; k++) {
@@ -2921,6 +3009,7 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched) 
         return a.used != b.used ? a.used > b.used : (a.layer != b.layer ? a.layer < b.layer : a.expert < b.expert);
     });
     int n_promoted = 0;
+    std::vector<ggml_backend_sched_expert_cache::ggml_promote_job> jobs;
     for (const cand & c : cands) {
         if (n_promoted >= cache->max_promote) {
             break;
@@ -2972,8 +3061,8 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched) 
         for (int k = 0; k < 3; k++) {
             ggml_backend_sched_expert_tensor * et = L[k];
             if (et != nullptr && et->slots_persist != nullptr) {
-                ggml_backend_tensor_set_async(cache->copy_backend, et->slots_persist,
-                    (const uint8_t *) et->weight->data + (size_t) c.expert * et->expert_size, (size_t) victim * et->expert_size, et->expert_size);
+                jobs.push_back({ et->slots_persist, (const uint8_t *) et->weight->data + (size_t) c.expert * et->expert_size,
+                    (size_t) victim * et->expert_size, et->expert_size });
                 cache->stats.bytes_h2d += et->expert_size;
             }
         }
@@ -2995,13 +3084,14 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched) 
             }
         }
     }
+    ggml_backend_sched_expert_cache_submit(cache, std::move(jobs));
     tp[4] = ggml_time_us();
     // 4. push the pointer tables (stream-ordered before the next graph)
     if (table_dirty) {
         ggml_backend_tensor_set_async(main, cache->ctl_ptr_view, cache->shadow.data(), 0, cache->ctl_ptr_bytes);
     }
     if (cache->debug_sync) {
-        ggml_backend_synchronize(cache->copy_backend);
+        ggml_backend_sched_expert_cache_wait_idle(cache);
         ggml_backend_synchronize(main);
     }
     tp[5] = ggml_time_us();

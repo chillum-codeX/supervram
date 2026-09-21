@@ -1509,6 +1509,11 @@ void llm_graph_input_moe_bias::set_input(const llama_ubatch * ubatch) {
     GGML_UNUSED(ubatch);
     std::vector<float> data((size_t) n_expert * (size_t) n_layer, 0.0f);
     ggml_backend_sched_expert_cache_fill_bias(sched, beta, data.data(), (int) n_layer, (int) n_expert);
+    if (mul) {
+        for (float & x : data) {
+            x += 1.0f;
+        }
+    }
     ggml_backend_tensor_set(bias, data.data(), 0, data.size() * sizeof(float));
 }
 
@@ -1518,7 +1523,7 @@ ggml_tensor * llm_graph_context::build_moe_cache_bias(int il) const {
     }
     llm_graph_input_moe_bias * inp = const_cast<llm_graph_context *>(this)->inp_moe_bias;
     if (inp == nullptr) {
-        auto ptr = std::make_unique<llm_graph_input_moe_bias>(sched, cparams.moe_expert_cache_bias, hparams.n_expert, hparams.n_layer());
+        auto ptr = std::make_unique<llm_graph_input_moe_bias>(sched, cparams.moe_expert_cache_bias, cparams.moe_expert_cache_bias_mul != 0, hparams.n_expert, hparams.n_layer());
         inp = ptr.get();
         inp->bias = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, hparams.n_expert, hparams.n_layer());
         ggml_set_input(inp->bias);
@@ -2087,7 +2092,8 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
     // leave probs unbiased as it's later used to get expert weights
     ggml_tensor * selection_probs = probs;
     if (exp_probs_b != nullptr) {
-        selection_probs = ggml_add(ctx0, probs, exp_probs_b);
+        const bool cache_mul = inp_moe_bias != nullptr && inp_moe_bias->mul && exp_probs_b->view_src == inp_moe_bias->bias;
+        selection_probs = cache_mul ? ggml_mul(ctx0, probs, exp_probs_b) : ggml_add(ctx0, probs, exp_probs_b);
         cb(selection_probs, "ffn_moe_probs_biased", il);
     }
 

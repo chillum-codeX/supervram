@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"; MODELS="${SUPERVRAM_MODELS:-$HOME/mode
 CORPUS="${LONGCTX_CORPUS:-/tmp/claude-1000/dio/corpus-32k.txt}"
 V="$ROOT/build/svram-verify"; M="${BIAS_MODEL:-$MODELS/Qwen3-30B-A3B-Q8_0.gguf}"
 # tokenize once: the first 2560 corpus tokens; context = first 512, forced text = the next 2048
-"$V" --model "$M" --storage resident --n-predict 1 --n-ctx 4096 --prompt-file "$CORPUS" --prompt-tokens 2560 --dump-prompt-tokens "$OUT/corpus-tokens.txt" --n-ubatch 512 --n-batch 512 > /dev/null 2>&1 || true
+"$V" --model "$MODELS/Qwen3-30B-A3B-Q4_K_M.gguf" --storage resident --n-predict 1 --n-ctx 4096 --prompt-file "$CORPUS" --prompt-tokens 2560 --dump-prompt-tokens "$OUT/corpus-tokens.txt" --n-ubatch 512 --n-batch 512 > /dev/null 2>&1 || true
 python3 - "$OUT" <<'PY'
 import sys
 t = open(sys.argv[1] + "/corpus-tokens.txt").read().split()

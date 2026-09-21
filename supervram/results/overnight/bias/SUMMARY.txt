@@ -1,0 +1,5 @@
+bias 0: mean logprob of the true text -2.3484 (bias 0: -2.3484), perplexity x1.0000, top-1 agreement with bias 0 100.0%, matches the true next token 52.1% (bias 0: 52.1%), cache hit rate 94.6%, decode 42.1 t/s
+bias 0.005: mean logprob of the true text -2.3453 (bias 0: -2.3484), perplexity x0.9970, top-1 agreement with bias 0 96.7%, matches the true next token 52.1% (bias 0: 52.1%), cache hit rate 97.0%, decode 51.8 t/s
+bias 0.01: mean logprob of the true text -2.3422 (bias 0: -2.3484), perplexity x0.9939, top-1 agreement with bias 0 96.3%, matches the true next token 52.1% (bias 0: 52.1%), cache hit rate 98.0%, decode 59.8 t/s
+bias 0.02: mean logprob of the true text -2.3467 (bias 0: -2.3484), perplexity x0.9983, top-1 agreement with bias 0 94.7%, matches the true next token 51.9% (bias 0: 52.1%), cache hit rate 98.9%, decode 70.2 t/s
+bias 0.05: mean logprob of the true text -2.3694 (bias 0: -2.3484), perplexity x1.0213, top-1 agreement with bias 0 91.6%, matches the true next token 52.1% (bias 0: 52.1%), cache hit rate 99.7%, decode 84.7 t/s

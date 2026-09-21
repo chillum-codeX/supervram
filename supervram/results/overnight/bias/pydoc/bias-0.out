@@ -1,0 +1,207 @@
+warm_start_ms=1800 (before prefill)
+mode=resident ngl=999 cpu_moe=0 n_cpu_moe=0 cache_mib=14336 prompt_tokens=512 generated=2048 load_ms=2474 prompt_ms=1540.1 decode_tps=46.29
+cache_stats accesses=786056 hits=750627 misses=35429 evictions=26163 hit_rate=95.5 bytes_h2d=131168305152 n_slots=8928 host_ms=750.5
+direct_io_stats bytes_ssd=0 io_ms=0.0
+tokens=1633,311,264,2169,1140,11,45524,43810,304,198,41064,38322,476,9334,38929,11,374,52847,4512,438,11017,382,9,1416,279,2169,1140,374,264,3175,2169,448,902,27748,31683,345,220,45524,304,73975,11,279,1633,374,12607,311,429,2169,382,9,18804,1447,220,353,1416,279,2169,1140,5610,825,2169,81495,448,458,33937,3187,345,262,2598,264,1036,11870,1151,854,2169,25,576,1633,1969,387,458,50834,448,518,198,262,3245,438,1657,3589,438,1052,525,11550,304,279,2169,1140,11,27283,198,262,825,13,220,576,1156,3589,315,279,50834,525,12607,11,504,2115,311,198,262,1290,11,311,279,11550,1573,279,58235,2169,13,220,576,1590,3589,198,262,315,279,50834,525,12607,311,279,11550,1283,279,58235,198,262,2169,13,220,362,1140,315,279,9664,3589,304,279,50834,374,1221,198,262,12607,311,279,58235,2169,320,1782,1140,646,387,4287,3593,220,353,18804,25,576,1633,1969,387,458,50834,448,279,1852,1372,315,3589,198,262,438,1052,525,11550,304,279,2169,1140,11,323,279,3589,525,198,262,12607,11,504,2115,311,1290,11,311,279,12159,11550,382,41613,315,458,1633,311,264,3175,2169,374,52847,4512,438,198,18559,82,382,9,1416,279,2169,374,458,12816,320,606,7731,220,353,1416,279,829,1558,537,12170,304,264,330,9752,1,476,330,6280,2438,1,5114,198,262,304,279,1482,2038,2504,25,279,829,374,6822,311,279,1633,304,279,198,262,1482,2205,4473,382,220,353,18214,25,279,829,374,6822,311,279,1633,304,279,3644,4473,198,262,476,279,15955,4473,10838,553,330,6280,2438,497,15576,382,220,576,829,374,41532,421,432,572,2669,6822,13,220,1096,1231,5240,279,198,220,5785,1760,369,279,1633,8597,6822,311,279,829,311,5545,198,220,7168,11,14381,279,1633,311,387,3484,39463,323,1181,45999,320,333,432,198,220,702,825,8,311,387,2598,382,9,1416,279,2169,374,458,7035,5785,25,576,6028,7493,304,198,220,279,5785,374,25070,13,220,1084,1265,7540,458,1633,448,198,220,89447,8201,26,421,419,374,537,279,1142,11,330,80076,1,374,198,220,9226,13,220,2938,1633,374,1221,4588,311,9793,279,12607,1633,311,198,220,279,2661,7035,26,421,432,4157,2736,279,16319,11,432,24886,198,220,458,4683,320,42966,714,537,14312,330,3907,1454,80984,220,7036,25,1416,279,1633,374,264,536,2867,323,279,7035,5785,198,220,13666,389,2176,11067,315,279,16319,5675,11,279,1290,24413,3108,198,220,7493,11,330,64,1993,1,646,2615,2987,458,2867,7035,476,320,333,902,198,220,2867,7035,6724,8,264,536,7035,13,220,576,2115,24413,3108,198,220,2169,330,64,1993,1,374,2677,738,438,458,2867,7035,11,6825,432,421,198,220,5871,13,220,14301,11,279,1378,56015,315,330,64,1993,1,653,537,14312,198,220,8300,311,279,1852,7035,25,421,279,1290,24413,3108,7493,198,220,19257,311,264,536,7035,11,279,2115,24413,3108,11450,264,501,198,220,2867,7035,438,279,2169,315,279,16319,1447,257,536,2435,82,510,260,856,284,220,18,1797,671,536,3890,198,257,1761,284,2435,82,741,257,1761,1993,284,1761,1993,488,220,16,256,671,13914,1761,1993,438,220,19,9380,2435,82,1993,438,220,18,271,220,1096,4008,1558,537,14312,3796,311,16414,198,220,8201,11,1741,438,5888,3465,448,330,3699,368,11436,9,1416,279,2169,374,264,15142,25,576,6028,7493,304,279,198,220,5785,374,25070,13,220,1084,1265,7540,2987,264,25804,8500,198,220,1633,320,20805,438,264,1140,8,476,264,12731,1633,320,20805,438,264,10997,4292,220,9295,11,279,98250,7493,374,25070,382,220,1416,279,6028,374,264,25804,8500,1633,320,20805,438,264,1140,701,279,198,220,98250,1969,7540,458,7546,13,220,1416,432,374,8225,11,279,8500,748,198,220,3084,374,3694,311,432,13,220,576,12942,897,1969,387,264,2477,42224,198,220,7546,2686,1091,279,8500,748,3084,11,323,279,8500,374,4588,198,220,311,9793,279,12607,1633,311,1181,1509,448,429,1922,13,220,1416,279,198,220,1922,374,700,315,2088,11,330,1552,1454,1,374,9226,320,29951,311,264,198,220,98250,291,8500,4157,912,501,3589,311,264,1140,3593,220,1416,279,6028,374,264,12731,1633,320,20805,438,264,10997,701,279,198,220,98250,1969,614,264,943,18146,448,279,12731,748,1376,943,345,220,323,279,12731,374,1221,4588,311,1855,264,1376,57542,6716,892,14043,198,220,279,98250,311,279,12607,1633,13,220,1096,646,2987,8290,458,198,220,6350,1376,57542,6716,448,279,1852,1376,897,11,476,5656,264,501,198,220,1376,57542,6716,320,333,902,1376,448,279,1852,897,24295,3593,220,1752,1196,38717,6171,11,279,13265,746,1203,563,35065,1714,374,2598,448,198,220,8311,5977,382,9,1416,279,2169,374,264,84915,25,576,6028,7493,304,279,5785,198,220,374,25070,13,220,1084,1265,7540,264,25804,8500,1633,320,20805,438,264,198,220,1140,568,220,576,12607,1633,1265,387,264,8500,1633,315,279,1852,198,220,943,13,220,9295,11,279,4722,323,8416,6822,23393,525,25070,345,220,304,93571,807,525,3042,26,16674,525,7168,323,279,8500,748,198,220,3084,13,220,576,14262,1265,15442,311,25780,13,1416,2987,6822,374,198,220,8225,11,279,8500,748,3084,374,3694,311,432,13,220,576,12942,198,220,14262,525,73059,311,10246,1948,7168,323,279,8500,748,3084,345,220,28308,13,220,17375,11,279,8500,1633,374,4588,311,8290,279,198,220,15983,448,279,3589,315,279,12607,8500,13,220,576,3084,315,279,198,220,15983,1231,387,2155,504,279,3084,315,279,12607,8500,345,220,8450,10018,279,3084,315,279,2169,8500,11,421,279,2169,198,220,8500,6147,432,382,334,7123,26895,8129,7716,66963,758,279,1482,8129,11,279,198,56193,369,11550,374,4429,311,387,279,1852,438,369,23393,11,323,198,11808,19482,374,17551,2337,279,2038,9471,10262,11,14381,198,1717,11682,1465,6605,382,15802,279,7271,315,16319,23945,429,76007,1948,198,1782,2115,24413,3108,323,279,1290,24413,3108,525,3369,14781,494,17666,527,320,1958,198,8687,330,64,11,293,284,293,11,264,1,73151,1378,7332,701,76007,353,55850,9,279,198,13421,315,12607,4686,7332,12170,2115,4686,6701,11,7025,198,1382,287,304,21340,13,220,1752,2867,11,279,2701,2025,23473,198,36864,15,11,220,17,60,51418,256,856,284,508,15,11,220,16,921,256,600,284,220,15,198,256,600,11,856,989,60,284,220,16,11,220,17,260,671,600,374,6049,11,1221,856,989,60,374,6049,198,256,1173,2075,692,9830,1083,1447,220,3070,1740,47,220,18,16,18,17,334,481,40565,38016,1230,95124,198,257,576,25128,369,279,15630,5657,1,4565,4192,21872,26980,16319,12239,198,1518,44908,271,21872,26980,16319,374,279,10601,11,304,264,3175,5114,11,315,264,198,25891,5666,323,458,16319,5114,1447,256,55988,51891,21824,64154,19303,5657,19303,453,320,28099,2019,760,7540,28068,340,256,19303,5657,338,64154,12816,760,17329,332,43970,760,15142,760,84915,198,256,19303,453,3824,64154,6630,428,760,6523,428,760,15630,428,760,8428,428,760,3521,428,760,35574,428,760,5962,428,760,67961,43488,786,760,330,2452,428,760,14717,428,760,13399,428,760,39915,428,760,25203,428,271,7,9830,3772,35183,5431,369,279,19482,17473,315,279,1537,2326,198,67426,9272,2082,55988,16319,66249,279,2169,320,8206,11,19836,4622,198,29951,12239,11,4157,387,458,31065,287,8,323,279,7493,198,1607,11,26674,279,7868,5666,3151,311,279,943,315,16319,198,263,279,1378,54510,11,323,49912,279,1102,311,279,4024,2169,624,785,2169,374,1172,25070,3055,382,2082,55988,16319,5114,1075,330,87,1421,220,16,1,646,387,58524,438,330,87,198,28,856,488,220,16,1,311,11075,264,4428,11,714,537,6896,6144,2456,13,758,279,198,19179,26980,2319,11,330,87,1,374,1172,25070,3055,13,7281,11,979,3204,345,1782,5042,5666,374,10660,353,258,41661,12314,7290,429,4751,1091,198,44902,264,501,1633,323,60753,429,311,279,2169,11,279,2310,1633,198,285,10807,4518,382,43079,4622,31172,11,55988,31172,15442,279,2115,6913,10661,3108,353,14801,9,37563,279,1290,24413,3108,13,220,1752,3110,11,330,64,989,921,8496,282,2075,9940,1156,5868,5239,330,64,989,19076,1221,432,66249,330,69,2075,9940,323,26674,198,1782,5256,11,323,1537,398,11,432,13914,279,1102,1182,311,330,64,989,60,11436,2354,279,4683,315,60753,311,45225,323,5248,11550,304,264,198,15338,5114,11,279,16319,2814,553,55988,16319,198,94587,374,17608,279,1852,1616,438,4622,31172,13,34239,345,4197,279,4683,315,279,3204,353,258,41661,9,7709,11,279,7868,198,9262,10660,553,55988,16319,374,279,1852,438,279,4622,198,25891,7525,382,2461,11550,892,525,7035,15057,11,279,1852,86051,911,198,1040,323,2867,8201,16790,438,369,5792,31172,4192,2082,87029,16319,12239,198,1518,44908,271,9,19711,9,16319,374,279,10601,11,304,264,3175,5114,11,315,198,64,3890,476,7035,21223,323,458,10101,16319,198,24184,1447,256,62851,51891,21824,64154,19303,5657,23427,7493,198,786,4383,428,320,11870,1151,28068,760,7540,28068,27771,785,6672,504,4622,34427,12239,374,429,1172,264,3175,198,5657,374,5420,382,785,16319,2169,374,6509,1036,22944,854,421,432,17167,315,264,198,15338,829,429,374,537,43810,304,73975,13,1752,4285,16319,198,45547,11,421,304,536,476,4688,6891,11,279,32207,525,25070,198,437,9768,304,264,3281,536,476,4688,7035,13265,39626,563,698,9033,374,264,10997,12731,504,3890,5036,320,76,38940,421,869,340,983,25070,32207,13,1096,7035,374,45905,323,374,198,27073,7022,3465,518,279,1191,315,536,476,4688,2487,11320,345,333,32207,525,1730,91174,382,2679,279,16319,2169,374,537,4285,320,276,7035,11,98250,2436,345,269,37940,82879,829,701,279,21223,374,25070,421,304,536,476,198,4352,6891,11,714,537,9768,382,2679,264,829,374,62851,304,264,729,6891,11,1221,419,829,374,2205,198,1958,429,6891,13,93332,525,2581,25070,323,9768,304,729,198,80925,382,2679,279,1290,1424,3108,374,3042,11,458,62851,16319,26674,198,1782,5042,16319,1573,37563,32207,320,2870,198,676,46114,568,1416,279,1290,1424,3108,374,537,3042,369,458,7493,198,5657,11,1221,279,39299,66249,279,2169,3650,369,279,1537,198,1,563,746,1203
+logits_hash_step0=67a9b4891f30c4ea
+text= object to a target list, optionally enclosed in
+parentheses or square brackets, is recursively defined as follows.
+
+* If the target list is a single target with no trailing comma,
+  optionally in parentheses, the object is assigned to that target.
+
+* Else:
+
+  * If the target list contains one target prefixed with an asterisk,
+    called a “starred” target: The object must be an iterable with at
+    least as many items as there are targets in the target list, minus
+    one.  The first items of the iterable are assigned, from left to
+    right, to the targets before the starred target.  The final items
+    of the iterable are assigned to the targets after the starred
+    target.  A list of the remaining items in the iterable is then
+    assigned to the starred target (the list can be empty).
+
+  * Else: The object must be an iterable with the same number of items
+    as there are targets in the target list, and the items are
+    assigned, from left to right, to the corresponding targets.
+
+Assignment of an object to a single target is recursively defined as
+follows.
+
+* If the target is an identifier (name):
+
+  * If the name does not occur in a "global" or "nonlocal" statement
+    in the current code block: the name is bound to the object in the
+    current local namespace.
+
+  * Otherwise: the name is bound to the object in the global namespace
+    or the outer namespace determined by "nonlocal", respectively.
+
+  The name is rebound if it was already bound.  This may cause the
+  reference count for the object previously bound to the name to reach
+  zero, causing the object to be deallocated and its destructor (if it
+  has one) to be called.
+
+* If the target is an attribute reference: The primary expression in
+  the reference is evaluated.  It should yield an object with
+  assignable attributes; if this is not the case, "TypeError" is
+  raised.  That object is then asked to assign the assigned object to
+  the given attribute; if it cannot perform the assignment, it raises
+  an exception (usually but not necessarily "AttributeError").
+
+  Note: If the object is a class instance and the attribute reference
+  occurs on both sides of the assignment operator, the right-hand side
+  expression, "a.x" can access either an instance attribute or (if no
+  instance attribute exists) a class attribute.  The left-hand side
+  target "a.x" is always set as an instance attribute, creating it if
+  necessary.  Thus, the two occurrences of "a.x" do not necessarily
+  refer to the same attribute: if the right-hand side expression
+  refers to a class attribute, the left-hand side creates a new
+  instance attribute as the target of the assignment:
+
+     class Cls:
+         x = 3             # class variable
+     inst = Cls()
+     inst.x = inst.x + 1   # writes inst.x as 4 leaving Cls.x as 3
+
+  This description does not necessarily apply to descriptor
+  attributes, such as properties created with "property()".
+
+* If the target is a subscription: The primary expression in the
+  reference is evaluated.  It should yield either a mutable sequence
+  object (such as a list) or a mapping object (such as a dictionary).
+  Next, the subscript expression is evaluated.
+
+  If the primary is a mutable sequence object (such as a list), the
+  subscript must yield an integer.  If it is negative, the sequence’s
+  length is added to it.  The resulting value must be a nonnegative
+  integer less than the sequence’s length, and the sequence is asked
+  to assign the assigned object to its item with that index.  If the
+  index is out of range, "IndexError" is raised (assignment to a
+  subscripted sequence cannot add new items to a list).
+
+  If the primary is a mapping object (such as a dictionary), the
+  subscript must have a type compatible with the mapping’s key type,
+  and the mapping is then asked to create a key/value pair which maps
+  the subscript to the assigned object.  This can either replace an
+  existing key/value pair with the same key value, or insert a new
+  key/value pair (if no key with the same value existed).
+
+  For user-defined objects, the "__setitem__()" method is called with
+  appropriate arguments.
+
+* If the target is a slicing: The primary expression in the reference
+  is evaluated.  It should yield a mutable sequence object (such as a
+  list).  The assigned object should be a sequence object of the same
+  type.  Next, the lower and upper bound expressions are evaluated,
+  insofar they are present; defaults are zero and the sequence’s
+  length.  The bounds should evaluate to integers. If either bound is
+  negative, the sequence’s length is added to it.  The resulting
+  bounds are clipped to lie between zero and the sequence’s length,
+  inclusive.  Finally, the sequence object is asked to replace the
+  slice with the items of the assigned sequence.  The length of the
+  slice may be different from the length of the assigned sequence,
+  thus changing the length of the target sequence, if the target
+  sequence allows it.
+
+**CPython implementation detail:** In the current implementation, the
+syntax for targets is taken to be the same as for expressions, and
+invalid syntax is rejected during the code generation phase, causing
+less detailed error messages.
+
+Although the definition of assignment implies that overlaps between
+the left-hand side and the right-hand side are ‘simultaneous’ (for
+example "a, b = b, a" swaps two variables), overlaps *within* the
+collection of assigned-to variables occur left-to-right, sometimes
+resulting in confusion.  For instance, the following program prints
+"[0, 2]":
+
+   x = [0, 1]
+   i = 0
+   i, x[i] = 1, 2         # i is updated, then x[i] is updated
+   print(x)
+
+See also:
+
+  **PEP 3132** - Extended Iterable Unpacking
+     The specification for the "*target" feature.
+
+
+Augmented assignment statements
+===============================
+
+Augmented assignment is the combination, in a single statement, of a
+binary operation and an assignment statement:
+
+   augmented_assignment_stmt ::= augtarget augop (expression_list | yield_expression)
+   augtarget                 ::= identifier | attributeref | subscription | slicing
+   augop                     ::= "+=" | "-=" | "*=" | "@=" | "/=" | "//=" | "%=" | "**="
+                                 | ">>=" | "<<=" | "&=" | "^=" | "|="
+
+(See section Primaries for the syntax definitions of the last three
+symbols.)
+
+An augmented assignment evaluates the target (which, unlike normal
+assignment statements, cannot be an unpacking) and the expression
+list, performs the binary operation specific to the type of assignment
+on the two operands, and assigns the result to the original target.
+The target is only evaluated once.
+
+An augmented assignment statement like "x += 1" can be rewritten as "x
+= x + 1" to achieve a similar, but not exactly equal effect. In the
+augmented version, "x" is only evaluated once. Also, when possible,
+the actual operation is performed *in-place*, meaning that rather than
+creating a new object and assigning that to the target, the old object
+is modified instead.
+
+Unlike normal assignments, augmented assignments evaluate the left-
+hand side *before* evaluating the right-hand side.  For example, "a[i]
++= f(x)" first looks-up "a[i]", then it evaluates "f(x)" and performs
+the addition, and lastly, it writes the result back to "a[i]".
+
+With the exception of assigning to tuples and multiple targets in a
+single statement, the assignment done by augmented assignment
+statements is handled the same way as normal assignments. Similarly,
+with the exception of the possible *in-place* behavior, the binary
+operation performed by augmented assignment is the same as the normal
+binary operations.
+
+For targets which are attribute references, the same caveat about
+class and instance attributes applies as for regular assignments.
+
+
+Annotated assignment statements
+===============================
+
+*Annotation* assignment is the combination, in a single statement, of
+a variable or attribute annotation and an optional assignment
+statement:
+
+   annotated_assignment_stmt ::= augtarget ":" expression
+                                 ["=" (starred_expression | yield_expression)]
+
+The difference from normal Assignment statements is that only a single
+target is allowed.
+
+The assignment target is considered “simple” if it consists of a
+single name that is not enclosed in parentheses. For simple assignment
+targets, if in class or module scope, the annotations are evaluated
+and stored in a special class or module attribute "__annotations__"
+that is a dictionary mapping from variable names (mangled if private)
+to evaluated annotations. This attribute is writable and is
+automatically created at the start of class or module body execution,
+if annotations are found statically.
+
+If the assignment target is not simple (an attribute, subscript node,
+or parenthesized name), the annotation is evaluated if in class or
+module scope, but not stored.
+
+If a name is annotated in a function scope, then this name is local
+for that scope. Annotations are never evaluated and stored in function
+scopes.
+
+If the right hand side is present, an annotated assignment performs
+the actual assignment before evaluating annotations (where
+applicable). If the right hand side is not present for an expression
+target, then the interpreter evaluates the target except for the last
+"__setitem

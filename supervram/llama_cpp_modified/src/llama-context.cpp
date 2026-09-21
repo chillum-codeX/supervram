@@ -280,6 +280,7 @@ llama_context::llama_context(
     cparams.moe_expert_trace        = params.moe_expert_trace;
     cparams.moe_expert_zerocopy     = params.moe_expert_zerocopy;
     cparams.moe_expert_cache_bias   = params.moe_expert_cache_bias;
+    cparams.moe_expert_cache_bias_mul = params.moe_expert_cache_bias_mul;
     if (model.moe_expert_storage() == LLAMA_MOE_EXPERT_STORAGE_CACHE && cparams.moe_expert_cache_bytes == 0) {
         cparams.moe_expert_cache_bytes = 8ull * 1024 * 1024 * 1024;
         LLAMA_LOG_WARN("%s: moe_expert_storage = cache but no cache size given, using %zu MiB\n", __func__, cparams.moe_expert_cache_bytes / 1024 / 1024);
@@ -3735,6 +3736,7 @@ llama_context_params llama_context_default_params() {
         /*.moe_expert_io_threads       =*/ 0,
         /*.moe_expert_staging_mib      =*/ 0,
         /*.moe_expert_trace            =*/ nullptr,
+        /*.moe_expert_cache_bias_mul   =*/ 0,
         /*.moe_expert_cache_bias       =*/ 0.0f,
         /*.moe_expert_zerocopy         =*/ 0,
         /*.embeddings                  =*/ false,

@@ -2808,6 +2808,13 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         }
     ).set_env("LLAMA_ARG_MOE_EXPERT_BIAS"));
     add_opt(common_arg(
+        {"--moe-expert-bias-mul"},
+        "make --moe-expert-bias multiplicative: a resident expert competes with its router probability multiplied by (1 + bias), i.e. a relative margin",
+        [](common_params & params) {
+            params.moe_expert_cache_bias_mul = true;
+        }
+    ).set_env("LLAMA_ARG_MOE_EXPERT_BIAS_MUL"));
+    add_opt(common_arg(
         {"--numa"}, "TYPE",
         "attempt optimizations that help on some NUMA systems\n"
         "- distribute: spread execution evenly over all nodes\n"

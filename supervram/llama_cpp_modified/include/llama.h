@@ -415,6 +415,7 @@ extern "C" {
         int32_t      moe_expert_io_threads;   // parallel direct reads (0 = default 8)
         int32_t      moe_expert_staging_mib;  // pinned staging buffer size in MiB (0 = default 128)
         const char * moe_expert_trace;        // if set, record the experts each layer selects per token to this file
+        int32_t      moe_expert_cache_bias_mul; // 1 = multiplicative bias: resident experts score x(1+bias) instead of +bias (relative margin)
         float        moe_expert_cache_bias;   // cache-aware routing: added to the router score of experts resident in VRAM (0 = off; changes outputs)
         int32_t      moe_expert_zerocopy;     // 1 = experts stay in pinned host RAM (see --override-tensor ...=CUDA_Host) and GPU kernels read them in place
 

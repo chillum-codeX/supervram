@@ -1,0 +1,3 @@
+bias 0: mean logprob of the true text -0.4915 (bias 0: -0.4915), perplexity x1.0000, top-1 agreement with bias 0 100.0%, matches the true next token 89.9% (bias 0: 89.9%), cache hit rate 96.4%, decode 53.2 t/s
+bias 0.02: mean logprob of the true text -0.4918 (bias 0: -0.4915), perplexity x1.0003, top-1 agreement with bias 0 98.4%, matches the true next token 89.8% (bias 0: 89.9%), cache hit rate 99.4%, decode 78.9 t/s
+bias 0.05: mean logprob of the true text -0.4995 (bias 0: -0.4915), perplexity x1.0080, top-1 agreement with bias 0 97.6%, matches the true next token 89.9% (bias 0: 89.9%), cache hit rate 99.8%, decode 89.7 t/s

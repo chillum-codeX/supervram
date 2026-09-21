@@ -75,3 +75,19 @@
  ggml/src/ggml-cuda/ggml-cuda.cu |   8 +-
  ggml/src/ggml-cuda/mmvq.cu      |  10 ++
  4 files changed, 298 insertions(+), 17 deletions(-)
+
+# patches/0009-zero-copy-warm-start-bias-prefetch-worker.patch (applies on top of 0008)
+ common/arg.cpp              |  14 ++
+ common/common.cpp           |   2 +
+ common/common.h             |   2 +
+ ggml/include/ggml-backend.h |   4 +
+ ggml/src/ggml-backend.cpp   | 363 +++++++++++++++++++++++++++++++++++++++++++-
+ ggml/src/ggml-cuda/mmvq.cu  |  26 ++++
+ include/llama.h             |   5 +
+ src/llama-context.cpp       |  12 ++
+ src/llama-context.h         |   1 +
+ src/llama-cparams.h         |   2 +
+ src/llama-graph.cpp         |  32 +++-
+ src/llama-graph.h           |  24 +++
+ src/models/qwen3moe.cpp     |   2 +-
+ 13 files changed, 481 insertions(+), 8 deletions(-)
