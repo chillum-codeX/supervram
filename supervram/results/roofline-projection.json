@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "evidence_class": "analytical_projection",
+  "warning": "Values are projections from explicit parameters, not hardware measurements.",
+  "parameters": {
+    "layers": 48,
+    "experts": 128,
+    "top_k": 8,
+    "embedding": 2048,
+    "expert_hidden": 768,
+    "bits_per_weight": 4.5,
+    "nvme_gbps": 7.0,
+    "pcie_gbps": 24.0,
+    "fixed_read_us": 80.0,
+    "reads_per_expert": 1,
+    "compute_ms_token": 40.0,
+    "output": "/home/novix/workspace/project/supervram/results/roofline-projection.json"
+  },
+  "derived": {
+    "parameters_per_expert": 4718592,
+    "expert_bytes": 2654208.0,
+    "all_experts_bytes": 16307453952.0,
+    "active_expert_bytes_per_token_without_cache": 1019215872.0,
+    "transfer_bottleneck_gbps": 7.0
+  },
+  "scenarios": [
+    {
+      "hit_rate": 0.0,
+      "miss_experts_per_token": 384.0,
+      "bytes_per_token": 1019215872.0,
+      "bandwidth_time_ms": 145.60226742857142,
+      "read_latency_time_ms": 30.72,
+      "serialized_io_ms": 176.32226742857142,
+      "max_hideable_ms": 40.0,
+      "projected_token_ms": 176.32226742857142,
+      "projected_tokens_s": 5.671433418953181
+    },
+    {
+      "hit_rate": 0.25,
+      "miss_experts_per_token": 288.0,
+      "bytes_per_token": 764411904.0,
+      "bandwidth_time_ms": 109.20170057142857,
+      "read_latency_time_ms": 23.04,
+      "serialized_io_ms": 132.24170057142857,
+      "max_hideable_ms": 40.0,
+      "projected_token_ms": 132.24170057142857,
+      "projected_tokens_s": 7.561911225270909
+    },
+    {
+      "hit_rate": 0.5,
+      "miss_experts_per_token": 192.0,
+      "bytes_per_token": 509607936.0,
+      "bandwidth_time_ms": 72.80113371428571,
+      "read_latency_time_ms": 15.36,
+      "serialized_io_ms": 88.16113371428571,
+      "max_hideable_ms": 40.0,
+      "projected_token_ms": 88.16113371428571,
+      "projected_tokens_s": 11.342866837906362
+    },
+    {
+      "hit_rate": 0.75,
+      "miss_experts_per_token": 96.0,
+      "bytes_per_token": 254803968.0,
+      "bandwidth_time_ms": 36.400566857142856,
+      "read_latency_time_ms": 7.68,
+      "serialized_io_ms": 44.080566857142855,
+      "max_hideable_ms": 40.0,
+      "projected_token_ms": 44.080566857142855,
+      "projected_tokens_s": 22.685733675812724
+    },
+    {
+      "hit_rate": 0.9,
+      "miss_experts_per_token": 38.39999999999999,
+      "bytes_per_token": 101921587.19999997,
+      "bandwidth_time_ms": 14.56022674285714,
+      "read_latency_time_ms": 3.071999999999999,
+      "serialized_io_ms": 17.63222674285714,
+      "max_hideable_ms": 17.63222674285714,
+      "projected_token_ms": 40.0,
+      "projected_tokens_s": 25.0
+    },
+    {
+      "hit_rate": 0.95,
+      "miss_experts_per_token": 19.200000000000017,
+      "bytes_per_token": 50960793.600000046,
+      "bandwidth_time_ms": 7.280113371428579,
+      "read_latency_time_ms": 1.5360000000000014,
+      "serialized_io_ms": 8.81611337142858,
+      "max_hideable_ms": 8.81611337142858,
+      "projected_token_ms": 40.0,
+      "projected_tokens_s": 25.0
+    },
+    {
+      "hit_rate": 0.99,
+      "miss_experts_per_token": 3.8400000000000034,
+      "bytes_per_token": 10192158.72000001,
+      "bandwidth_time_ms": 1.4560226742857159,
+      "read_latency_time_ms": 0.30720000000000025,
+      "serialized_io_ms": 1.763222674285716,
+      "max_hideable_ms": 1.763222674285716,
+      "projected_token_ms": 40.0,
+      "projected_tokens_s": 25.0
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+ common/arg.cpp          | 15 +++++++++++++++
+ common/common.cpp       |  7 ++++---
+ common/common.h         |  1 +
+ include/llama.h         |  6 ++++++
+ src/llama-model.cpp     |  1 +
+ src/llama.cpp           | 16 +++++++++++++++-
+ src/models/qwen3moe.cpp |  7 ++++---
+ 7 files changed, 46 insertions(+), 7 deletions(-)

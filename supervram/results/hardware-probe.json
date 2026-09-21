@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "evidence_class": "measured_environment_probe",
+  "host": {
+    "node": "novix-agent-cpu-warmpool-prod-4x8mq",
+    "kernel": "6.12.85+",
+    "machine": "x86_64"
+  },
+  "target_path": "/mnt/novix-k8s-workspace-root/session_5c7e3fbe77ac76726fc4f25be16fe8e5/workspace/project/supervram",
+  "mount": {
+    "mountpoint": "/mnt/novix-k8s-workspace-root",
+    "mount_options": "rw,relatime",
+    "filesystem": "nfs",
+    "source": "10.239.192.2:/novix_storage_fs/nova_agent_v1/user_data"
+  },
+  "nvidia_smi": {
+    "available": false,
+    "error": "[Errno 2] No such file or directory: 'nvidia-smi'"
+  },
+  "nvidia_topology": {
+    "available": false,
+    "error": "[Errno 2] No such file or directory: 'nvidia-smi'"
+  },
+  "libcufile": null,
+  "gdscheck": null,
+  "iommu_enabled": false,
+  "pci_devices": [],
+  "direct_io_open_test": {
+    "supported": true,
+    "error": null
+  },
+  "gds_candidate": false,
+  "gds_rejection_reasons": [
+    "no NVIDIA GPU/driver visible",
+    "libcufile not found",
+    "filesystem nfs is not an ext4/xfs GDS candidate"
+  ],
+  "recommended_backend": "pread",
+  "notes": [
+    "A candidate result is not proof that cuFile device DMA works; run gdscheck and the transfer microbenchmark on the target host.",
+    "Resizable BAR and BAR1 size do not independently establish GDS support.",
+    "ACS/IOMMU and PCIe root-complex topology must be checked on the target host."
+  ]
+}

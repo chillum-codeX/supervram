@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "evidence_class": "deterministic_synthetic_trace_replay",
+  "warning": "This is a software-policy validation result, not an RTX 3090 inference benchmark.",
+  "parameters": {
+    "tokens": 16,
+    "layers": 4,
+    "experts": 16,
+    "top_k": 2,
+    "expert_bytes": 4096,
+    "cache_experts": 8,
+    "policy": "router-aware",
+    "predictor": "markov",
+    "prefetch_depth": 2,
+    "locality": 0.8,
+    "seed": 7,
+    "store": null,
+    "trace": "/home/novix/workspace/project/supervram/results/simulation-trace.jsonl",
+    "output": "/home/novix/workspace/project/supervram/results/simulation-smoke.json"
+  },
+  "accesses": 64,
+  "elapsed_ns": 39883487,
+  "metrics": {
+    "cache": {
+      "accesses": 128,
+      "hits": 25,
+      "misses": 103,
+      "prefetches": 16,
+      "useful_prefetches": 0,
+      "evictions": 111,
+      "bytes_read": 487424,
+      "read_ns": 3485572,
+      "wait_ns": 29210246,
+      "hit_rate": 0.1953125
+    },
+    "prediction": {
+      "opportunities": 128,
+      "predicted": 50,
+      "correct": 28,
+      "precision": 0.56,
+      "coverage": 0.21875
+    },
+    "cache_used_bytes": 32768,
+    "cache_capacity_bytes": 32768
+  }
+}

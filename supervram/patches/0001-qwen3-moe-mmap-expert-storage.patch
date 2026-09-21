@@ -1,0 +1,340 @@
+diff --git a/common/arg.cpp b/common/arg.cpp
+index c4c4e14..8b5000a 100644
+--- a/common/arg.cpp
++++ b/common/arg.cpp
+@@ -2715,6 +2715,21 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
+             else { throw std::invalid_argument("invalid value"); }
+         }
+     ).set_env("LLAMA_ARG_LAZY_MODE"));
++    add_opt(common_arg(
++        {"--moe-expert-storage"}, "{resident,mmap}",
++        "storage for supported MoE expert weights (default: resident)\n"
++        "- resident: load expert weights normally\n"
++        "- mmap: demand-page Qwen3 MoE expert weights from the model file and execute them on CPU",
++        [](common_params & params, const std::string & value) {
++            if (value == "resident") {
++                params.moe_expert_storage = LLAMA_MOE_EXPERT_STORAGE_RESIDENT;
++            } else if (value == "mmap") {
++                params.moe_expert_storage = LLAMA_MOE_EXPERT_STORAGE_MMAP;
++            } else {
++                throw std::invalid_argument("invalid value");
++            }
++        }
++    ).set_env("LLAMA_ARG_MOE_EXPERT_STORAGE"));
+     add_opt(common_arg(
+         {"--numa"}, "TYPE",
+         "attempt optimizations that help on some NUMA systems\n"
+diff --git a/common/common.cpp b/common/common.cpp
+index d8319cd..f113c19 100644
+--- a/common/common.cpp
++++ b/common/common.cpp
+@@ -1686,9 +1686,10 @@ struct llama_model_params common_model_params_to_llama(common_params & params) {
+     mparams.n_gpu_layers    = params.n_gpu_layers;
+     mparams.main_gpu        = params.main_gpu;
+     mparams.split_mode      = params.split_mode;
+-    mparams.load_mode       = params.load_mode;
+-    mparams.lazy_mode = params.lazy_mode;
+-    mparams.tensor_split    = params.tensor_split;
++    mparams.load_mode          = params.load_mode;
++    mparams.lazy_mode          = params.lazy_mode;
++    mparams.moe_expert_storage = params.moe_expert_storage;
++    mparams.tensor_split       = params.tensor_split;
+     mparams.check_tensors   = params.check_tensors;
+     mparams.use_extra_bufts = !params.no_extra_bufts;
+     mparams.no_host         = params.no_host;
+diff --git a/common/common.h b/common/common.h
+index 63d0bad..2b96e8c 100644
+--- a/common/common.h
++++ b/common/common.h
+@@ -484,6 +484,7 @@ struct common_params {
+     enum llama_load_mode  load_mode  = LLAMA_LOAD_MODE_AUTO; // how to load the model
+ 
+     enum llama_lazy_mode lazy_mode = LLAMA_LAZY_MODE_AUTO; // on-demand reading of tensors marked by the arch
++    enum llama_moe_expert_storage moe_expert_storage = LLAMA_MOE_EXPERT_STORAGE_RESIDENT;
+ 
+     common_cpu_params cpuparams;
+     common_cpu_params cpuparams_batch;
+diff --git a/common/speculative.cpp b/common/speculative.cpp
+index 77dfe95..82a259b 100644
+--- a/common/speculative.cpp
++++ b/common/speculative.cpp
+@@ -2480,6 +2480,7 @@ common_params common_base_params_to_speculative(const common_params & params) {
+         result.model                 = params_spec.mparams;
+         result.n_gpu_layers          = params_spec.n_gpu_layers;
+         result.tensor_buft_overrides = params_spec.tensor_buft_overrides;
++        result.moe_expert_storage    = LLAMA_MOE_EXPERT_STORAGE_RESIDENT;
+ 
+         // a draft pinned to a single device doesn't need the meta wrapper an inherited -sm tensor would give it
+         // (the device list is null-terminated, so a single device means size 2)
+diff --git a/include/llama.h b/include/llama.h
+index 31bbf8b..fc29e5b 100644
+--- a/include/llama.h
++++ b/include/llama.h
+@@ -221,6 +221,11 @@ extern "C" {
+         LLAMA_LAZY_MODE_ON   = 2, // read the rows of tensors marked by the arch on demand (requires mmap)
+     };
+ 
++    enum llama_moe_expert_storage {
++        LLAMA_MOE_EXPERT_STORAGE_RESIDENT = 0,
++        LLAMA_MOE_EXPERT_STORAGE_MMAP     = 1,
++    };
++
+     enum llama_context_type {
+         LLAMA_CONTEXT_TYPE_DEFAULT = 0,
+         LLAMA_CONTEXT_TYPE_MTP     = 1,
+@@ -323,6 +328,7 @@ extern "C" {
+         enum llama_load_mode  load_mode;  // how to load the model
+ 
+         enum llama_lazy_mode lazy_mode; // on-demand reading of tensors marked by the arch
++        enum llama_moe_expert_storage moe_expert_storage; // storage for supported MoE expert tensors
+ 
+         // the GPU that is used for the entire model when split_mode is LLAMA_SPLIT_MODE_NONE
+         int32_t main_gpu;
+diff --git a/src/llama-model.cpp b/src/llama-model.cpp
+index e195f50..7c88692 100644
+--- a/src/llama-model.cpp
++++ b/src/llama-model.cpp
+@@ -2792,6 +2792,7 @@ llama_model_params llama_model_default_params() {
+         /*.split_mode                  =*/ LLAMA_SPLIT_MODE_LAYER,
+         /*.load_mode                   =*/ LLAMA_LOAD_MODE_AUTO,
+         /*.lazy_mode                   =*/ LLAMA_LAZY_MODE_AUTO,
++        /*.moe_expert_storage          =*/ LLAMA_MOE_EXPERT_STORAGE_RESIDENT,
+         /*.main_gpu                    =*/ 0,
+         /*.tensor_split                =*/ nullptr,
+         /*.progress_callback           =*/ nullptr,
+diff --git a/src/llama.cpp b/src/llama.cpp
+index ad8e443..834fd91 100644
+--- a/src/llama.cpp
++++ b/src/llama.cpp
+@@ -319,7 +319,21 @@ static std::pair<int, llama_model *> llama_model_load(struct gguf_context * meta
+         llama_model_loader ml(metadata, set_tensor_data, set_tensor_data_ud, fname, splits, file, params.load_mode,
+             params.check_tensors, params.no_alloc, params.load_mtp, params.kv_overrides, params.tensor_buft_overrides);
+ 
+-        ml.lazy.mode = params.lazy_mode;
++        if (params.moe_expert_storage == LLAMA_MOE_EXPERT_STORAGE_MMAP) {
++            if (ml.get_arch() != LLM_ARCH_QWEN3MOE) {
++                throw std::runtime_error("mmap MoE expert storage is only supported for Qwen3 MoE");
++            }
++            if (!llama_supports_mmap()) {
++                throw std::runtime_error("mmap MoE expert storage requires mmap support");
++            }
++            if (ml.files.empty()) {
++                throw std::runtime_error("mmap MoE expert storage requires a file-backed model");
++            }
++            ml.lazy.mode = LLAMA_LAZY_MODE_ON;
++            LLAMA_LOG_INFO("%s: Qwen3 MoE expert weights use demand-paged CPU mappings\n", __func__);
++        } else {
++            ml.lazy.mode = params.lazy_mode;
++        }
+ 
+         ml.print_info();
+         std::unique_ptr<llama_model> model_ptr(llama_model_create(ml, params));
+diff --git a/src/models/qwen3moe.cpp b/src/models/qwen3moe.cpp
+index a6a3381..62cff07 100644
+--- a/src/models/qwen3moe.cpp
++++ b/src/models/qwen3moe.cpp
+@@ -48,10 +48,11 @@ void llama_model_qwen3moe::load_arch_tensors(llama_model_loader &) {
+ 
+         // MoE branch
+         const int64_t n_ff_exp = hparams.n_ff_exp() ? hparams.n_ff_exp() : n_ff / n_expert_used;
++        const int expert_flags = params.moe_expert_storage == LLAMA_MOE_EXPERT_STORAGE_MMAP ? TENSOR_READ_LAZY : 0;
+ 
+-        layer.ffn_gate_exps = create_tensor(tn(LLM_TENSOR_FFN_GATE_EXPS, "weight", i), {  n_embd, n_ff_exp, n_expert}, 0);
+-        layer.ffn_down_exps = create_tensor(tn(LLM_TENSOR_FFN_DOWN_EXPS, "weight", i), {n_ff_exp,   n_embd, n_expert}, 0);
+-        layer.ffn_up_exps   = create_tensor(tn(LLM_TENSOR_FFN_UP_EXPS,   "weight", i), {  n_embd, n_ff_exp, n_expert}, 0);
++        layer.ffn_gate_exps = create_tensor(tn(LLM_TENSOR_FFN_GATE_EXPS, "weight", i), {  n_embd, n_ff_exp, n_expert}, expert_flags);
++        layer.ffn_down_exps = create_tensor(tn(LLM_TENSOR_FFN_DOWN_EXPS, "weight", i), {n_ff_exp,   n_embd, n_expert}, expert_flags);
++        layer.ffn_up_exps   = create_tensor(tn(LLM_TENSOR_FFN_UP_EXPS,   "weight", i), {  n_embd, n_ff_exp, n_expert}, expert_flags);
+     }
+ }
+ 
+diff --git a/tools/llama-bench/llama-bench.cpp b/tools/llama-bench/llama-bench.cpp
+index 6541bb5..c696498 100644
+--- a/tools/llama-bench/llama-bench.cpp
++++ b/tools/llama-bench/llama-bench.cpp
+@@ -284,6 +284,14 @@ static const char * lazy_mode_str(llama_lazy_mode mode) {
+     }
+ }
+ 
++static const char * moe_expert_storage_str(llama_moe_expert_storage storage) {
++    switch (storage) {
++        case LLAMA_MOE_EXPERT_STORAGE_RESIDENT: return "resident";
++        case LLAMA_MOE_EXPERT_STORAGE_MMAP:     return "mmap";
++        default: GGML_ABORT("invalid MoE expert storage");
++    }
++}
++
+ static std::string pair_str(const std::pair<int, int> & p) {
+     static char buf[32];
+     snprintf(buf, sizeof(buf), "%d,%d", p.first, p.second);
+@@ -355,6 +363,7 @@ struct cmd_params {
+     std::vector<llama_split_mode>    split_mode;
+     std::vector<llama_load_mode>     load_mode;
+     std::vector<llama_lazy_mode>     lazy_mode;
++    std::vector<llama_moe_expert_storage> moe_expert_storage;
+     std::vector<int>                 main_gpu;
+     std::vector<bool>                no_kv_offload;
+     std::vector<llama_flash_attn_type> flash_attn;
+@@ -400,6 +409,7 @@ static const cmd_params cmd_params_defaults = {
+     /* split_mode           */ { LLAMA_SPLIT_MODE_LAYER },
+     /* load_mode            */ { LLAMA_LOAD_MODE_AUTO },
+     /* lazy_mode            */ { LLAMA_LAZY_MODE_AUTO },
++    /* moe_expert_storage   */ { LLAMA_MOE_EXPERT_STORAGE_RESIDENT },
+     /* main_gpu             */ { 0 },
+     /* no_kv_offload        */ { false },
+     /* flash_attn           */ { LLAMA_FLASH_ATTN_TYPE_AUTO },
+@@ -477,6 +487,7 @@ static void print_usage(int /* argc */, char ** argv) {
+     printf("  -dev, --device <dev0/dev1/...>                    (default: auto)\n");
+     printf("  -lm, --load-mode <auto|none|mmap|mlock|mmap+mlock|dio> (default: %s)\n", join(transform_to_str(cmd_params_defaults.load_mode, llama_load_mode_name), ",").c_str());
+     printf("  -lzm, --lazy-mode <on|auto|off>                   (default: %s)\n", join(transform_to_str(cmd_params_defaults.lazy_mode, lazy_mode_str), ",").c_str());
++    printf("  --moe-expert-storage <resident|mmap>              (default: %s)\n", join(transform_to_str(cmd_params_defaults.moe_expert_storage, moe_expert_storage_str), ",").c_str());
+     printf("  -embd, --embeddings <0|1>                         (default: %s)\n", join(cmd_params_defaults.embeddings, ",").c_str());
+     printf("  -ts, --tensor-split <ts0/ts1/..>                  (default: 0)\n");
+     printf("  -ot --override-tensor <tensor name pattern>=<buffer type>;...\n");
+@@ -830,6 +841,25 @@ static cmd_params parse_cmd_params(int argc, char ** argv) {
+                     break;
+                 }
+                 params.lazy_mode.insert(params.lazy_mode.end(), modes.begin(), modes.end());
++            } else if (arg == "--moe-expert-storage") {
++                if (++i >= argc) {
++                    invalid_param = true;
++                    break;
++                }
++                auto p = string_split<std::string>(argv[i], split_delim);
++                for (const auto & value : p) {
++                    if (value == "resident") {
++                        params.moe_expert_storage.push_back(LLAMA_MOE_EXPERT_STORAGE_RESIDENT);
++                    } else if (value == "mmap") {
++                        params.moe_expert_storage.push_back(LLAMA_MOE_EXPERT_STORAGE_MMAP);
++                    } else {
++                        invalid_param = true;
++                        break;
++                    }
++                }
++                if (invalid_param) {
++                    break;
++                }
+             } else if (arg == "-mg" || arg == "--main-gpu") {
+                 if (++i >= argc) {
+                     invalid_param = true;
+@@ -1146,6 +1176,9 @@ static cmd_params parse_cmd_params(int argc, char ** argv) {
+     if (params.lazy_mode.empty()) {
+         params.lazy_mode = cmd_params_defaults.lazy_mode;
+     }
++    if (params.moe_expert_storage.empty()) {
++        params.moe_expert_storage = cmd_params_defaults.moe_expert_storage;
++    }
+     if (params.main_gpu.empty()) {
+         params.main_gpu = cmd_params_defaults.main_gpu;
+     }
+@@ -1213,6 +1246,7 @@ struct cmd_params_instance {
+     llama_split_mode   split_mode;
+     llama_load_mode    load_mode;
+     llama_lazy_mode    lazy_mode;
++    llama_moe_expert_storage moe_expert_storage;
+     int                main_gpu;
+     bool               no_kv_offload;
+     llama_flash_attn_type flash_attn;
+@@ -1233,9 +1267,10 @@ struct cmd_params_instance {
+             mparams.devices = const_cast<ggml_backend_dev_t *>(devices.data());
+         }
+         mparams.split_mode    = split_mode;
+-        mparams.load_mode     = load_mode;
+-        mparams.lazy_mode     = lazy_mode;
+-        mparams.main_gpu      = main_gpu;
++        mparams.load_mode          = load_mode;
++        mparams.lazy_mode          = lazy_mode;
++        mparams.moe_expert_storage = moe_expert_storage;
++        mparams.main_gpu           = main_gpu;
+         mparams.tensor_split  = tensor_split.data();
+         mparams.no_host       = no_host;
+ 
+@@ -1282,7 +1317,7 @@ struct cmd_params_instance {
+         return model == other.model && n_gpu_layers == other.n_gpu_layers && n_cpu_moe == other.n_cpu_moe &&
+                split_mode == other.split_mode &&
+                main_gpu == other.main_gpu && tensor_split == other.tensor_split &&
+-               load_mode == other.load_mode && lazy_mode == other.lazy_mode &&
++               load_mode == other.load_mode && lazy_mode == other.lazy_mode && moe_expert_storage == other.moe_expert_storage &&
+                devices == other.devices && no_host == other.no_host &&
+                vec_tensor_buft_override_equal(tensor_buft_overrides, other.tensor_buft_overrides);
+     }
+@@ -1318,6 +1353,7 @@ static std::vector<cmd_params_instance> get_cmd_params_instances(const cmd_param
+     for (const auto & sm : params.split_mode)
+     for (const auto & lm : params.load_mode)
+     for (const auto & lzm : params.lazy_mode)
++    for (const auto & mes : params.moe_expert_storage)
+     for (const auto & mg : params.main_gpu)
+     for (const auto & devs : params.devices)
+     for (const auto & ts : params.tensor_split)
+@@ -1358,6 +1394,7 @@ static std::vector<cmd_params_instance> get_cmd_params_instances(const cmd_param
+                 /* .split_mode            = */ sm,
+                 /* .load_mode             = */ lm,
+                 /* .lazy_mode             = */ lzm,
++                /* .moe_expert_storage    = */ mes,
+                 /* .main_gpu              = */ mg,
+                 /* .no_kv_offload         = */ nkvo,
+                 /* .flash_attn            = */ fa,
+@@ -1395,6 +1432,7 @@ static std::vector<cmd_params_instance> get_cmd_params_instances(const cmd_param
+                 /* .split_mode            = */ sm,
+                 /* .load_mode             = */ lm,
+                 /* .lazy_mode             = */ lzm,
++                /* .moe_expert_storage    = */ mes,
+                 /* .main_gpu              = */ mg,
+                 /* .no_kv_offload         = */ nkvo,
+                 /* .flash_attn            = */ fa,
+@@ -1432,6 +1470,7 @@ static std::vector<cmd_params_instance> get_cmd_params_instances(const cmd_param
+                 /* .split_mode            = */ sm,
+                 /* .load_mode             = */ lm,
+                 /* .lazy_mode             = */ lzm,
++                /* .moe_expert_storage    = */ mes,
+                 /* .main_gpu              = */ mg,
+                 /* .no_kv_offload         = */ nkvo,
+                 /* .flash_attn            = */ fa,
+@@ -1474,6 +1513,7 @@ struct test {
+     llama_split_mode         split_mode;
+     llama_load_mode          load_mode;
+     llama_lazy_mode          lazy_mode;
++    llama_moe_expert_storage moe_expert_storage;
+     int                      main_gpu;
+     bool                     no_kv_offload;
+     llama_flash_attn_type    flash_attn;
+@@ -1512,9 +1552,10 @@ struct test {
+         n_gpu_layers   = inst.n_gpu_layers;
+         n_cpu_moe      = inst.n_cpu_moe;
+         split_mode     = inst.split_mode;
+-        load_mode      = inst.load_mode;
+-        lazy_mode      = inst.lazy_mode;
+-        main_gpu       = inst.main_gpu;
++        load_mode          = inst.load_mode;
++        lazy_mode          = inst.lazy_mode;
++        moe_expert_storage = inst.moe_expert_storage;
++        main_gpu           = inst.main_gpu;
+         no_kv_offload  = inst.no_kv_offload;
+         flash_attn     = inst.flash_attn;
+         devices        = inst.devices;
+@@ -1581,7 +1622,7 @@ struct test {
+             "n_ubatch",       "n_threads",      "cpu_mask",      "cpu_strict",     "poll",
+             "type_k",         "type_v",         "n_gpu_layers",  "n_cpu_moe",      "split_mode",
+             "main_gpu",       "no_kv_offload",  "flash_attn",    "devices",        "tensor_split",
+-            "tensor_buft_overrides",            "load_mode",     "lazy_mode",
++            "tensor_buft_overrides",            "load_mode",     "lazy_mode", "moe_expert_storage",
+             "embeddings",
+             "no_op_offload",  "no_host",        "fit_target",    "fit_min_ctx",
+             "n_prompt",       "n_gen",          "n_depth",
+@@ -1607,7 +1648,7 @@ struct test {
+         if (field == "avg_ts" || field == "stddev_ts") {
+             return FLOAT;
+         }
+-        if (field == "load_mode" || field == "lazy_mode") {
++        if (field == "load_mode" || field == "lazy_mode" || field == "moe_expert_storage") {
+             return STRING;
+         }
+         return STRING;
+@@ -1678,6 +1719,7 @@ struct test {
+                                             tensor_buft_overrides_str,
+                                             llama_load_mode_name(load_mode),
+                                             lazy_mode_str(lazy_mode),
++                                            moe_expert_storage_str(moe_expert_storage),
+                                             std::to_string(embeddings),
+                                             std::to_string(no_op_offload),
+                                             std::to_string(no_host),

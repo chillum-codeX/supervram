@@ -1,0 +1,10 @@
+supervram/third_party/llama.cpp/
+supervram/build/
+supervram/.pytest_cache/
+supervram/**/__pycache__/
+supervram/results/arch-test/
+supervram/results/reproduced/
+supervram/results/*.svram
+supervram/results/*.svram.json
+supervram/*.log
+supervram/*.stdout.json

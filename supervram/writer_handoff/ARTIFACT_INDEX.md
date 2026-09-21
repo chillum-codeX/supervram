@@ -1,0 +1,21 @@
+# Technical artifact index
+
+- `README.md`: scope and commands.
+- `patches/0001-qwen3-moe-mmap-expert-storage.patch`: exact llama.cpp patch.
+- `docs/LLAMA_CPP_CODE_MAP.md`: source files, symbols and future GPU-cache insertion points.
+- `docs/IMPLEMENTATION_STATUS.md`: implemented/pending boundary.
+- `docs/RTX3090_PROTOCOL.md`: target-host execution protocol.
+- `docs/METRICS_SCHEMA.md`: evidence and metric definitions.
+- `supervram/`: Python tensor store, cache, policies, predictors, engine and tracing.
+- `include/`, `src/supervram_native.cpp`: C++ capability-probed asynchronous reader.
+- `scripts/pack_gguf_experts.py`: creates aligned per-layer/per-expert gate/up/down extents.
+- `scripts/probe_hardware.py`: GPU/GDS/filesystem/topology probe.
+- `scripts/simulate_trace.py`: deterministic policy replay.
+- `scripts/analyze_trace.py`: JSONL aggregation.
+- `scripts/roofline.py`: explicit analytical projection.
+- `scripts/run_ablations.py`: 720-run requested Cartesian plan.
+- `scripts/benchmark_target.py`: target llama-server latency/resource harness.
+- `results/`: current measured probe, synthetic replay, projection, tiny GGUF and ablation manifest.
+- `writer_handoff/EVIDENCE_LEDGER.md`: strict evidence labels.
+- `writer_handoff/BUILD_AND_TEST_RESULTS.md`: validation record.
+- `writer_handoff/KNOWN_LIMITATIONS.md`: unresolved engineering risks.
