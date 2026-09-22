@@ -31,3 +31,14 @@ Tuesday 22 September 2026 01:29:57 AM IST
   balanced). Verified end-to-end against two real runs: a plenty-of-RAM zero-copy bias-0.02 run (VRAM 22.7 GiB, hit rate 98.9%)
   and a 4 GB RAM-capped SSD run via cold_run.py (RAM panel correctly showed the 4 GiB systemd-run cap, SSD read 1.0-1.6 GB/s,
   bottleneck correctly flagged SSD READ during prefill). Screenshots confirm both light and dark themes render cleanly.
+- 23:10 root-caused and closed out the "cache exactness regression" alarm from earlier. It was a TEST METHODOLOGY bug, not a
+  code bug: comparing --storage cache against a --storage resident baseline run at different --n-batch/--n-ubatch picks up
+  ordinary CPU-fallback (batches > GGML_SCHED_EXPERT_CACHE_MAX_BATCH=4 correctly excluded from the cache and run on CPU, by
+  design) and batch-size-dependent GPU kernel selection -- confirmed resident-vs-resident alone diverges across batch sizes.
+  Apples-to-apples (same batch size both sides): classic cache, warm start (direct-io and mmap), and zero-copy with/without
+  bias are all bit-identical (tokens + logits hashes) to full-GPU resident. Along the way found and fixed a real, separate
+  bug: my own earlier "use slots_view not slots_persist" fix (aimed at a theoretical sync gap) broke warm start outright
+  (crash: read_direct is shared by live-miss handling, where slots_view exists, and warm start, which runs before any graph
+  exists, where it does not) -- corrected to prefer slots_view only when bound. Also wired the expert-cache lazy-read flags
+  and cache-aware-routing bias hook into qwen35moe.cpp (Qwen3.6-35B-A3B's architecture), mirroring qwen3moe.cpp. Resuming the
+  Qwen3.6-35B-A3B download/bring-up now.
