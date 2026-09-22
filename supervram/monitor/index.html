@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SuperVRAM Monitor</title>
+<style>
+  :root {
+    --bg: #0b0d12;
+    --panel: #12151c;
+    --panel-2: #171b24;
+    --border: #232836;
+    --text: #e8eaf0;
+    --text-dim: #8890a4;
+    --text-faint: #565f75;
+    --accent: #5b8cff;
+    --accent-dim: #2c3a5c;
+    --vram: #7aa2ff;
+    --ram: #6fd6a8;
+    --ssd: #ffb454;
+    --hot: #ff5d6c;
+    --warn: #ffb454;
+    --ok: #4fd68a;
+    --info: #7aa2ff;
+    --idle: #565f75;
+    --mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f4f5f8; --panel: #ffffff; --panel-2: #f9fafc; --border: #e3e6ee;
+      --text: #1a1d27; --text-dim: #666e84; --text-faint: #a0a6b8;
+      --accent-dim: #dfe8ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
+  body { padding: 20px; min-height: 100vh; }
+  .wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+  header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 2px 2px 6px; }
+  .title { display: flex; align-items: baseline; gap: 10px; }
+  .title h1 { font-size: 19px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+  .title .sub { font-size: 12.5px; color: var(--text-dim); font-family: var(--mono); }
+  .status { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-dim); font-family: var(--mono); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); transition: background .3s; }
+  .dot.live { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+
+  .banner {
+    border-radius: 14px; padding: 16px 20px; border: 1px solid var(--border);
+    background: var(--panel); display: flex; align-items: center; gap: 16px; transition: border-color .3s;
+  }
+  .banner .icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 18px; }
+  .banner .label { font-size: 15.5px; font-weight: 650; letter-spacing: -0.01em; }
+  .banner .detail { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+  .banner.hot { border-color: color-mix(in srgb, var(--hot) 40%, var(--border)); }
+  .banner.hot .icon { background: color-mix(in srgb, var(--hot) 18%, transparent); color: var(--hot); }
+  .banner.warn .icon { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+  .banner.ok .icon { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+  .banner.info .icon { background: color-mix(in srgb, var(--info) 18%, transparent); color: var(--info); }
+  .banner.idle .icon { background: color-mix(in srgb, var(--idle) 22%, transparent); color: var(--text-dim); }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .grid2 { grid-template-columns: 1fr !important; } }
+  .grid2 { display: grid; grid-template-columns: 1.3fr 1fr; gap: 14px; }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; }
+  .card h2 { font-size: 11.5px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin: 0 0 12px; display: flex; align-items: center; justify-content: space-between; }
+  .card h2 .tag { font-family: var(--mono); font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--text-faint); font-size: 11px; }
+
+  .tier-value { display: flex; align-items: baseline; gap: 6px; margin-bottom: 10px; }
+  .tier-value .num { font-family: var(--mono); font-size: 26px; font-weight: 600; letter-spacing: -0.02em; }
+  .tier-value .unit { font-size: 13px; color: var(--text-dim); }
+  .tier-value .of { font-size: 12.5px; color: var(--text-faint); font-family: var(--mono); margin-left: auto; }
+
+  .bar { height: 8px; border-radius: 5px; background: var(--panel-2); border: 1px solid var(--border); overflow: hidden; margin-bottom: 10px; }
+  .bar > div { height: 100%; border-radius: 5px; transition: width .5s ease; }
+  .bar.vram > div { background: linear-gradient(90deg, var(--vram), #a0c0ff); }
+  .bar.ram > div { background: linear-gradient(90deg, var(--ram), #a6f0cf); }
+  .bar.ssd > div { background: linear-gradient(90deg, var(--ssd), #ffd28a); }
+
+  .spark { width: 100%; height: 34px; display: block; }
+  .foot-row { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--text-faint); font-family: var(--mono); margin-top: 4px; }
+
+  .cache-ring-row { display: flex; align-items: center; gap: 18px; }
+  .ring-wrap { position: relative; width: 92px; height: 92px; flex-shrink: 0; }
+  .ring-wrap svg { transform: rotate(-90deg); }
+  .ring-wrap .pct { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 18px; font-weight: 600; }
+  .stat-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; flex: 1; }
+  .stat-list .item .k { font-size: 11px; color: var(--text-faint); }
+  .stat-list .item .v { font-family: var(--mono); font-size: 14.5px; font-weight: 600; }
+
+  .progress-row { margin-bottom: 14px; }
+  .progress-row .pr-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
+  .progress-row .pr-label b { color: var(--text); font-family: var(--mono); font-weight: 600; }
+  .pbar { height: 10px; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--border); overflow: hidden; }
+  .pbar > div { height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--accent), #9fb8ff); transition: width .4s ease; }
+
+  .chart-wrap { position: relative; }
+  .chart-wrap canvas { width: 100%; height: 130px; display: block; }
+  .chart-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-faint); font-family: var(--mono); margin-top: 4px; }
+
+  .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 18px; }
+  .config-grid .item .k { font-size: 10.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.04em; }
+  .config-grid .item .v { font-family: var(--mono); font-size: 13px; margin-top: 2px; word-break: break-all; }
+
+  .empty { color: var(--text-faint); font-size: 13px; padding: 6px 0; }
+  .pulse { animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
+
+  footer { text-align: center; padding: 10px 0 4px; font-size: 11px; color: var(--text-faint); font-family: var(--mono); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="title">
+      <h1>SuperVRAM Monitor</h1>
+      <span class="sub" id="modelName">no run active</span>
+    </div>
+    <div class="status"><span class="dot" id="liveDot"></span><span id="statusText">connecting…</span></div>
+  </header>
+
+  <div class="banner idle" id="banner">
+    <div class="icon" id="bannerIcon">◌</div>
+    <div>
+      <div class="label" id="bannerLabel">IDLE</div>
+      <div class="detail" id="bannerDetail">Waiting for a run — point --progress at the live file to watch it here.</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>VRAM <span class="tag">RTX 3090</span></h2>
+      <div class="tier-value"><span class="num" id="vramUsed">–</span><span class="unit">GiB</span><span class="of" id="vramOf"></span></div>
+      <div class="bar vram"><div id="vramBar" style="width:0%"></div></div>
+      <canvas class="spark" id="vramSpark"></canvas>
+      <div class="foot-row"><span id="gpuUtil">util –%</span><span id="gpuPower">– W</span></div>
+    </div>
+
+    <div class="card">
+      <h2>RAM <span class="tag" id="ramTag">system</span></h2>
+      <div class="tier-value"><span class="num" id="ramUsed">–</span><span class="unit">GiB</span><span class="of" id="ramOf"></span></div>
+      <div class="bar ram"><div id="ramBar" style="width:0%"></div></div>
+      <canvas class="spark" id="ramSpark"></canvas>
+      <div class="foot-row"><span id="ramNote">no cgroup cap</span><span id="ramTotal"></span></div>
+    </div>
+
+    <div class="card">
+      <h2>SSD READ <span class="tag" id="ssdTag">nvme1n1 · WD</span></h2>
+      <div class="tier-value"><span class="num" id="ssdRate">–</span><span class="unit">GB/s</span><span class="of" id="ssdOf"></span></div>
+      <div class="bar ssd"><div id="ssdBar" style="width:0%"></div></div>
+      <canvas class="spark" id="ssdSpark"></canvas>
+      <div class="foot-row"><span id="ssdCeil">ceiling ~2.4 GB/s (measured)</span><span id="ssdTotal"></span></div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Decode progress</h2>
+      <div class="progress-row">
+        <div class="pr-label"><span>Prefill (prompt tokens)</span><b id="prefillLabel">0 / 0</b></div>
+        <div class="pbar"><div id="prefillBar" style="width:0%"></div></div>
+      </div>
+      <div class="progress-row" style="margin-bottom:6px">
+        <div class="pr-label"><span>Decode (output tokens)</span><b id="decodeLabel">0 / 0</b></div>
+        <div class="pbar"><div id="decodeBar" style="width:0%"></div></div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="tpsChart"></canvas>
+      </div>
+      <div class="chart-labels"><span>tokens/s, last 120 steps</span><span id="tpsNow">– t/s inst · – t/s avg</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Expert cache</h2>
+      <div class="cache-ring-row">
+        <div class="ring-wrap">
+          <svg width="92" height="92" viewBox="0 0 92 92">
+            <circle cx="46" cy="46" r="40" fill="none" stroke="var(--panel-2)" stroke-width="8"/>
+            <circle id="hitRing" cx="46" cy="46" r="40" fill="none" stroke="var(--ok)" stroke-width="8"
+                    stroke-dasharray="251.3" stroke-dashoffset="251.3" stroke-linecap="round"/>
+          </svg>
+          <div class="pct" id="hitPct">–%</div>
+        </div>
+        <div class="stat-list">
+          <div class="item"><div class="k">hits</div><div class="v" id="stHits">–</div></div>
+          <div class="item"><div class="k">misses</div><div class="v" id="stMisses">–</div></div>
+          <div class="item"><div class="k">evictions</div><div class="v" id="stEvict">–</div></div>
+          <div class="item"><div class="k">slots</div><div class="v" id="stSlots">–</div></div>
+          <div class="item"><div class="k">from RAM (H2D)</div><div class="v" id="stH2d">–</div></div>
+          <div class="item"><div class="k">from SSD</div><div class="v" id="stSsd">–</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Run configuration</h2>
+    <div class="config-grid" id="configGrid"><div class="empty">no run active</div></div>
+  </div>
+
+  <footer>polling every 600ms · progress file: <span id="progPath">–</span></footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const GiB = 1024**3, MiB = 1024**2;
+const fmt = (n, d=1) => (n == null || isNaN(n)) ? '–' : n.toFixed(d);
+const fmtInt = n => (n == null || isNaN(n)) ? '–' : Math.round(n).toLocaleString();
+const fmtBytes = b => {
+  if (b == null || isNaN(b)) return '–';
+  if (b >= GiB) return (b/GiB).toFixed(2) + ' GiB';
+  if (b >= MiB) return (b/MiB).toFixed(0) + ' MiB';
+  return (b/1024).toFixed(0) + ' KiB';
+};
+
+function drawSpark(canvas, values, color) {
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== w*dpr || canvas.height !== h*dpr) { canvas.width = w*dpr; canvas.height = h*dpr; }
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  if (!values.length) return;
+  const max = Math.max(...values, 1e-9);
+  const pts = values.map((v,i) => [i/(values.length-1||1)*w, h - (v/max)*h*0.9 - 2]);
+  ctx.beginPath();
+  pts.forEach(([x,y],i) => i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
+  ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.lineTo(w,h); ctx.lineTo(0,h); ctx.closePath();
+  const grad = ctx.createLinearGradient(0,0,0,h);
+  grad.addColorStop(0, color + '33'); grad.addColorStop(1, color + '00');
+  ctx.fillStyle = grad; ctx.fill();
+}
+
+function drawTpsChart(canvas, values) {
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== w*dpr || canvas.height !== h*dpr) { canvas.width = w*dpr; canvas.height = h*dpr; }
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  const pad = 4;
+  ctx.strokeStyle = 'var(--border)';
+  if (!values.length) return;
+  const max = Math.max(...values, 1);
+  const style = getComputedStyle(document.documentElement);
+  const accent = style.getPropertyValue('--accent').trim();
+  const pts = values.map((v,i) => [i/(values.length-1||1)*w, h - pad - (v/max)*(h-2*pad)]);
+  // gridline at max
+  ctx.beginPath(); ctx.moveTo(0, pad); ctx.lineTo(w, pad);
+  ctx.strokeStyle = style.getPropertyValue('--border').trim(); ctx.lineWidth = 1; ctx.setLineDash([3,3]); ctx.stroke(); ctx.setLineDash([]);
+  ctx.beginPath();
+  pts.forEach(([x,y],i) => i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
+  ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.lineTo(w,h); ctx.lineTo(0,h); ctx.closePath();
+  const grad = ctx.createLinearGradient(0,0,0,h);
+  grad.addColorStop(0, accent + '30'); grad.addColorStop(1, accent + '00');
+  ctx.fillStyle = grad; ctx.fill();
+}
+
+let everLive = false;
+
+async function tick() {
+  let s;
+  try {
+    const r = await fetch('/api/stats', {cache: 'no-store'});
+    s = await r.json();
+    $('liveDot').classList.add('live');
+    $('statusText').textContent = 'live';
+    everLive = true;
+  } catch (e) {
+    $('liveDot').classList.remove('live');
+    $('statusText').textContent = everLive ? 'reconnecting…' : 'connecting…';
+    setTimeout(tick, 700);
+    return;
+  }
+
+  $('progPath').textContent = s.progress_path || '–';
+
+  // GPU / VRAM
+  const gpu = s.gpu || {};
+  const vramUsedGiB = (gpu.vram_used_mib||0)/1024, vramTotGiB = (gpu.vram_total_mib||24576)/1024;
+  $('vramUsed').textContent = fmt(vramUsedGiB, 1);
+  $('vramOf').textContent = 'of ' + fmt(vramTotGiB,0) + ' GiB';
+  $('vramBar').style.width = Math.min(100, vramUsedGiB/vramTotGiB*100) + '%';
+  $('gpuUtil').textContent = 'util ' + fmtInt(gpu.util_pct) + '%';
+  $('gpuPower').textContent = fmtInt(gpu.power_w) + ' W · ' + fmtInt(gpu.temp_c) + '°C';
+
+  // RAM
+  const ram = s.ram || {};
+  const cg = s.cgroup;
+  let usedB = ram.used_bytes, totB = ram.total_bytes, note = 'no cgroup cap';
+  if (cg) {
+    usedB = cg.current_bytes;
+    if (cg.capped && cg.max_bytes) { totB = cg.max_bytes; note = 'systemd-run cap active'; }
+    else { totB = ram.total_bytes; note = cg.capped ? 'capped' : 'process RSS shown'; }
+  }
+  $('ramUsed').textContent = fmt(usedB/GiB, 2);
+  $('ramOf').textContent = 'of ' + fmt(totB/GiB,0) + ' GiB';
+  $('ramBar').style.width = Math.min(100, usedB/totB*100) + '%';
+  $('ramNote').textContent = note;
+  $('ramTag').textContent = (cg && cg.capped) ? 'RAM-capped run' : 'system';
+  $('ramTotal').textContent = fmt(ram.total_bytes/GiB,0) + ' GiB total';
+
+  // SSD
+  const ssd = s.ssd || {};
+  const ceilB = s.ssd_ceiling_bps || 2.4e9;
+  const rateGBs = (ssd.read_bps||0)/1e9;
+  $('ssdRate').textContent = fmt(rateGBs, 2);
+  $('ssdOf').textContent = fmt(rateGBs/(ceilB/1e9)*100,0) + '% of ceiling';
+  $('ssdBar').style.width = Math.min(100, (ssd.read_bps||0)/ceilB*100) + '%';
+  $('ssdTag').textContent = (ssd.device||'') + ' · WD';
+  $('ssdCeil').textContent = 'ceiling ~' + fmt(ceilB/1e9,1) + ' GB/s (measured)';
+  $('ssdTotal').textContent = ssd.write_bps > 1e6 ? ('+' + fmt(ssd.write_bps/1e9,2) + ' GB/s write') : '';
+
+  // sparklines
+  const hist = s.history || [];
+  drawSpark($('vramSpark'), hist.map(h=>h.vram_used_mib), getComputedStyle(document.documentElement).getPropertyValue('--vram').trim());
+  drawSpark($('ramSpark'), hist.map(h=>h.ram_used_bytes), getComputedStyle(document.documentElement).getPropertyValue('--ram').trim());
+  drawSpark($('ssdSpark'), hist.map(h=>h.ssd_read_bps), getComputedStyle(document.documentElement).getPropertyValue('--ssd').trim());
+
+  // bottleneck banner
+  const bn = s.bottleneck || {label:'IDLE', detail:'', level:'idle'};
+  const banner = $('banner');
+  banner.className = 'banner ' + bn.level;
+  $('bannerLabel').textContent = bn.label;
+  $('bannerDetail').textContent = bn.detail;
+  const icons = {hot:'▲', warn:'●', ok:'✓', info:'◐', idle:'◌'};
+  $('bannerIcon').textContent = icons[bn.level] || '◐';
+  $('bannerIcon').classList.toggle('pulse', bn.level === 'hot');
+
+  // run
+  const run = s.run || {};
+  if (run.active) {
+    $('modelName').textContent = (run.model_name || '') + '  ·  ' + (run.config?.storage || '') +
+        (run.config?.bias ? ` · bias ${run.config.bias}` : '') + (run.config?.zerocopy ? ' · zero-copy' : '');
+    $('prefillLabel').textContent = fmtInt(run.prefill_pos) + ' / ' + fmtInt(run.prefill_total);
+    $('prefillBar').style.width = run.prefill_total ? Math.min(100, run.prefill_pos/run.prefill_total*100) + '%' : '0%';
+    $('decodeLabel').textContent = fmtInt(run.decode_step) + ' / ' + fmtInt(run.decode_total);
+    $('decodeBar').style.width = run.decode_total ? Math.min(100, run.decode_step/run.decode_total*100) + '%' : '0%';
+    $('tpsNow').textContent = fmt(run.tps_inst,1) + ' t/s inst · ' + fmt(run.tps_avg,1) + ' t/s avg';
+    drawTpsChart($('tpsChart'), run.step_history || []);
+
+    if (run.hit_rate != null) {
+      const pct = run.hit_rate;
+      $('hitPct').textContent = fmt(pct,1) + '%';
+      const circumf = 251.3;
+      $('hitRing').style.strokeDashoffset = circumf - (pct/100)*circumf;
+      $('stHits').textContent = fmtInt(run.hits);
+      $('stMisses').textContent = fmtInt(run.misses);
+      $('stEvict').textContent = fmtInt(run.evictions);
+      $('stSlots').textContent = fmtInt(run.n_slots);
+      $('stH2d').textContent = fmtBytes(run.bytes_h2d);
+      $('stSsd').textContent = fmtBytes(run.bytes_ssd);
+    }
+
+    const cfg = run.config || {};
+    const rows = [
+      ['model', run.model_name], ['storage', cfg.storage], ['zero-copy', cfg.zerocopy ? 'yes' : 'no'],
+      ['bias', cfg.bias ?? 0], ['bias mode', cfg.bias_mul ? 'multiplicative' : 'additive'],
+      ['cache', fmtInt(cfg.cache_mib) + ' MiB'], ['direct I/O', cfg.direct_io ? 'yes (SSD)' : 'no'],
+      ['context', fmtInt(cfg.n_ctx)], ['prompt tokens', fmtInt(cfg.prompt_tokens)],
+      ['target output', fmtInt(cfg.n_predict)], ['warm start', run.warm_ms != null ? fmtInt(run.warm_ms) + ' ms' : 'off'],
+      ['phase', run.phase],
+    ];
+    $('configGrid').innerHTML = rows.map(([k,v]) => `<div class="item"><div class="k">${k}</div><div class="v">${v ?? '–'}</div></div>`).join('');
+  } else {
+    $('modelName').textContent = 'no run active';
+    $('configGrid').innerHTML = '<div class="empty">Start a run with --progress pointed at the live file to see it here.</div>';
+  }
+
+  setTimeout(tick, 600);
+}
+tick();
+</script>
+</body>
+</html>

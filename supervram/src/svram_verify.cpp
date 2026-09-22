@@ -24,6 +24,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <unistd.h>
 
 namespace {
 
@@ -264,6 +265,25 @@ int main(int argc, char ** argv) {
     if (o.tokenize_only) {
         return 0;
     }
+
+    // live progress for the monitoring UI: one JSON object per line, appended as the run proceeds.
+    // truncated at the start of each run so a stale file from a previous run is never tailed by mistake.
+    auto progress = [&](const std::string & line) {
+        if (o.progress.empty()) return;
+        std::ofstream pg(o.progress, std::ios::app);
+        pg << line << "\n";
+    };
+    if (!o.progress.empty()) {
+        std::ofstream(o.progress, std::ios::trunc); // clear
+        char buf[1024];
+        std::snprintf(buf, sizeof(buf),
+            "{\"phase\":\"start\",\"t\":%.0f,\"model\":\"%s\",\"storage\":\"%s\",\"zerocopy\":%s,\"bias\":%.4f,\"bias_mul\":%s,"
+            "\"cache_mib\":%d,\"direct_io\":%s,\"n_ctx\":%d,\"n_batch\":%d,\"n_ubatch\":%d,\"prompt_tokens\":%d,\"n_predict\":%d,\"pid\":%d}",
+            now_ms(), o.model.c_str(), o.storage.c_str(), o.zerocopy ? "true" : "false", (double) o.bias,
+            o.bias_mul ? "true" : "false", o.cache_mib, o.direct_io ? "true" : "false", o.n_ctx, o.n_batch, o.n_ubatch,
+            n_prompt, o.n_predict, (int) getpid());
+        progress(buf);
+    }
     if (n_prompt + o.n_predict > o.n_ctx) {
         std::fprintf(stderr, "warning: prompt (%d) + n_predict (%d) exceeds n_ctx (%d)\n", n_prompt, o.n_predict, o.n_ctx);
     }
@@ -280,8 +300,12 @@ int main(int argc, char ** argv) {
     double warm_ms = -1.0;
 #ifdef SVRAM_HAVE_EXPERT_CACHE
     if (!o.warm.empty()) {
+        progress("{\"phase\":\"warm\",\"t\":" + std::to_string(now_ms()) + ",\"stage\":\"before_prefill\"}");
         warm_ms = llama_moe_expert_cache_warm(ctx, o.warm.c_str()); // before the prompt: prompt batches then reuse the resident experts
         std::printf("warm_start_ms=%.0f (before prefill)\n", warm_ms);
+        if (warm_ms >= 0.0) {
+            progress("{\"phase\":\"warm_done\",\"t\":" + std::to_string(now_ms()) + ",\"warm_ms\":" + std::to_string(warm_ms) + "}");
+        }
     }
 #endif
     std::vector<llama_token> forced;
@@ -311,18 +335,23 @@ int main(int argc, char ** argv) {
         }
         llama_synchronize(ctx); // llama_decode returns once GPU work is queued; time the completed step
         prefill_chunk_ms.push_back(now_ms() - tc);
-        if (!o.progress.empty()) {
-            std::ofstream pg(o.progress, std::ios::app);
-            pg << "prefill " << (i0 + n) << "/" << n_prompt << " chunk_ms=" << prefill_chunk_ms.back() << " elapsed_s=" << (now_ms() - t_pp0) / 1000.0 << "\n";
+        {
+            char buf[256];
+            std::snprintf(buf, sizeof(buf), "{\"phase\":\"prefill\",\"t\":%.0f,\"pos\":%d,\"total\":%d,\"chunk_ms\":%.1f,\"elapsed_s\":%.3f}",
+                          now_ms(), i0 + n, n_prompt, prefill_chunk_ms.back(), (now_ms() - t_pp0) / 1000.0);
+            progress(buf);
         }
     }
     const double prompt_ms = now_ms() - t_pp0;
 #ifdef SVRAM_HAVE_EXPERT_CACHE
     if (!o.warm.empty() && warm_ms < 0.0) {
+        progress("{\"phase\":\"warm\",\"t\":" + std::to_string(now_ms()) + ",\"stage\":\"after_prefill\"}");
         warm_ms = llama_moe_expert_cache_warm(ctx, o.warm.c_str()); // the layout only exists after the first graph: retry after the prompt
         std::printf("warm_start_ms=%.0f (after prefill)\n", warm_ms);
+        progress("{\"phase\":\"warm_done\",\"t\":" + std::to_string(now_ms()) + ",\"warm_ms\":" + std::to_string(warm_ms) + "}");
     }
 #endif
+    progress("{\"phase\":\"prefill_done\",\"t\":" + std::to_string(now_ms()) + ",\"prompt_ms\":" + std::to_string(prompt_ms) + "}");
 
     for (int step = 0; step < o.n_predict; ++step) {
         const float * logits = llama_get_logits_ith(ctx, -1);
@@ -387,6 +416,30 @@ int main(int argc, char ** argv) {
         }
         llama_synchronize(ctx);
         step_ms.push_back(now_ms() - t0);
+        if (!o.progress.empty()) {
+            double tps_inst = step_ms.back() > 0.0 ? 1000.0 / step_ms.back() : 0.0;
+            double tps_avg = 0.0;
+            { double sum = 0.0; for (double v : step_ms) sum += v; tps_avg = sum > 0.0 ? 1000.0 * step_ms.size() / sum : 0.0; }
+            char buf[512];
+            int n = std::snprintf(buf, sizeof(buf),
+                "{\"phase\":\"decode\",\"t\":%.0f,\"step\":%d,\"total\":%d,\"step_ms\":%.2f,\"tps_inst\":%.1f,\"tps_avg\":%.1f",
+                now_ms(), step, o.n_predict, step_ms.back(), tps_inst, tps_avg);
+#ifdef SVRAM_HAVE_EXPERT_CACHE
+            {
+                ggml_backend_sched_expert_cache_stats st{};
+                if (llama_get_moe_expert_cache_stats(ctx, &st)) {
+                    const double hit_rate = st.accesses ? 100.0 * st.hits / st.accesses : 0.0;
+                    n += std::snprintf(buf + n, sizeof(buf) - n,
+                        ",\"hits\":%llu,\"misses\":%llu,\"evictions\":%llu,\"hit_rate\":%.2f,\"bytes_h2d\":%llu,\"bytes_ssd\":%llu,\"n_slots\":%llu,\"host_ms\":%.2f,\"io_ms\":%.2f",
+                        (unsigned long long) st.hits, (unsigned long long) st.misses, (unsigned long long) st.evictions, hit_rate,
+                        (unsigned long long) st.bytes_h2d, (unsigned long long) st.bytes_ssd, (unsigned long long) st.n_slots_total,
+                        st.host_ms, st.io_ms);
+                }
+            }
+#endif
+            std::snprintf(buf + n, sizeof(buf) - n, "}");
+            progress(buf);
+        }
     }
 
     // decoded text
@@ -403,6 +456,12 @@ int main(int argc, char ** argv) {
 
     std::printf("mode=%s ngl=%d cpu_moe=%d n_cpu_moe=%d cache_mib=%d prompt_tokens=%d generated=%zu load_ms=%.0f prompt_ms=%.1f decode_tps=%.2f\n",
                 o.storage.c_str(), o.ngl, (int) o.cpu_moe, o.n_cpu_moe, o.cache_mib, n_prompt, generated.size(), load_ms, prompt_ms, tps);
+    {
+        char buf[256];
+        std::snprintf(buf, sizeof(buf), "{\"phase\":\"done\",\"t\":%.0f,\"generated\":%zu,\"prompt_ms\":%.1f,\"decode_tps\":%.2f}",
+                      now_ms(), generated.size(), prompt_ms, tps);
+        progress(buf);
+    }
 #ifdef SVRAM_HAVE_EXPERT_CACHE
     {
         ggml_backend_sched_expert_cache_stats st{};

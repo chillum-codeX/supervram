@@ -37,6 +37,13 @@ Command-line flags (any llama.cpp tool that takes the usual model options, plus 
 
 The environment variables `SVRAM_DIRECT_IO=1`, `SVRAM_IO_THREADS`, `SVRAM_STAGING_MIB`, `SVRAM_TRACE=<file>` still work as a fallback (the scripts use them); an explicit flag wins.
 
+## Live monitor
+
+`python3 monitor/server.py --port 8787` (or `preview_start` name `svram-monitor`), then open http://localhost:8787.
+Add `--progress /tmp/claude-1000/svram-live.jsonl` to any `svram-verify` / `cold_run.py` invocation to watch it live:
+VRAM, RAM (including the real cgroup cap during a RAM-poor run), SSD read throughput vs its measured ceiling, expert
+cache hit rate, and a bottleneck indicator. Details: `monitor/README.md`.
+
 ## Experiments
 
 | Result | Command |
