@@ -22,3 +22,6 @@ Q36-stock-forced	prefill_s=9.8	decode_tps=100.5	n_out=4096	by_pos(0-512,512-1024
 Q36-cache-exact	prefill_s=24.2	decode_tps=98.1	n_out=4096	by_pos(0-512,512-1024,1024-2048,2048-4096)=79.3,100.9,101.7,101.5	total_s=66
 Q36-cache-bias0.02	prefill_s=123.5	decode_tps=89.5	n_out=4096	by_pos(0-512,512-1024,1024-2048,2048-4096)=81.6,90.8,90.7,90.7	total_s=169
 Q36-cache-bias0.02-run2	prefill_s=24.2	decode_tps=89.0	n_out=4096	by_pos(0-512,512-1024,1024-2048,2048-4096)=82.0,89.6,89.8,90.4	total_s=70
+Q36-zerocopy-exact	prefill_s=23.2	decode_tps=70.4	n_out=4096	by_pos(0-512,512-1024,1024-2048,2048-4096)=38.4,88.4,83.7,76.3	total_s=81
+Q36-zerocopy-exact-14g	prefill_s=23.3	decode_tps=88.5	n_out=4096	by_pos(0-512,512-1024,1024-2048,2048-4096)=40.1,100.7,104.4,109.8	total_s=70
+Q36-zerocopy-bias0.02	prefill_s=23.5	decode_tps=86.2	n_out=4096	by_pos(0-512,512-1024,1024-2048,2048-4096)=52.6,92.8,94.5,95.6	total_s=71

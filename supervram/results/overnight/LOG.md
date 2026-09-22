@@ -66,3 +66,14 @@ Tuesday 22 September 2026 01:29:57 AM IST
   layers must fit in RAM). Headline for this model: SuperVRAM does not beat a generous-VRAM stock split here (that split was
   already close to optimal), but it is what makes the small-RAM case work at all. Zero-copy tier still unresolved (see prior
   entry) so not included.
+- 01:15 CORRECTION on the zero-copy tier: it was never actually broken. Same root cause as the classic-cache false alarm --
+  I was comparing a zero-copy run at --n-batch 1 --n-ubatch 1 against a resident reference taken at the DEFAULT batch size
+  (512/64), which picks up the same batch-size-dependent kernel variance. Matched-batch re-test (short prompt AND a
+  1500-token/16-step decode): tokens and logits hashes are bit-identical to resident. Ruled out nothing was actually wrong;
+  the debug instrumentation (host-memory content vs GGUF ground truth, device-side pointer-table dispatch trace) all came
+  back clean along the way, which is consistent with this conclusion. Zero-copy tier is verified exact on Qwen3.6-35B-A3B.
+  Flagship number, 32k in / 4096 forced out, cache-mib 14336: prefill 23.3 s + decode 88.5 t/s = 70 s (bias 0.02: 71 s, no
+  help here either). Still behind the stock split's 51 s and close to classic cache's 66 s -- same conclusion as before,
+  now on firmer ground: this model's cheap KV cache lets stock llama.cpp already use the 24 GB card efficiently, so none of
+  our modes have much room to improve when RAM is plentiful. The RAM-poor/SSD result (112 s where stock cannot run at all)
+  remains the genuine win for this model.
