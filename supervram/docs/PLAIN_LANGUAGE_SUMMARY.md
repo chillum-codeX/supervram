@@ -1,7 +1,9 @@
 # SuperVRAM / ElasticVRAM: what was built and what was measured, in plain language
 
-Machine: RTX 3090 (24 GB), WD SN550 NVMe (about 2.4 GB/s), 125 GB RAM, Qwen3-30B-A3B models.
-All numbers below come from files under `results/rtx3090/`; the detailed tables are in `docs/IMPLEMENTATION_STATUS.md`.
+Machine: RTX 3090 (24 GB), WD SN550 NVMe (about 2.4 GB/s), 125 GB RAM. Tested on two models: Qwen3-30B-A3B (the original
+target) and, added later, the newer and bigger Qwen3.6-35B-A3B, to see whether the approach holds up on a different model.
+All numbers below come from files under `results/rtx3090/` and `results/overnight/`; the detailed tables are in
+`docs/IMPLEMENTATION_STATUS.md` and `results/overnight/FINAL_RESULTS.md`.
 
 ## 1. The goal
 
@@ -81,6 +83,31 @@ Every system decodes the *same* 4,096-token text after the same prompt, so the c
 Three ideas did it: keep the most used experts in VRAM from the start (warm start), let the GPU read the rest straight from pinned RAM
 without stopping, and (optionally) nudge the router toward experts that are already in VRAM.
 
+## 4d. A second, newer model: Qwen3.6-35B-A3B (256 experts, hybrid architecture)
+
+To check the approach isn't a one-model fluke, I later downloaded a newer, bigger official model (35B parameters, 20.4 GB at
+this quantization) and ran the same kind of test on it. The honest result is more interesting than a clean win:
+
+| Machine budget | Total time (4,096 out) | Note |
+|---|---|---|
+| 24 GB GPU + RAM, plain llama.cpp (best split) | 51 s | this model needs almost no CPU help to begin with |
+| 24 GB GPU + RAM, this project's cache | 66-70 s | slower than plain here |
+| 24 GB GPU + 4 GB RAM + SSD | 112 s (2,048 out) | works at all only because of this project |
+
+This model's design keeps its "memory of the conversation so far" (its KV cache) far cheaper than the first model's, so
+almost the whole thing already fits on the 24 GB card with hardly any help from the CPU — there's very little left for a
+caching trick to improve. Plain llama.cpp legitimately wins there. But the small-RAM row still only works because of this
+project, on this model too, which is the more important, more general result: **it's not always a speed win, but it's
+always the difference between "runs" and "doesn't run" when RAM is scarce.**
+
+**A mistake worth admitting, because it explains why this took longer than expected:** twice this session I thought I'd
+found a real bug making the caching produce wrong answers, and both times it turned out I was comparing two runs that
+weren't actually set up the same way (different "batch size" settings), which naturally gives different — but equally
+correct — results, the same way two calculators can give very slightly different rounding for a big calculation without
+either being wrong. Once I compared like-for-like, everything checked out as exactly correct in both cases. No real
+correctness bug was found in either investigation; one small, unrelated bug (from an earlier fix I made myself, over-eagerly)
+was found and fixed along the way, and is not the source of either scare.
+
 ## 4. Results in order
 
 Q8_0 (30 GiB, does not fit in VRAM), 16 GiB cache, cold start unless noted:
@@ -142,6 +169,8 @@ Q8_0 (30 GiB, does not fit in VRAM), 16 GiB cache, cold start unless noted:
 
 ## 9. Where everything lives
 
-Code: `patches/0001..0005`, `src/svram_verify.cpp`. Tools: `scripts/cold_run.py`, `ssd_expert_read_bench.py`, `analyze_policies.py`,
-`compare_quality.py`, `aggregate_ablations.py`. Results: `results/rtx3090/` (cold, ablations-long, traces, quality). Status tables:
+Code: `patches/0001..0009`, `src/svram_verify.cpp`, live monitor UI: `monitor/`. Tools: `scripts/cold_run.py`,
+`ssd_expert_read_bench.py`, `analyze_policies.py`, `compare_quality.py`, `aggregate_ablations.py`, `scripts/bench32k.sh`
+(set `BENCH_MODEL` to switch between the two models tested). Results: `results/rtx3090/` (cold, ablations-long, traces,
+quality) and `results/overnight/` (both models' final numbers, `FINAL_RESULTS.md` is the top-level summary). Status tables:
 `docs/IMPLEMENTATION_STATUS.md`; evidence log: `writer_handoff/EVIDENCE_LEDGER.md`; running log: `../progress.md`.
