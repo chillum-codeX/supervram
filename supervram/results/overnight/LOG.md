@@ -53,3 +53,16 @@ Tuesday 22 September 2026 01:29:57 AM IST
   SuperVRAM today; zero-copy (the fastest tier, used for the 48-GB-class comparison) needs further debugging before it can be
   used on this architecture. Recommend running the benchmark on classic cache for this model, or holding zero-copy for a
   follow-up session.
+- 00:20 Qwen3.6-35B-A3B-Q4_K_M benchmark on the classic cache (verified-exact path), 32k in / 4096 forced out, same text
+  everywhere. Best-fitting stock split: --n-cpu-moe 4 (only 4/40 layers to CPU; --n-cpu-moe 3 OOMs) -- 51 s (9.8 s prefill +
+  100.5 t/s decode). This model's recurrent/linear-attention layers keep KV cache tiny, so stock llama.cpp already uses the
+  24 GB card very efficiently; classic cache exact mode is SLOWER here: 66 s (24.2 s prefill + 98.1 t/s decode, hit rate
+  99.1%) -- prefill overhead from cache-filling isn't recovered since stock had almost nothing to offload in the first place.
+  Cache-aware routing bias (0.02) actually cost more than it saved at this cache size (14336 MiB, n_slots=25440 covers ~83%
+  of the 256 experts/layer already): hit rate rose to 99.7% but decode dropped to 89.0 t/s (total 70 s) -- bias's kernel
+  overhead isn't offset when the plain cache is already this well saturated. RAM-poor (4 GB RAM cap + SSD, no bias): prefill
+  81.2 s, decode 65.4 t/s, 112 s for 2048 tokens, peak RAM 2.96 GiB, 146 GiB read from SSD -- this is the real value case:
+  runs a 20 GB MoE model at 32k context on 24 GB VRAM + 4 GB RAM, which stock llama.cpp cannot do at all (its CPU-offloaded
+  layers must fit in RAM). Headline for this model: SuperVRAM does not beat a generous-VRAM stock split here (that split was
+  already close to optimal), but it is what makes the small-RAM case work at all. Zero-copy tier still unresolved (see prior
+  entry) so not included.

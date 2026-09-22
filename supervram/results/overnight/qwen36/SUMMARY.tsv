@@ -1,0 +1,1 @@
+qwen36-ram4g-exact	prefill_s=81.2	decode_tps=65.4	n_out=2048	by_pos(0-512,512-1024,1024-2048,2048-4096)=38.7,83.7,85.6,nan	total_s=112

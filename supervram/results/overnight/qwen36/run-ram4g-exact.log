@@ -1,0 +1,24 @@
+{
+ "name": "qwen36-ram4g-exact",
+ "evidence_class": "measured_rtx3090",
+ "returncode": 0,
+ "disk": "nvme1n1",
+ "ram_cap": "4G",
+ "evicted_before": true,
+ "model_page_cache_resident_gib_before": 0.0,
+ "model_page_cache_resident_gib_after": 2.02,
+ "ssd_read_gib": 145.93,
+ "wall_s": 128.3,
+ "peak_rss_anon_gib": 0.45,
+ "peak_rss_file_gib": 1.93,
+ "peak_cgroup_gib": 2.96,
+ "cache_stats": [
+  "cache_stats accesses=1966080 hits=1938306 misses=27774 evictions=2937 hit_rate=98.6 bytes_h2d=16381771776 n_slots=25440 host_ms=11289.3",
+  "direct_io_stats bytes_ssd=154523934720 io_ms=70832.9"
+ ],
+ "env": {},
+ "stderr_tail": [],
+ "decode_tps_all": 65.4001,
+ "decode_tps_second_half": 85.59,
+ "tokens_generated": 2048
+}
