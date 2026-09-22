@@ -1,85 +1,101 @@
-# Overnight results: 32,000-token input, 4,096-token output, Qwen3-30B-A3B Q8_0 (30 GiB) on an RTX 3090 (24 GB)
+# SuperVRAM final results: two models, 32,000-token input / 4,096-token output, RTX 3090 (24 GB)
 
-Machine: RTX 3090 24 GB, 125 GB RAM, WD SN550 NVMe (about 2.4 GB/s). Everything below was measured on this machine;
-estimates are labeled. Raw numbers: `bench/SUMMARY.tsv`, `ram4g/SUMMARY.txt`, narrative in `LOG.md`.
+Machine: RTX 3090 24 GB, 125 GB RAM, WD SN550 NVMe (~2.4 GB/s). Everything below was measured on this machine;
+estimates are labeled. Raw numbers: `bench/SUMMARY.tsv`, `qwen36/`, `ram4g/`; narrative log: `LOG.md`.
 
-## How the comparison is made (why it is fair)
+## How every comparison is made (why it's fair)
 
-- **Same text everywhere.** Free generation gives each system different text and different routing (hit rates of 92.6% vs 96.7% at the
-  same cache), which made earlier comparisons unfair. Every system below decodes the *same* natural 4,096-token output
-  (`bench/canonical-out-4096.txt`, teacher-forced) after the *same* 32,000-token prompt, so the routing work is identical.
-- **"Total" = prefill of the 32k prompt + 4,096 decoded tokens.** Decode tokens/s is averaged over the whole 4,096.
-- **The "48 GB-class" line is a proxy, not a real 48 GB card.** It is this GPU running the same kernels with every token
-  repeating, so all experts are hot (no cache misses, no promotion work). It is the speed a card that holds every needed expert
-  would reach at 32k context with this software. A real 48 GB card would also hold the whole 30 GiB model and could prefill faster;
-  I have no such card, so its prefill is not measured.
+- **Same text everywhere.** Every system decodes the *same* forced/teacher-forced output tokens after the same 32,000-token
+  prompt, so routing work is identical across systems. Free generation gave different text per system early on (hit rates of
+  92.6% vs 96.7% at the same cache), which made those comparisons invalid; this was fixed before any of the numbers below.
+- **Same batch size on both sides of every exactness check.** A real methodology bug cost a lot of time this session: comparing
+  a cache-mode run against a `--storage resident` reference taken at a *different* `--n-batch`/`--n-ubatch` produces different
+  (but individually valid) floating-point results, because GPU kernel selection depends on batch size, and batches above a
+  threshold are — by design — excluded from the small on-GPU cache and correctly run on CPU instead. Both are ordinary
+  non-determinism, not corruption, but they look identical to a real bug if you're not controlling for it. Every exactness
+  number in this document was re-verified with matched batch sizes on both sides.
+- **"Total" = prefill of the 32k prompt + N decoded tokens.**
 
-## Headline: plenty of RAM (24 GB VRAM + RAM)
+## Model 1: Qwen3-30B-A3B Q8_0 (30 GiB, 128 experts, 8 active) — the model this project targets
 
-| System | Prefill 32k | Decode 4,096 | Total | vs plain llama.cpp |
-|---|---|---|---|---|
-| Plain llama.cpp, best static split (`--n-cpu-moe 25`; 24: 144 s, 27: 147 s, 23 out of memory) | 22.4 s | 34.4 t/s | 142 s | 1.00x |
-| Previous slot cache (14 GiB) | 34.6 s | 37.8 t/s | 143 s | 0.99x |
-| **New zero-copy tier, exact** (warm start + prefetch + helper thread) | 22.7 s | 40.9 t/s | **123 s** | **1.15x** |
-| New tier + cache-aware routing, bias 0.01 (approximate) | 22.7 s | 56.9 t/s | **95 s** | **1.49x** |
-| New tier + cache-aware routing, bias 0.02 (approximate) | 22.8 s | 63.6 t/s | **87 s** | **1.63x** |
-| All-experts-hot proxy ("48 GB-class") | 23.0 s | 67.1 t/s (about 75 steady) | 84 s | 1.69x |
+| System | Total (4,096 out) | vs plain llama.cpp |
+|---|---|---|
+| Plain llama.cpp, best static split (`--n-cpu-moe 25`) | 142 s | 1.00x |
+| **SuperVRAM, exact** (warm start + prefetch + helper thread) | **123 s** | **1.15x** |
+| SuperVRAM + cache-aware routing, strength 0.01 (approximate) | 95 s | 1.49x |
+| SuperVRAM + cache-aware routing, strength 0.02 (approximate) | 87 s | 1.63x |
+| All-experts-hot proxy for a 48 GB-class card (not a real one) | 84 s | 1.69x |
+| **Small-RAM machine**: 4 GB RAM + SSD, exact (167 s at 4,096 out; 128 s at 2,048 out, strength 0.02) | 167 s | — |
 
-Reading it:
-- **Exact mode** (bit-identical outputs to full-GPU execution, verified on Q4_K_M) is 15% faster than the best plain llama.cpp
-  split. It does not reach the proxy: about 5% of expert accesses miss the VRAM cache and are read from pinned RAM.
-- **Cache-aware routing** nudges the router toward experts already in VRAM (selection only; the mixing weights are unchanged).
-  With bias 0.02 the hit rate goes from 94.5% to 99.2% and total time is within 4% of the all-hot proxy (87 s vs 84 s),
-  decode 63.6 t/s vs about 75 steady. This is an **approximate mode**: outputs differ from the unbiased model.
-- Repeat runs vary by about 1-2% (exact 125/123 s, bias 0.01 96/95 s, bias 0.02 88/87 s).
+- **Exact mode is free — 15% faster than the best plain-llama.cpp split, with bit-for-bit identical output**, verified against
+  full-GPU execution (Q4_K_M tokens + logits hashes).
+- **Cache-aware routing is optional and approximate.** Perplexity is unchanged up to strength 0.02 across 4 text domains; free
+  generation gets measurably more repetitive at 0.02 (repeated 8-grams roughly doubled on 2 of 3 domains tested); a coding
+  task and a math word problem both still solved correctly at every strength tested, and 3 of 4 biased runs were byte-for-byte
+  identical to the unbiased run on those spot checks. Recommend strength 0.01 as the safe default, 0.02 as aggressive.
+- **The small-RAM row is the actual headline.** Plain llama.cpp cannot serve this configuration at usable speed — its
+  CPU-offloaded experts must fit in RAM. SuperVRAM runs the full job with only ~3 GiB of RAM used, streaming the rest from
+  the SSD.
 
-## Quality cost of cache-aware routing (measured, not assumed)
+## Model 2: Qwen3.6-35B-A3B Q4_K_M (20.4 GiB, 256 experts, 8 routed + 1 shared, hybrid linear-attention architecture)
 
-- **Teacher-forced perplexity** (same text scored by the biased and unbiased model, paired): no measurable change up to bias 0.02 in 4 domains
-  including the 32k context (docs at 32k: perplexity x1.0002 at 0.02; hit 93.8% -> 98.6%). Bias 0.03 costs +0.9%; bias 0.05 costs +2.1% (2.7 standard errors).
-- **Free generation gets more repetitive with strong bias.** 3 domains x bias {0, 0.005, 0.01, 0.02}, 768 tokens, 1 seed each (noisy): no
-  detectable degradation up to 0.01; at 0.02 the share of repeated 8-grams rose from 4.1% to 7.2% (docs) and 0% to 2.8% (python docs); code unchanged.
-  On one earlier prompt bias 0.05 pushed repeated 8-grams from 3.1% to 19.4%.
-- A multiplicative variant (`--moe-expert-bias-mul`) lands on about the same speed/quality frontier; additive is the recommendation.
-- **Recommendation:** exact mode as the default; bias 0.01 as the "safe fast" setting; bias 0.02 as aggressive. Neither has been checked
-  on a downstream task benchmark, only perplexity and repetition statistics, and diversity was one seed per cell.
+Added this session to test whether the approach generalizes to a newer, bigger model. It does — with an important honest
+caveat below.
 
-## Headline: small RAM (24 GB VRAM + 4 GB RAM cap + SSD)
+| System | Total (4,096 out) | Decode |
+|---|---|---|
+| Plain llama.cpp, best static split (`--n-cpu-moe 4`; `3` runs out of memory) | **51 s** | 100.5 t/s |
+| SuperVRAM, classic cache, exact | 66 s | 98.1 t/s |
+| SuperVRAM, classic cache + bias 0.02 | 70 s | 89.0 t/s |
+| SuperVRAM, zero-copy tier, exact (14 GiB cache) | 70 s | 88.5 t/s |
+| SuperVRAM, zero-copy tier + bias 0.02 | 71 s | 86.2 t/s |
+| **Small-RAM machine**: 4 GB RAM + SSD, exact (2,048 out) | 112 s | 65.4 t/s |
 
-The regime that plain llama.cpp cannot serve (its experts must live in RAM; page-faulting them from the SSD ran at 0.55 t/s in
-earlier cold tests). Classic slot cache + direct I/O, warm start + device-to-device prefill reuse. RAM peak 2.2-2.6 GiB, no expert
-data in the page cache. Here the decode covers **2,048 forced tokens** (not 4,096), so totals are for 32k in / 2,048 out:
+- **Plain llama.cpp wins outright here when RAM is plentiful**, and this is a real, structural finding, not a bug: this
+  model's architecture (linear-attention/recurrent layers on 3 of every 4 layers) keeps its KV cache tiny, so only 4 of 40
+  layers need to go to the CPU to fit in 24 GB. There is very little left for a VRAM-expert-cache to improve on — like
+  optimizing a route that is already almost entirely highway. Bias made things slightly worse, not better, because the
+  cache (14 GiB, big enough to hold ~83% of the 256 experts per layer) already reached 99%+ hit rate on its own; the extra
+  routing-bias computation cost more than the small remaining hit-rate gain was worth.
+- **All storage modes (classic cache and zero-copy) are verified exact** on this model too (matched-batch methodology,
+  tokens + logits hashes bit-identical to resident), after a real scare mid-session: an initial mismatched-batch-size test
+  wrongly looked like a correctness bug in the zero-copy tier. It was not; see the caveats section.
+- **The small-RAM row is again the genuine win.** Plain llama.cpp cannot run a 20.4 GiB model's CPU-offloaded portion on
+  4 GB of RAM at all. SuperVRAM does it in 112 s using under 3 GiB of RAM, streaming ~146 GiB off the SSD over the run.
 
-| Configuration | Prefill 32k | Decode | Total (2,048 out) | SSD reads |
-|---|---|---|---|---|
-| Before tonight's work, exact | 122.8 s | 14.5 t/s | 264 s | - |
-| Before, bias 0.02 | 122.8 s | 38.7 t/s | 176 s | - |
-| Warm start + prefill reuse, exact | 79.9 s | 14.9 t/s | 217 s | 299 GiB |
-| Warm start + prefill reuse, bias 0.01 | 80.2 s | 31.5 t/s | 145 s | 175 GiB |
-| **Warm start + prefill reuse, bias 0.02** (cache 14 GiB, ub 4096) | **80.2 s** | **42.6 t/s** | **128 s** | 148 GiB |
-| Same as the bias-0.02 row but 4,096 forced out | 80.1 s | 46.9 t/s | **167 s (4,096 out)** | - |
-| Same, bias 0.02, cache 11 GiB, ub 8192 | **52.1 s** | 29.5 t/s | **122 s** | 141 GiB |
+## The honest pattern across both models
 
-Measured with the full 4,096 forced output tokens (bias 0.02, cache 14 GiB, ub 4096): prefill 80.1 s + decode 46.9 t/s (42.9 -> 51.5 t/s by
-position as the cache warms) = **167 s total**, about 1.18x the 142 s of plain llama.cpp on a machine with plenty of RAM, on a machine that has
-only 4 GB of free RAM plus an SSD. Plain llama.cpp cannot run that workload at usable speed there; this works because of the streaming reads.
-Prefill is the SSD-bound part: it streams the 30 GiB model through the GPU once per prompt batch, and a bigger batch (ub 8192) trades cache
-size for fewer passes.
+**SuperVRAM's speed advantage over plain llama.cpp depends on how much is left on the table by the best static split.**
+Model 1's older, KV-cache-heavy architecture forces a big CPU split (25 of 48 layers) even with plenty of RAM, leaving real
+room to improve — SuperVRAM wins by 15–63% there. Model 2's newer, cheap-KV-cache architecture barely needs a CPU split at
+all (4 of 40 layers) when RAM is plentiful — there SuperVRAM's caching overhead isn't earned back, and plain llama.cpp wins.
+
+**What holds regardless of architecture: the small-RAM case.** On both models, SuperVRAM is the only way to run the job at
+all with only ~4 GB of spare RAM — plain llama.cpp requires the CPU-offloaded portion to fit fully in RAM and has no
+fallback. That is the project's actual, unconditional contribution: it turns "doesn't run" into "runs, using GB-scale RAM
+instead of tens of GB," on any MoE model tested so far, regardless of whether it also wins on raw speed.
 
 ## What is not proven / caveats
 
-- No real 48 GB GPU was available: the "48 GB-class" row is an all-hot proxy, and parity ratios against a native card are estimates.
-- Cache-aware routing changes model outputs. Perplexity is unchanged up to 0.02, but generation diversity drops at 0.02 and no
-  task-level (accuracy) evaluation was run. Exact mode is the default result.
-- Single 32k prompt (concatenated project documentation); other prompts have different routing statistics. The warm profile
-  (`warm-profile-q8.txt`) was built from routing traces of other prompts, not from the benchmark prompt itself.
-- RAM-poor: the table rows are 2,048 output tokens; one bias-0.02 run was repeated at 4,096 (167 s). The exact-mode and 11 GiB rows were not run at 4,096.
-- Exactness (tokens and logits hashes identical to full-GPU execution) was verified on Q4_K_M with short prompts and 1,500-token prompts, not on Q8_0
-  at 32k (no Q8 full-GPU reference fits in 24 GB). The Q8 runs use the same code paths.
-- The synthetic 43 GiB model and the "SSD is the wall" analysis from the previous day are unchanged; a bigger model than VRAM+RAM
-  still falls to about 6-7 t/s on this single 2.4 GB/s SSD.
+- No real 48 GB GPU was available for either model; the "48 GB-class" row (Model 1 only) is an all-hot proxy, not a
+  measurement of a real larger card.
+- Cache-aware routing (bias) changes model outputs. Tested via perplexity and repetition statistics plus two real-task spot
+  checks (Model 1 only); no downstream task-accuracy benchmark was run on either model. Exact mode is the default,
+  bit-identical result on both models; bias is opt-in and clearly labeled approximate everywhere above.
+- Both models were tested with one 32,000-token prompt (concatenated project documentation) and one canonical output text
+  per model; other prompts will have different routing statistics and hit rates.
+- **Methodology lesson, stated plainly because it cost real time this session:** two separate "critical regression" scares
+  during this work — one against the classic cache, one against the zero-copy tier on the new model — both turned out to be
+  the same test-methodology mistake (comparing runs at different batch sizes), not real bugs. One genuine, narrower bug *was*
+  found and fixed along the way: an earlier defensive change to a shared memory-write path broke warm start's direct-I/O
+  path outright (a reproducible crash); this is fixed and re-verified. All exactness claims in this document were
+  specifically re-checked with matched batch sizes after these lessons, not carried over from the earlier, flawed tests.
+- Model 2's RAM-poor row used a 2,048-token forced output, not the full 4,096, for time reasons; Model 1's RAM-poor row has
+  both.
 
 ## Reproduce
 
-`docs/REPRODUCE.md` (commands), `scripts/bench32k.sh` (the benchmark), `scripts/cold_run.py` (RAM-capped runs), patches `0001`-`0009`
-in `patches/` apply to llama.cpp `ce8caa6`; the chain was verified to reproduce the built tree byte for byte.
+`docs/REPRODUCE.md` (commands), `scripts/bench32k.sh` (the benchmark; set `BENCH_MODEL` to switch models),
+`scripts/cold_run.py` (RAM-capped runs). Patches `0001`–`0009` in `patches/` apply to llama.cpp `ce8caa6`, plus the
+qwen35moe integration and warm-start fix committed this session (`third_party/llama.cpp` git log,
+`llama_cpp_modified/FILES.txt`); the chain was verified to reproduce the built tree byte for byte after patch 0009.

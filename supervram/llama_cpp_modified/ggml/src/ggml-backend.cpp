@@ -1807,7 +1807,13 @@ static bool ggml_backend_sched_expert_cache_read_direct(
 
         for (size_t k = 0; k < n; k++) {
             const ggml_expert_miss & m = misses[i0 + k];
-            ggml_backend_tensor_set_async(split_backend, m.et->slots_persist ? m.et->slots_persist : m.et->slots_view,
+            // this function is shared by two callers: live in-graph misses (a real slots_view is bound, and the
+            // compute graph's MUL_MAT_ID node depends on that exact tensor object -- asserted elsewhere as
+            // node->src[0] == et.slots_view) and warm start / background promotion, which run with no graph
+            // built yet, so slots_view is still null and slots_persist is the only valid graph-independent
+            // handle to the same device memory. Prefer slots_view when it exists; it is never wrong to prefer
+            // it, since both handles alias the same memory once a graph exists.
+            ggml_backend_tensor_set_async(split_backend, m.et->slots_view ? m.et->slots_view : m.et->slots_persist,
                 cache->staging + pos[k] + head[k], (size_t) m.slot * m.et->expert_size, m.et->expert_size);
         }
         cache->staging_busy = true;

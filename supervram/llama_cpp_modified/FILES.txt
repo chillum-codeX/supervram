@@ -18,6 +18,7 @@ src/llama-model.cpp
 src/llama-model.h
 src/llama-model-loader.cpp
 src/llama-model-loader.h
+src/models/qwen35moe.cpp
 src/models/qwen3moe.cpp
 tests/CMakeLists.txt
 tests/test-expert-cache.cpp

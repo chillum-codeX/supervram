@@ -321,8 +321,8 @@ static std::pair<int, llama_model *> llama_model_load(struct gguf_context * meta
 
         if (params.moe_expert_storage == LLAMA_MOE_EXPERT_STORAGE_MMAP || params.moe_expert_storage == LLAMA_MOE_EXPERT_STORAGE_CACHE) {
             const char * mode = params.moe_expert_storage == LLAMA_MOE_EXPERT_STORAGE_MMAP ? "mmap" : "cache";
-            if (ml.get_arch() != LLM_ARCH_QWEN3MOE) {
-                throw std::runtime_error(std::string(mode) + " MoE expert storage is only supported for Qwen3 MoE");
+            if (ml.get_arch() != LLM_ARCH_QWEN3MOE && ml.get_arch() != LLM_ARCH_QWEN35MOE) {
+                throw std::runtime_error(std::string(mode) + " MoE expert storage is only supported for Qwen3 MoE and Qwen3.5/3.6 MoE");
             }
             if (!llama_supports_mmap()) {
                 throw std::runtime_error(std::string(mode) + " MoE expert storage requires mmap support");

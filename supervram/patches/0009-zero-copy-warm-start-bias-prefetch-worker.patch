@@ -65,7 +65,7 @@ index ee03458..471ecfe 100644
      GGML_API void ggml_backend_sched_reset_expert_cache_stats(ggml_backend_sched_t sched);
  
 diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
-index 3e7c063..9284209 100644
+index 3e7c063..f22c904 100644
 --- a/ggml/src/ggml-backend.cpp
 +++ b/ggml/src/ggml-backend.cpp
 @@ -23,6 +23,8 @@
@@ -337,16 +337,22 @@ index 3e7c063..9284209 100644
      ggml_backend_sched_expert_cache_ctl_init(sched);
  
      GGML_LOG_INFO("%s: expert cache: %zu tensors, %d slots/tensor (budget %zu MiB, %.2f MiB per expert), %.2f MiB on device\n", __func__,
-@@ -1605,7 +1807,7 @@ static bool ggml_backend_sched_expert_cache_read_direct(
+@@ -1605,7 +1807,13 @@ static bool ggml_backend_sched_expert_cache_read_direct(
  
          for (size_t k = 0; k < n; k++) {
              const ggml_expert_miss & m = misses[i0 + k];
 -            ggml_backend_tensor_set_async(split_backend, m.et->slots_view,
-+            ggml_backend_tensor_set_async(split_backend, m.et->slots_persist ? m.et->slots_persist : m.et->slots_view,
++            // this function is shared by two callers: live in-graph misses (a real slots_view is bound, and the
++            // compute graph's MUL_MAT_ID node depends on that exact tensor object -- asserted elsewhere as
++            // node->src[0] == et.slots_view) and warm start / background promotion, which run with no graph
++            // built yet, so slots_view is still null and slots_persist is the only valid graph-independent
++            // handle to the same device memory. Prefer slots_view when it exists; it is never wrong to prefer
++            // it, since both handles alias the same memory once a graph exists.
++            ggml_backend_tensor_set_async(split_backend, m.et->slots_view ? m.et->slots_view : m.et->slots_persist,
                  cache->staging + pos[k] + head[k], (size_t) m.slot * m.et->expert_size, m.et->expert_size);
          }
          cache->staging_busy = true;
-@@ -1618,6 +1820,95 @@ static bool ggml_backend_sched_expert_cache_read_direct(
+@@ -1618,6 +1826,95 @@ static bool ggml_backend_sched_expert_cache_read_direct(
  #endif
  }
  
@@ -442,7 +448,7 @@ index 3e7c063..9284209 100644
  // compute time: make the experts selected by `ids` resident in the slots and upload the remapped ids
  static enum ggml_status ggml_backend_sched_expert_cache_plan(
          ggml_backend_sched_t sched, ggml_backend_sched_expert_tensor & et, ggml_backend_t split_backend,
-@@ -2599,6 +2890,131 @@ static bool ggml_backend_sched_alloc_splits(ggml_backend_sched_t sched) {
+@@ -2599,6 +2896,131 @@ static bool ggml_backend_sched_alloc_splits(ggml_backend_sched_t sched) {
      return true;
  }
  
@@ -574,7 +580,7 @@ index 3e7c063..9284209 100644
  // zero-copy tier, once per token boundary (the previous graph is complete, the next one is not launched yet):
  // 1. read the use counters the kernels incremented, 2. commit last boundary's copies (flip their table entries to the VRAM
  // slots), 3. copy the most used experts that were served from RAM into VRAM slots on a second stream, so the copies overlap
-@@ -2628,6 +3044,7 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched)
+@@ -2628,6 +3050,7 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched)
          }
      }
      const int64_t t_start = ggml_time_us();
@@ -582,7 +588,7 @@ index 3e7c063..9284209 100644
      const size_t n = (size_t) cache->ctl_stride;
      const uint64_t tick = ++cache->promote_tick;
      auto master_of = [](ggml_backend_sched_expert_tensor * const (&L)[3]) {
-@@ -2637,12 +3054,13 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched)
+@@ -2637,12 +3060,13 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched)
      // 1. usage since the last boundary
      ggml_backend_tensor_get_async(main, cache->ctl_cnt_view, cache->counts.data(), 0, cache->counts.size() * sizeof(uint32_t));
      ggml_backend_synchronize(main);
@@ -597,7 +603,7 @@ index 3e7c063..9284209 100644
              continue;
          }
          const size_t base = (size_t) m->ctl_index * n;
-@@ -2668,11 +3086,12 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched)
+@@ -2668,11 +3092,12 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched)
      cache->stats.accesses += n_used;
      cache->stats.hits     += n_hit;
      cache->stats.misses   += n_used - n_hit;
@@ -611,7 +617,7 @@ index 3e7c063..9284209 100644
          for (const auto & pr : cache->pending) {
              auto & L = cache->layers[pr.layer];
              for (int k = 0; k < 3; k++) {
-@@ -2684,15 +3103,38 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched)
+@@ -2684,15 +3109,38 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched)
              }
              master_of(L)->slot_of_expert[pr.expert] = pr.slot;
              table_dirty = true;
@@ -650,7 +656,7 @@ index 3e7c063..9284209 100644
      for (const cand & c : cands) {
          if (n_promoted >= cache->max_promote) {
              break;
-@@ -2743,9 +3185,9 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched)
+@@ -2743,9 +3191,9 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched)
          m->use_count[victim] = 1;
          for (int k = 0; k < 3; k++) {
              ggml_backend_sched_expert_tensor * et = L[k];
@@ -663,7 +669,7 @@ index 3e7c063..9284209 100644
                  cache->stats.bytes_h2d += et->expert_size;
              }
          }
-@@ -2753,10 +3195,41 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched)
+@@ -2753,10 +3201,41 @@ static void ggml_backend_sched_expert_cache_promote(ggml_backend_sched_t sched)
          n_promoted++;
      }
  
@@ -705,7 +711,7 @@ index 3e7c063..9284209 100644
      cache->stats.host_ms += (ggml_time_us() - t_start) / 1000.0;
  }
  
-@@ -2926,6 +3399,9 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
+@@ -2926,6 +3405,9 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
                          const size_t padding = std::min<size_t>(expert_size, 512);
                          const size_t padding_end = last_id < n_expert - 1 ? padding : 0;
  
@@ -943,6 +949,50 @@ index cc41106..e03642a 100644
      ggml_tensor * build_cvec(
               ggml_tensor * cur,
                       int   il) const;
+diff --git a/src/llama.cpp b/src/llama.cpp
+index 43e4fae..4685c7e 100644
+--- a/src/llama.cpp
++++ b/src/llama.cpp
+@@ -321,8 +321,8 @@ static std::pair<int, llama_model *> llama_model_load(struct gguf_context * meta
+ 
+         if (params.moe_expert_storage == LLAMA_MOE_EXPERT_STORAGE_MMAP || params.moe_expert_storage == LLAMA_MOE_EXPERT_STORAGE_CACHE) {
+             const char * mode = params.moe_expert_storage == LLAMA_MOE_EXPERT_STORAGE_MMAP ? "mmap" : "cache";
+-            if (ml.get_arch() != LLM_ARCH_QWEN3MOE) {
+-                throw std::runtime_error(std::string(mode) + " MoE expert storage is only supported for Qwen3 MoE");
++            if (ml.get_arch() != LLM_ARCH_QWEN3MOE && ml.get_arch() != LLM_ARCH_QWEN35MOE) {
++                throw std::runtime_error(std::string(mode) + " MoE expert storage is only supported for Qwen3 MoE and Qwen3.5/3.6 MoE");
+             }
+             if (!llama_supports_mmap()) {
+                 throw std::runtime_error(std::string(mode) + " MoE expert storage requires mmap support");
+diff --git a/src/models/qwen35moe.cpp b/src/models/qwen35moe.cpp
+index bdf7726..c4d59e1 100644
+--- a/src/models/qwen35moe.cpp
++++ b/src/models/qwen35moe.cpp
+@@ -91,10 +91,12 @@ void llama_model_qwen35moe::load_arch_tensors(llama_model_loader & ml) {
+             layer.ssm_out        = create_tensor(tn(LLM_TENSOR_SSM_OUT,        "weight", il), { value_dim, n_embd }, flags);
+         }
+ 
+-        // Routed experts
++        // Routed experts: lazy-read (SuperVRAM expert cache) when storage is not "resident". The shared
++        // expert below stays fully resident (it runs every token, so there is nothing to cache).
++        const int expert_flags = flags | (params.moe_expert_storage != LLAMA_MOE_EXPERT_STORAGE_RESIDENT ? TENSOR_READ_LAZY : 0);
+         layer.ffn_gate_inp  = create_tensor(tn(LLM_TENSOR_FFN_GATE_INP,  "weight", il), { n_embd, n_expert }, flags);
+-        layer.ffn_down_exps = create_tensor(tn(LLM_TENSOR_FFN_DOWN_EXPS, "weight", il), { n_ff_exp, n_embd, n_expert }, flags);
+-        create_tensor_gate_up_exps(layer, il, n_embd, n_ff_exp, n_expert, flags);
++        layer.ffn_down_exps = create_tensor(tn(LLM_TENSOR_FFN_DOWN_EXPS, "weight", il), { n_ff_exp, n_embd, n_expert }, expert_flags);
++        create_tensor_gate_up_exps(layer, il, n_embd, n_ff_exp, n_expert, expert_flags);
+ 
+         // Shared experts
+         layer.ffn_gate_inp_shexp = create_tensor(tn(LLM_TENSOR_FFN_GATE_INP_SHEXP, "weight", il), { n_embd }, flags);
+@@ -501,7 +503,7 @@ ggml_tensor * llama_model_qwen35moe::graph::build_layer_ffn(ggml_tensor * cur, c
+             model.layers[il].ffn_up_exps,
+             model.layers[il].ffn_gate_exps,
+             model.layers[il].ffn_down_exps,
+-            nullptr,
++            build_moe_cache_bias(il),
+             n_expert, n_expert_used,
+             LLM_FFN_SILU, true,
+             hparams.expert_weights_scale,
 diff --git a/src/models/qwen3moe.cpp b/src/models/qwen3moe.cpp
 index 49526bf..86778c4 100644
 --- a/src/models/qwen3moe.cpp
