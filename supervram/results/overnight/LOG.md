@@ -42,3 +42,14 @@ Tuesday 22 September 2026 01:29:57 AM IST
   exists, where it does not) -- corrected to prefer slots_view only when bound. Also wired the expert-cache lazy-read flags
   and cache-aware-routing bias hook into qwen35moe.cpp (Qwen3.6-35B-A3B's architecture), mirroring qwen3moe.cpp. Resuming the
   Qwen3.6-35B-A3B download/bring-up now.
+- 23:45 Qwen3.6-35B-A3B-Q4_K_M (ggml-org GGUF, 20.4 GB, 256 experts/8+1 active, hybrid gated-delta-net+attention) downloaded and
+  wired into the expert cache: extended the qwen3moe-only architecture gate in llama.cpp to also allow qwen35moe. Loads and
+  runs correctly out of the box (coherent output on the very first try). CLASSIC SLOT CACHE verified exact (matched-batch
+  methodology): tokens and logits hashes bit-identical to full-GPU resident. ZERO-COPY TIER: exactness FAILS even at properly
+  matched batch size (ub=1) -- diverges from step 0. Checked and ruled out: tensor naming collisions (gate/up/down/shexp all
+  cleanly distinct in this GGUF), mixed quantization types (all three expert tensors are uniformly Q4_K), and a hardcoded
+  128-expert assumption in the pointer-table sizing/kernel index width (stride is correctly computed as max n_expert = 256,
+  channel_x is uint32_t). Root cause not yet found. Classic cache is a complete, verified way to run this model under
+  SuperVRAM today; zero-copy (the fastest tier, used for the 48-GB-class comparison) needs further debugging before it can be
+  used on this architecture. Recommend running the benchmark on classic cache for this model, or holding zero-copy for a
+  follow-up session.
