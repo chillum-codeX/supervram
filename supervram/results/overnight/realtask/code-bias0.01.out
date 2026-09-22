@@ -1,0 +1,19 @@
+warm_start_ms=1785 (before prefill)
+mode=resident ngl=999 cpu_moe=0 n_cpu_moe=0 cache_mib=14336 prompt_tokens=77 generated=83 load_ms=2264 prompt_ms=1264.2 decode_tps=15.48
+cache_stats accesses=31112 hits=27906 misses=3206 evictions=1768 hit_rate=89.7 bytes_h2d=8863875072 n_slots=8928 host_ms=8.7
+direct_io_stats bytes_ssd=0 io_ms=0.0
+tokens=151667,271,151668,271,73594,12669,198,750,374,8337,73310,36058,1141,982,262,27722,284,42863,5987,6933,18073,368,369,1161,304,274,421,1161,2079,93362,2398,262,470,27722,621,27722,62154,16,2533,2207,374,8337,73310,36058,445,32,883,11,264,3119,11,264,38921,25,48036,899,621,3007,198,2207,374,8337,73310,36058,445,9707,11,1879,88783,621,3557,198,2207,374,8337,73310,36058,39047,621,3007,198,73594,151645
+logits_hash_step0=d08a5ebfc990f693
+text=<think>
+
+</think>
+
+```python
+def is_valid_palindrome(s):
+    cleaned = ''.join(char.lower() for char in s if char.isalnum())
+    return cleaned == cleaned[::-1]
+
+assert is_valid_palindrome("A man, a plan, a canal: Panama") == True
+assert is_valid_palindrome("Hello, world!") == False
+assert is_valid_palindrome("") == True
+```<|im_end|>
