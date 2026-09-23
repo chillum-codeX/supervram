@@ -249,9 +249,86 @@ Details, methodology and every number: `results/overnight/FINAL_RESULTS.md` and 
 - Benchmark (Q8_0, 32k in, 4,096 forced out, identical text): plain llama.cpp 142 s; exact tier 123 s; bias 0.01 95 s; bias 0.02 87 s; all-hot proxy 84 s.
 - RAM-poor (4 GB cap, SSD, 2,048 out): 264 s -> 217 s exact, 176 s -> 128 s with bias 0.02 (prefill 122.8 -> 80.2 s).
 
+## Adaptive speculative prefetch scheduler: Python reference, Phases A-C (`PLAN_ADAPTIVE.md`; `supervram/scheduler.py`, `scripts/cost_model.py`; `evidence_class: deterministic_synthetic_trace_replay` / `analytical_roofline_projection`)
+
+The prefetch-feasibility work above concluded that *blind* prefetch is a net loss and stopped
+there. This is the follow-up: a confidence-gated, cost-aware, lookahead scheduler
+(`AdaptiveSpeculativeScheduler`, "ASS") that fires a speculative read only when a calibrated
+per-(layer, expert) confidence score clears a floor threshold *and* wins a shared per-window
+compute-time budget against competing candidates (most-confident first). Pure-Python simulation
+prototype only (`supervram/` package) -- **not ported to the C++/`ggml_backend_sched` integration**,
+so the "no prefetch" state of the real llama.cpp cache (Remaining gaps, below) is unchanged.
+
+- **Verified in the harness, not just designed:** `tests/test_scheduler.py` (33 tests, 41 total
+  with the pre-existing `tests/test_supervram.py`, all passing) runs the
+  gated scheduler and the existing blind-prefetch baseline against the same deterministic,
+  intentionally weak-predictor trace and asserts `waste_bytes` is strictly lower for ASS on that
+  scenario. Two seeds from manual sweeps: locality ~0.05, `waste_bytes` 321,126,400 (blind) vs
+  287,768,576 (ASS); locality ~0.15, 320,864,256 vs 295,763,968. At artificially high locality
+  (>= 0.5, unrepresentative of the 1.4-2 % real routing-history accuracy measured above) blind
+  prefetch's disadvantage narrows or disappears -- the design targets the weak-predictor regime
+  the earlier measurement actually found, not an idealized one. **Correction, from the full matrix
+  below: "modeled throughput is never worse than the baseline's" does not hold universally** --
+  that claim (and a test docstring making it) was based on one hand-picked scenario, not the full
+  policy/predictor/cache-size space.
+- **Full 3,600-run scaled ablation matrix** (`results/ablation-simulate-ass-scaled/`,
+  `scripts/run_ablations.py --mode simulate`, `evidence_class: deterministic_synthetic_trace_replay`):
+  the first attempt at this reused `simulate_trace.py`'s tiny default trace (32 experts x 8 layers
+  x 64 KiB = 16 MiB) against the matrix's original multi-GiB cache axis -- every run had zero
+  evictions (a cache 256x the working set never evicts anything), so all 3,600 runs of that first
+  attempt showed `off` and `ass` as byte-identical everywhere, a null result, not a win. Rescaled
+  the matrix to a 12-layer/32-expert/256 KiB-expert synthetic trace (96 MiB working set) with a
+  cache-size axis expressed as *fractions* of that working set (0.1x-1.5x) so eviction pressure is
+  guaranteed across the sweep, a locality of 0.2 (representative of weak prediction, not the
+  harness's own unrealistically-easy 0.8 default), and a shared store file built once and reused
+  across all 3,600 subprocess calls (building a fresh store per run would have meant needless
+  disk I/O for byte-identical content). Of 2,304 comparable (`--prefetch-depth` > 0, both
+  scheduler modes present) rows:
+  - `waste_bytes`: ASS better in 743 (32.3 %), tied in 1,129 (49.0 %), worse in 432 (18.8 %).
+  - modeled throughput: ASS better in 861 (37.4 %), tied in 1,378 (59.8 %), worse in 65 (2.8 %).
+  - **The 65 throughput regressions are concentrated almost entirely in one predictor: 63/65 use
+    `predictor=oracle`** (worst case -33.5 %); across the other five predictors (the realistic
+    case this plan targets) only 2/1,920 comparisons regressed (0.10 %, noise), while 384/1,920
+    (20.0 %) reduced waste and 535/1,920 (27.9 %) were unaffected. Root cause: the scheduler's own
+    confidence calibration starts at a neutral default and needs a few observations to warm up to
+    a predictor's real accuracy; against an already-perfect oracle, that warm-up window means the
+    gate under-trusts (and refuses) some prefetches blind prefetch would have fired correctly from
+    turn one. Against a genuinely weak predictor there is no such gap to warm up out of -- most of
+    the gate's value *is* not trusting it.
+  - 397 of the 432 `waste_bytes` regressions (92 %) are cases where the *baseline* fired nothing
+    at all (`off_waste = 0`) and ASS fired something small -- not cases where ASS out-wastes an
+    actively-speculating baseline.
+- **Two formula bugs were found by running it, not by inspection**, and both are worth recording
+  because they'd silently invalidate the "gate reduces waste" claim if reintroduced: (1) the
+  window planner first drew gate *candidates* from raw router probabilities while *calibration*
+  scored whatever the base predictor's own `.predict()` returned -- different sets, so most gated
+  candidates sat at the neutral default confidence and the gate barely gated anything; (2) the
+  first "expected value" formula, `p_use * t_read < budget - (1 - p_use) * t_read`, algebraically
+  reduces to `t_read < budget` -- the confidence terms cancel, so past the floor check confidence
+  stopped affecting the outcome at all. A real end-to-end run (not a unit test) had *higher*
+  `waste_bytes` for `--scheduler ass` than for `--scheduler off` before this was caught. Replaced
+  with a budget-pooled selection: rank all window candidates by confidence, spend a shared
+  per-window compute-time budget on the most-confident ones first, refuse the rest.
+- **The roofline cost model's drive-speed behavior is not monotonic across the full range**, and
+  that's expected, not a bug: sweeping `--drive-gbps` from 2.4 down to 0.02 shows ASS's throughput
+  advantage over blind prefetch widen over a middle range (2.4 -> 0.5 GB/s: parity -> ~10 % ahead)
+  and then narrow back toward parity at very slow simulated speeds, because the gate correctly
+  stops firing *anything* once no candidate's read fits the fixed per-window compute budget
+  (verified: fired=0/3584 at 0.1 and 0.02 GB/s in one run) -- a safe floor matching "no prefetch,"
+  not degraded gating.
+- **Known simplification, stated rather than hidden:** the cost model has no drive-contention
+  term -- a wasted (fired-but-never-used) prefetch is treated as costing nothing beyond the bytes
+  it occupies, when in reality it competes with other reads on the same drive queue. This is
+  optimistic and, if anything, understates ASS's own overhead relative to what real queueing would
+  show, so it does not manufacture ASS's measured advantage.
+- Oracle remains the ceiling: `test_oracle_predictor_is_a_ceiling_over_ass_and_baseline` checks
+  the oracle-driven run's modeled throughput is never beaten by either ASS or the baseline on the
+  same trace, matching the earlier oracle-gain numbers above (oracle: +4 % at 1 layer to +30 % at
+  a whole token ahead on this drive).
+
 ## Remaining gaps
 
 - Prompt ubatches that route more distinct experts than `n_slots` return a hard error (observed as llama-bench warmup `res = -3` at `-ub 16`). Use `-ub 1` or a larger cache for decode; prompt processing is not a v1 win.
-- No prefetch (measured to be a net loss with history-based prediction and worth at most about 4-11 % with an ideal early-router predictor, see above), no GDS copy backend, no llama-server `/metrics` cache stats (stats are in the server task JSON only), and only the 20-run cache-size x policy ablation above, not the 720-run matrix (no prefetch/predictor axes, no repetitions).
+- No prefetch in the C++/llama.cpp integration (a validated Python-only confidence-gated design now exists, see above, but is not ported; measured to be a net loss with blind history-based prediction and worth at most about 4-11 % with an ideal early-router predictor), no GDS copy backend, no llama-server `/metrics` cache stats (stats are in the server task JSON only), and only the 20-run cache-size x policy ablation above, not the 720-run matrix (no prefetch/predictor axes, no repetitions).
 - Direct I/O (`--moe-expert-direct-io`, Linux only; the `SVRAM_*` environment variables remain as a fallback) uses one pinned staging buffer with a synchronize before each reuse: no double buffering and no prefetch, so reads never overlap compute (reads of one layer are batched, see above). The default path is still mmap.
 - CUDA graphs were disabled (`GGML_CUDA_DISABLE_GRAPHS=1`) for bring-up.

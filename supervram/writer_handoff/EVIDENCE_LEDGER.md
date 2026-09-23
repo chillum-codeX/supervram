@@ -27,9 +27,48 @@
 
 `results/simulation-smoke.json` validates the software policies, not LLM throughput. Do not interpret those hit rates as Qwen routing behavior.
 
+- Adaptive speculative scheduler (ASS, `PLAN_ADAPTIVE.md`, `supervram/scheduler.py`): on a
+  deterministic, intentionally weak-predictor synthetic trace (`tests/test_scheduler.py`'s
+  `_weak_trace`, near-zero locality so history-based prediction has little real signal), gated
+  prefetch's `waste_bytes` is strictly lower than blind unconditional prefetch at equal
+  `--prefetch-depth` in that specific test scenario (e.g. locality ~0.05: 287,768,576
+  vs 321,126,400 bytes; locality ~0.15: 295,763,968 vs 320,864,256). At artificially high locality
+  (>= 0.5, not representative of the 1.4-2 % real routing-history accuracy measured above) the
+  margin narrows or disappears -- consistent with the gate mattering exactly where the earlier
+  prefetch-feasibility measurement found blind prefetch to be a net loss. Software-policy
+  validation only, not LLM throughput.
+- **Full 3,600-run scaled ablation matrix** (`results/ablation-simulate-ass-scaled/`,
+  `scripts/run_ablations.py --mode simulate`; a first, unscaled attempt against the matrix's
+  original multi-GiB cache axis and the harness's tiny 16 MiB default trace produced zero
+  evictions in all 3,600 runs -- a null result, not a win, since discarded): 12-layer/32-expert/
+  256 KiB-expert trace (96 MiB working set), cache sizes as fractions of that working set
+  (0.1x-1.5x, guaranteeing real pressure), locality 0.2. Of 2,304 comparable rows: `waste_bytes`
+  better for ASS in 743 (32.3 %), tied in 1,129 (49.0 %), worse in 432 (18.8 %, 92 % of which are
+  cases where the baseline fired nothing at all); modeled throughput better in 861 (37.4 %), tied
+  in 1,378 (59.8 %), worse in 65 (2.8 %, worst -33.5 %). 63 of those 65 throughput regressions use
+  `predictor=oracle` -- the gate's confidence calibration needs a few observations to warm up to a
+  predictor's real accuracy, so it costs something specifically against an already-perfect
+  predictor; against every other (realistic) predictor only 2/1,920 comparisons regressed
+  (0.10 %, noise). **This corrects an earlier claim (and a test docstring) that ASS's modeled
+  throughput is never worse than the baseline's "universally, not just at a hand-picked drive
+  speed" -- that was true only for the one scenario it was checked against.**
+
 ## Analytical projection
 
 `results/roofline-projection.json` is not measured data.
+
+- `scripts/cost_model.py`'s roofline projection of the same ASS replay counters (`compute_s` vs
+  `blocking_io_s`, `wall_s = max` of the two): for that one weak-predictor scenario, modeled
+  throughput stayed at or above the blind-prefetch baseline's across a drive-speed sweep, and the
+  gap widened over a middle range of simulated drive speeds (2.4 -> 0.5 GB/s: parity -> ~10 %
+  ahead in one run), then narrowed back toward parity at very slow simulated speeds because the
+  gate correctly stops firing anything once no candidate's read fits the fixed per-window compute
+  budget (verified: 0/3584 fired at 0.1 and 0.02 GB/s) -- a safe floor, not a broken result. **Not
+  a universal property**: the full scaled ablation matrix (above) found 65/2,304 comparable rows
+  where modeled throughput was worse for ASS, concentrated in `predictor=oracle` (confidence
+  calibration warm-up cost). No drive-contention term is modeled (a wasted prefetch is treated as
+  free beyond its own bytes), which is optimistic and, if anything, understates ASS's real
+  overhead. Not measured hardware throughput.
 
 ## Overnight results (2026-09-22)
 
@@ -39,6 +78,6 @@ The "48 GB-class" row is an all-hot proxy, not a real card.
 
 ## Still pending
 
-- Prefetch and double-buffered staging (a single pinned staging buffer exists), GDS device DMA, llama-server `/metrics` cache stats.
+- Prefetch in the actual C++/llama.cpp integration (a validated Python-only confidence-gated design exists, `supervram/scheduler.py`, `PLAN_ADAPTIVE.md`, not yet ported) and double-buffered staging (a single pinned staging buffer exists), GDS device DMA, llama-server `/metrics` cache stats.
 - Prompt-batch cache (v1 errors when `n_used > n_slots`).
-- Full 720-run ablation matrix (prefetch/predictor axes, >= 5 reps, pp512), energy, Nsight overlap traces.
+- Full 720-run ablation matrix (prefetch/predictor axes, >= 5 reps, pp512), energy, Nsight overlap traces. The simulation-mode ablation harness (`scripts/run_ablations.py`) now has scheduler x gate x lookahead axes for ASS, but a full run has not been executed on this host, only a 15-run smoke test.

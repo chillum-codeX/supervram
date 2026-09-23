@@ -6,7 +6,7 @@ from pathlib import Path
 import json
 from typing import Iterable, Mapping, Sequence
 
-from .types import Access, ExpertKey
+from .types import Access, Confidence, ExpertKey
 
 
 class Predictor(ABC):
@@ -116,6 +116,80 @@ class OraclePredictor(Predictor):
         if not self.by_layer[layer]:
             return []
         return list(self.by_layer[layer].popleft())[:top_k]
+
+
+class ConfidencePredictor:
+    """Wraps a base predictor and calibrates a per-(layer, expert) confidence score from
+    observed precision, so a downstream gate can fire only on near-certain guesses instead of
+    blindly prefetching everything (PLAN_ADAPTIVE.md section 2.1 -- this is the fix for the
+    measured result that history-based prefetch is a net loss: wrong reads cost a full SSD
+    round-trip, so a predictor with no confidence signal can't tell a good guess from a bad one).
+
+    Calibration is a bias-corrected EMA of correctness per (layer, expert): `conf = a*conf +
+    (1-a)*hit`, seeded at `default_confidence` for anything not yet observed, where the *effective*
+    weight `a` starts at 0 (the first observation fully determines confidence, i.e. a plain
+    running mean) and ramps up to the configured `alpha` as observations accumulate --
+    `a_n = min(alpha, (n-1)/n)` at the n-th observation of a given key.
+
+    PLAN_ADAPTIVE.md Phase E: a fixed `alpha` (e.g. 0.9) needs about 1/(1-alpha) observations (44
+    at alpha=0.9) to pull confidence from the neutral default up near 1.0, even for a predictor
+    that is *always* right. The full 3,600-run scaled ablation matrix
+    (results/ablation-simulate-ass-scaled/) found this costs real modeled throughput specifically
+    against `predictor=oracle` (63/65 throughput regressions, worst -33.5%): the gate spends many
+    steps under-trusting a predictor that was correct from the start, refusing prefetches blind
+    prefetch would have fired correctly. Ramping the weight up with the observation count gives a
+    perfect predictor near-certain confidence after only a handful of hits (n=1: conf=hit; n=2:
+    conf=mean of both; ... converges to the fixed alpha once `n >= 1/(1-alpha)`), while a genuinely
+    noisy predictor still settles near its true hit rate once enough samples accumulate -- the
+    early volatility (a single early hit or miss swings confidence hard) is the accepted cost of
+    not waiting ~44 steps to trust a predictor that never needed to prove itself that long.
+    """
+
+    def __init__(self, base: Predictor, alpha: float = 0.9, default_confidence: float = 0.5):
+        if not 0.0 <= alpha <= 1.0:
+            raise ValueError("alpha must be in [0, 1]")
+        self.base = base
+        self.alpha = alpha
+        self.default_confidence = default_confidence
+        self._confidence: dict[tuple[int, int], float] = {}
+        self._counts: dict[tuple[int, int], int] = {}
+        self._pending: dict[int, set[int]] = defaultdict(set)
+
+    def confidence_of(self, layer: int, expert: int) -> float:
+        return self._confidence.get((layer, expert), self.default_confidence)
+
+    def predict(self, layer: int, top_k: int, probabilities: Mapping[int, float] | None = None) -> list[int]:
+        """Predictor-compatible passthrough, so a ConfidencePredictor can be used anywhere a
+        plain Predictor is expected."""
+        return self.base.predict(layer, top_k, probabilities)
+
+    def predict_confident(self, layer: int, top_k: int, probabilities: Mapping[int, float] | None = None) -> list[Confidence]:
+        candidates = self.base.predict(layer, top_k, probabilities)
+        return self.set_pending(layer, candidates)
+
+    def set_pending(self, layer: int, candidates: list[int]) -> list[Confidence]:
+        """Like predict_confident, but takes an already-computed candidate list instead of
+        calling the base predictor again. For a caller (AdaptiveSpeculativeScheduler) that must
+        not invoke the base predictor's predict() more than once per real access -- a stateful
+        predictor like OraclePredictor mutates on every predict() call (it pops a queue), and
+        calling it once per lookahead-window revisit instead of once per real access silently
+        exhausts it early (PLAN_ADAPTIVE.md Phase E)."""
+        self._pending[layer] = set(candidates)
+        return [Confidence(expert, self.confidence_of(layer, expert)) for expert in candidates]
+
+    def observe(self, access: Access) -> None:
+        chosen = set(access.experts)
+        pending = self._pending.pop(access.layer, None)
+        if pending:
+            for expert in pending:
+                key = (access.layer, expert)
+                hit = 1.0 if expert in chosen else 0.0
+                count = self._counts.get(key, 0) + 1
+                self._counts[key] = count
+                effective_alpha = min(self.alpha, (count - 1) / count)
+                previous = self._confidence.get(key, self.default_confidence)
+                self._confidence[key] = effective_alpha * previous + (1.0 - effective_alpha) * hit
+        self.base.observe(access)
 
 
 def make_predictor(name: str, oracle_trace: str | None = None) -> Predictor:

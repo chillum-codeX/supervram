@@ -5,12 +5,18 @@ import argparse
 import json
 from pathlib import Path
 import random
+import sys
 import tempfile
 import time
 
 from supervram import Access, ExpertCache, ExpertKey, SuperVRAM, TensorStore, TensorStoreWriter, make_policy, make_predictor
 from supervram.predictors import OraclePredictor
+from supervram.scheduler import AdaptiveSpeculativeScheduler
 from supervram.trace import TraceWriter
+from supervram.types import CostModelParams
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from cost_model import project_throughput_dict  # noqa: E402
 
 
 def generate_trace(tokens: int, layers: int, experts: int, top_k: int, seed: int, locality: float) -> list[Access]:
@@ -54,6 +60,18 @@ def main() -> None:
     parser.add_argument("--prefetch-depth", type=int, default=4)
     parser.add_argument("--locality", type=float, default=0.8)
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--scheduler", choices=["off", "ass"], default="off",
+                         help="off: process() blind prefetch (baseline). ass: AdaptiveSpeculativeScheduler "
+                              "confidence-gated, cost-aware, lookahead prefetch (PLAN_ADAPTIVE.md)")
+    parser.add_argument("--gate-threshold", type=float, default=CostModelParams().gate_threshold,
+                         help="minimum calibrated confidence required to fire a speculative read")
+    parser.add_argument("--lookahead-d", type=int, default=CostModelParams().lookahead_d,
+                         help="how many upcoming accesses the scheduler plans reads across per step")
+    parser.add_argument("--drive-gbps", type=float, default=CostModelParams().drive_gbps,
+                         help="drive bandwidth constant used to estimate a candidate read's cost")
+    parser.add_argument("--cost-model", action="store_true",
+                         help="emit an analytical modeled-throughput projection (PLAN_ADAPTIVE.md section 2.3) "
+                              "alongside the raw cache/scheduler counters -- not a hardware measurement")
     parser.add_argument("--store")
     parser.add_argument("--trace")
     parser.add_argument("--output", required=True)
@@ -89,12 +107,29 @@ def main() -> None:
         deterministic=not args.async_replay,
     ) as cache:
         engine = SuperVRAM(cache, predictor, args.prefetch_depth)
-        for access in accesses:
-            engine.process(access)
+        params = CostModelParams(drive_gbps=args.drive_gbps, lookahead_d=args.lookahead_d, gate_threshold=args.gate_threshold)
+        scheduler = None
+        if args.scheduler == "ass":
+            # Independent predictor instance, not the same object as `predictor` above: the
+            # scheduler calibrates its own confidence from the same access stream, and sharing a
+            # single stateful predictor between engine._resolve() and the scheduler would observe
+            # every access twice into one history, corrupting it.
+            if args.predictor == "oracle":
+                scheduler_predictor = OraclePredictor(accesses[args.layers:])
+            else:
+                scheduler_predictor = make_predictor(args.predictor)
+            scheduler = AdaptiveSpeculativeScheduler(scheduler_predictor, lambda key: store.extents[key].length, params, top_k=args.prefetch_depth)
+        for index, access in enumerate(accesses):
+            if scheduler is not None:
+                window = accesses[index : index + args.lookahead_d]
+                engine.process_window(window, scheduler)
+            else:
+                engine.process(access)
             if not args.async_replay:
                 cache.drain()
         cache.drain()
         elapsed_ns = time.perf_counter_ns() - start
+        metrics = engine.metrics()
         result = {
             "schema_version": 1,
             "evidence_class": "synthetic_async_trace_replay" if args.async_replay else "deterministic_synthetic_trace_replay",
@@ -102,8 +137,10 @@ def main() -> None:
             "parameters": vars(args),
             "accesses": len(accesses),
             "elapsed_ns": elapsed_ns,
-            "metrics": engine.metrics(),
+            "metrics": metrics,
         }
+        if args.cost_model:
+            result["cost_model"] = project_throughput_dict(metrics["cache"], params, args.tokens, args.tokens * args.layers)
     trace.close()
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text(json.dumps(result, indent=2, default=str) + "\n")

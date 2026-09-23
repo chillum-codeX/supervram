@@ -9,7 +9,7 @@ from typing import Callable, Mapping
 from .policies import CachePolicy, RouterAwarePolicy
 from .store import TensorStore
 from .trace import TraceWriter
-from .types import CacheEntry, ExpertKey
+from .types import CacheEntry, ExpertKey, ReadDecision
 
 
 @dataclass
@@ -30,6 +30,8 @@ class CacheStats:
     bytes_read: int = 0
     read_ns: int = 0
     wait_ns: int = 0
+    overlapped_bytes: int = 0
+    waste_bytes: int = 0
 
     @property
     def hit_rate(self) -> float:
@@ -95,6 +97,14 @@ class ExpertCache:
             self.prefetched.add(key)
             self.inflight[key] = self.executor.submit(self._load, key, True)
 
+    def issue(self, decision: ReadDecision) -> None:
+        """Scheduled-read path for AdaptiveSpeculativeScheduler (PLAN_ADAPTIVE.md section 2.2),
+        distinct from the reactive get()/blind prefetch(). A non-firing decision is a deliberate
+        no-op: the entire point of the gate is to skip doubtful reads rather than issue them and
+        pay for the waste, so `issue()` on a gated-off decision does nothing."""
+        if decision.fire:
+            self.prefetch(decision.key)
+
     def get(self, key: ExpertKey) -> object:
         request_ns = self._now()
         with self._lock:
@@ -106,6 +116,7 @@ class ExpertCache:
                 entry.last_access_ns = request_ns
                 if key in self.prefetched:
                     self.stats.useful_prefetches += 1
+                    self.stats.overlapped_bytes += entry.size
                     self.prefetched.discard(key)
                 self.trace.emit("cache_hit", layer=key.layer, expert=key.expert)
                 cached = self.payloads[key]
@@ -121,6 +132,9 @@ class ExpertCache:
             self.stats.wait_ns += wait_ns
             if key in self.prefetched:
                 self.stats.useful_prefetches += 1
+                entry = self.entries.get(key)
+                if entry is not None:
+                    self.stats.overlapped_bytes += entry.size
                 self.prefetched.discard(key)
             self.trace.emit("cache_miss", layer=key.layer, expert=key.expert, wait_ns=wait_ns)
         return result
@@ -178,6 +192,8 @@ class ExpertCache:
             payload = self.payloads.pop(victim, None)
             if isinstance(payload, UploadHandle) and payload.release is not None:
                 payload.release()
+            if victim in self.prefetched:
+                self.stats.waste_bytes += entry.size
             self.prefetched.discard(victim)
             self.used_bytes -= entry.size
             freed += entry.size

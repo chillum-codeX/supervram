@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable, Mapping
 
 from .types import CacheEntry, ExpertKey
@@ -59,6 +59,30 @@ class RouterAwarePolicy(WeightedPolicy):
                 entries[key].predicted_probability = float(probability)
 
 
+@dataclass
+class AdaptivePolicy(WeightedPolicy):
+    """Cost-aware eviction (inherited from WeightedPolicy's reload_weight/transfer_cost_ns term)
+    plus scheduler-directed pin protection (PLAN_ADAPTIVE.md section 2.4): experts the scheduler
+    judges expensive-to-fetch and near-certain to be needed soon are never chosen as eviction
+    victims while pinned, even if their weighted score would otherwise rank lowest. The scheduler
+    (built in a later phase) is expected to keep the pinned set small -- if everything is pinned,
+    there is nothing left to evict, which is the caller's responsibility to avoid.
+    """
+
+    pinned: frozenset[ExpertKey] = field(default_factory=frozenset)
+
+    def pin(self, keys: Iterable[ExpertKey]) -> None:
+        self.pinned = frozenset(self.pinned) | frozenset(keys)
+
+    def unpin(self, keys: Iterable[ExpertKey]) -> None:
+        self.pinned = frozenset(self.pinned) - frozenset(keys)
+
+    def victims(self, entries: Mapping[ExpertKey, CacheEntry], bytes_needed: int, now_ns: int) -> list[ExpertKey]:
+        evictable = {key: entry for key, entry in entries.items() if key not in self.pinned}
+        order = sorted(evictable, key=lambda key: self.value(evictable[key], now_ns))
+        return _take_until(evictable, order, bytes_needed)
+
+
 def make_policy(name: str) -> CachePolicy:
     normalized = name.lower().replace("_", "-")
     if normalized == "lru":
@@ -69,6 +93,8 @@ def make_policy(name: str) -> CachePolicy:
         return WeightedPolicy()
     if normalized in {"router", "router-aware", "probability-aware"}:
         return RouterAwarePolicy()
+    if normalized == "adaptive":
+        return AdaptivePolicy()
     raise ValueError(f"unknown cache policy: {name}")
 
 
