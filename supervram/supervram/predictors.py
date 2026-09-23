@@ -133,16 +133,20 @@ class ConfidencePredictor:
 
     PLAN_ADAPTIVE.md Phase E: a fixed `alpha` (e.g. 0.9) needs about 1/(1-alpha) observations (44
     at alpha=0.9) to pull confidence from the neutral default up near 1.0, even for a predictor
-    that is *always* right. The full 3,600-run scaled ablation matrix
-    (results/ablation-simulate-ass-scaled/) found this costs real modeled throughput specifically
-    against `predictor=oracle` (63/65 throughput regressions, worst -33.5%): the gate spends many
-    steps under-trusting a predictor that was correct from the start, refusing prefetches blind
-    prefetch would have fired correctly. Ramping the weight up with the observation count gives a
-    perfect predictor near-certain confidence after only a handful of hits (n=1: conf=hit; n=2:
-    conf=mean of both; ... converges to the fixed alpha once `n >= 1/(1-alpha)`), while a genuinely
-    noisy predictor still settles near its true hit rate once enough samples accumulate -- the
-    early volatility (a single early hit or miss swings confidence hard) is the accepted cost of
-    not waiting ~44 steps to trust a predictor that never needed to prove itself that long.
+    that is *always* right. Ramping the weight up with the observation count gives a perfect
+    predictor near-certain confidence after only a handful of hits (n=1: conf=hit; n=2: conf=mean
+    of both; ... converges to the fixed alpha once `n >= 1/(1-alpha)`), while a genuinely noisy
+    predictor still settles near its true hit rate once enough samples accumulate.
+
+    NOTE on what this did and did not fix: the full ablation matrix showed ASS regressing modeled
+    throughput specifically against `predictor=oracle` (63/384 comparisons, worst -33.5%). This
+    ramp-up was the *first* Phase E attempt at that, on the hypothesis that slow EMA convergence
+    was the cause. Verified empirically that it was not: re-running the same oracle-only subset
+    with only this change landed at 70/384 worse (18.2%, if anything slightly more than before).
+    The actual cause was a different bug entirely -- see AdaptiveSpeculativeScheduler._predict_once
+    in scheduler.py -- and fixing that (not this) brought oracle regressions down to 8/384 (2.1%,
+    worst -13.2%). This ramp-up is kept because it is a real, harmless improvement in its own
+    right (faster, still-stable convergence for every predictor), not because it was the fix.
     """
 
     def __init__(self, base: Predictor, alpha: float = 0.9, default_confidence: float = 0.5):

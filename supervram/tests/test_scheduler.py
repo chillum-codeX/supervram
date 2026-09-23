@@ -51,11 +51,14 @@ def test_confidence_predictor_calibrates_toward_one_for_a_consistent_hit() -> No
 
 def test_confidence_predictor_converges_fast_for_an_always_right_predictor() -> None:
     """PLAN_ADAPTIVE.md Phase E: a fixed alpha=0.9 EMA needs ~44 observations to pull a perfect
-    predictor's confidence near 1.0, which is exactly what caused ASS's throughput regressions
-    against predictor=oracle in the full ablation matrix (63/65 cases, see
-    docs/IMPLEMENTATION_STATUS.md). The bias-corrected ramp (effective alpha starts at 0, a plain
-    running mean, and only reaches the configured alpha once enough observations accumulate) must
-    reach a high-confidence verdict in a handful of observations, not dozens."""
+    predictor's confidence near 1.0. This ramp (effective alpha starts at 0, a plain running mean,
+    and only reaches the configured alpha once enough observations accumulate) makes that
+    convergence fast instead of slow. NOTE: this alone was NOT what fixed ASS's throughput
+    regressions against predictor=oracle in the full ablation matrix -- that hypothesis was tested
+    in isolation and found wrong (see writer_handoff/KNOWN_LIMITATIONS.md item 21 and
+    supervram/scheduler.py's AdaptiveSpeculativeScheduler._predict_once for the actual cause and
+    fix). This test locks in a real, independently-useful property of the ramp, not a claim about
+    what it fixed."""
     predictor = ConfidencePredictor(_StubPredictor([5]), alpha=0.9)
     for _ in range(3):
         predictor.predict_confident(layer=0, top_k=1)
@@ -407,18 +410,17 @@ def test_ass_modeled_throughput_never_worse_than_baseline_blocking_bytes(tmp_pat
     predictor (this project's own measured routing-history accuracy is 1.4-2 %, not the ceiling).
 
     CORRECTION: an earlier version of this docstring claimed this holds "universally, not just at
-    a hand-picked drive speed." The full 3,600-run scaled ablation matrix
-    (results/ablation-simulate-ass-scaled/, see docs/IMPLEMENTATION_STATUS.md) disproved that:
-    with `predictor=oracle`, ASS's modeled throughput is *worse* than blind prefetch in 63/384
-    comparisons (up to -33.5 %), because the scheduler's own confidence calibration starts at a
-    neutral default and needs a few observations to warm up to the oracle's actual (perfect)
-    accuracy -- during that warm-up it under-trusts a predictor that was already reliable from
-    turn one, refusing prefetches blind prefetch would have fired correctly. For every *non*-
-    oracle predictor in the same matrix (the realistic case this plan targets), the story holds:
-    2/1920 comparisons regressed throughput (0.10 %), essentially noise, against 384/1920 (20 %)
-    that reduced waste and 535/1920 (27.9 %) unaffected either way. This test's own scenario below
-    is one specific weak-predictor trace, not a claim that spans predictor quality -- see
-    writer_handoff/KNOWN_LIMITATIONS.md for the oracle-warm-up caveat."""
+    a hand-picked drive speed." The full 3,600-run scaled ablation matrix disproved that: with
+    `predictor=oracle`, ASS's modeled throughput was *worse* than blind prefetch in 63/384
+    comparisons pre-Phase-E (up to -33.5 %). The actual cause was not calibration warm-up speed --
+    it was a redundant-predict()-call bug that silently exhausted OraclePredictor's internal state
+    (see writer_handoff/KNOWN_LIMITATIONS.md item 21 and scheduler.py's `_predict_once`). Fixing
+    that brought oracle regressions down to 8/384 (2.1 %, worst -13.2 %) in the same full matrix --
+    a real, large improvement, but still not literally zero. For every *non*-oracle predictor in
+    the same post-fix matrix (the realistic case this plan targets), regressions are 4/1920
+    (0.2 %), essentially noise. This test's own scenario below is one specific weak-predictor
+    trace, not a claim that spans predictor quality -- see writer_handoff/KNOWN_LIMITATIONS.md
+    items 19-21 for the full, corrected picture."""
     layers, experts, size, cache_experts, depth = 6, 24, 65536, 12, 4
     path = tmp_path / "experts.svram"
     _build_store(path, layers=layers, experts=experts, size=size)

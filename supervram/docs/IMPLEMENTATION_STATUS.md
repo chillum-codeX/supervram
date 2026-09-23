@@ -271,33 +271,45 @@ so the "no prefetch" state of the real llama.cpp cache (Remaining gaps, below) i
   below: "modeled throughput is never worse than the baseline's" does not hold universally** --
   that claim (and a test docstring making it) was based on one hand-picked scenario, not the full
   policy/predictor/cache-size space.
-- **Full 3,600-run scaled ablation matrix** (`results/ablation-simulate-ass-scaled/`,
-  `scripts/run_ablations.py --mode simulate`, `evidence_class: deterministic_synthetic_trace_replay`):
-  the first attempt at this reused `simulate_trace.py`'s tiny default trace (32 experts x 8 layers
-  x 64 KiB = 16 MiB) against the matrix's original multi-GiB cache axis -- every run had zero
-  evictions (a cache 256x the working set never evicts anything), so all 3,600 runs of that first
-  attempt showed `off` and `ass` as byte-identical everywhere, a null result, not a win. Rescaled
-  the matrix to a 12-layer/32-expert/256 KiB-expert synthetic trace (96 MiB working set) with a
-  cache-size axis expressed as *fractions* of that working set (0.1x-1.5x) so eviction pressure is
-  guaranteed across the sweep, a locality of 0.2 (representative of weak prediction, not the
-  harness's own unrealistically-easy 0.8 default), and a shared store file built once and reused
-  across all 3,600 subprocess calls (building a fresh store per run would have meant needless
-  disk I/O for byte-identical content). Of 2,304 comparable (`--prefetch-depth` > 0, both
-  scheduler modes present) rows:
-  - `waste_bytes`: ASS better in 743 (32.3 %), tied in 1,129 (49.0 %), worse in 432 (18.8 %).
-  - modeled throughput: ASS better in 861 (37.4 %), tied in 1,378 (59.8 %), worse in 65 (2.8 %).
-  - **The 65 throughput regressions are concentrated almost entirely in one predictor: 63/65 use
-    `predictor=oracle`** (worst case -33.5 %); across the other five predictors (the realistic
-    case this plan targets) only 2/1,920 comparisons regressed (0.10 %, noise), while 384/1,920
-    (20.0 %) reduced waste and 535/1,920 (27.9 %) were unaffected. Root cause: the scheduler's own
-    confidence calibration starts at a neutral default and needs a few observations to warm up to
-    a predictor's real accuracy; against an already-perfect oracle, that warm-up window means the
-    gate under-trusts (and refuses) some prefetches blind prefetch would have fired correctly from
-    turn one. Against a genuinely weak predictor there is no such gap to warm up out of -- most of
-    the gate's value *is* not trusting it.
-  - 397 of the 432 `waste_bytes` regressions (92 %) are cases where the *baseline* fired nothing
-    at all (`off_waste = 0`) and ASS fired something small -- not cases where ASS out-wastes an
-    actively-speculating baseline.
+- **Full 3,600-run scaled ablation matrix** (`scripts/run_ablations.py --mode simulate`,
+  `evidence_class: deterministic_synthetic_trace_replay`): the first attempt at this reused
+  `simulate_trace.py`'s tiny default trace (32 experts x 8 layers x 64 KiB = 16 MiB) against the
+  matrix's original multi-GiB cache axis -- every run had zero evictions (a cache 256x the working
+  set never evicts anything), so all 3,600 runs of that first attempt showed `off` and `ass` as
+  byte-identical everywhere, a null result, not a win. Rescaled the matrix to a
+  12-layer/32-expert/256 KiB-expert synthetic trace (96 MiB working set) with a cache-size axis
+  expressed as *fractions* of that working set (0.1x-1.5x) so eviction pressure is guaranteed
+  across the sweep, a locality of 0.2 (representative of weak prediction, not the harness's own
+  unrealistically-easy 0.8 default), and a shared store file built once and reused across all
+  3,600 subprocess calls. This rescaled run (pre-Phase-E, superseded by the corrected numbers
+  below) found 65/2,304 comparable rows (2.8%) with worse modeled throughput than the baseline,
+  63 of them `predictor=oracle` -- which is what motivated Phase E, below.
+- **Phase E: gate the oracle warm-up cost** (`results/ablation-simulate-ass-scaled-phaseE/`).
+  First hypothesis -- slow EMA convergence -- was wrong, and verified wrong before being kept:
+  making `ConfidencePredictor`'s calibration ramp up faster (`supervram/predictors.py`,
+  bias-corrected EMA) was tested in isolation against the same 480-row oracle-only subset and made
+  things marginally *worse* (70/384 regressions, 18.2%, vs 63/384 before). Actually diagnosing it
+  (counting predict() calls in an isolated harness run) found the real cause: `plan_window` and
+  `record_and_observe` each independently call the base predictor's `predict()`, and because
+  lookahead windows overlap across steps, the same real access got predicted redundantly -- 194
+  calls measured for a 40-access trace before the fix. Harmless for stateless predictors (calling
+  `predict()` twice returns the same answer), but `OraclePredictor.predict()` is *mutating* (pops
+  a queue), so redundant calls silently drained it early, making it go blind for the back half of
+  any run. Fixed with `AdaptiveSpeculativeScheduler._predict_once`, a per-(token, layer) cache so
+  the base predictor is called at most once per real access regardless of how many overlapping
+  windows revisit it -- verified the scheduler-side oracle's call count landed at an exact 1:1
+  match with the trace length after the fix (was a many-to-one ratio before).
+  Re-running the full 3,600-run scaled matrix with both changes:
+  - `waste_bytes`: ASS better in 708 (30.7%), tied in 1,175 (51.0%), worse in 421 (18.3%) --
+    essentially unchanged from before Phase E, as expected: this fix targeted throughput
+    regressions specifically, not the waste-byte accounting.
+  - modeled throughput: ASS better in 894 (38.8%), tied in 1,398 (60.7%), **worse in only 12
+    (0.5%, down from 65/2.8%)**. Of those 12, 8 are `predictor=oracle` (down from 63) and 4 are
+    `predictor=history` (up from 2, still noise-level); non-oracle regressions overall are
+    4/1,920 (0.2%). Worst-case regression fell from -33.5% to -13.2%.
+  - 397 of the 432 pre-Phase-E `waste_bytes` "regressions" were cases where the *baseline* fired
+    nothing at all (`off_waste = 0`) and ASS fired something small -- not cases where ASS
+    out-wastes an actively-speculating baseline. That characterization still holds post-fix.
 - **Two formula bugs were found by running it, not by inspection**, and both are worth recording
   because they'd silently invalidate the "gate reduces waste" claim if reintroduced: (1) the
   window planner first drew gate *candidates* from raw router probabilities while *calibration*

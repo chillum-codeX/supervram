@@ -1,12 +1,25 @@
 # SuperVRAM — Game-Changing Improvement: Adaptive Prefetch + Cost-Aware Scheduling
 
-Status: **Phases A-D built and verified in the Python reference harness** (see
+Status: **Phases A-E built and verified in the Python reference harness** (see
 `docs/IMPLEMENTATION_STATUS.md`'s "Adaptive speculative prefetch scheduler" section,
-`writer_handoff/KNOWN_LIMITATIONS.md` items 14-18, and `writer_handoff/EVIDENCE_LEDGER.md`'s
-deterministic-replay and analytical-projection sections for the actual numbers, caveats, and two
-real formula bugs found and fixed while verifying this). Section 6's C++/llama.cpp port (v2) is
-still not built -- the real cache (`writer_handoff/KNOWN_LIMITATIONS.md` item 8) still has no
-prefetch.
+`writer_handoff/KNOWN_LIMITATIONS.md` items 14-21, and `writer_handoff/EVIDENCE_LEDGER.md`'s
+deterministic-replay and analytical-projection sections for the actual numbers, caveats, and the
+formula/state bugs found and fixed while verifying this -- including a Phase E one where the first
+diagnosis of a real regression was itself wrong and had to be caught by testing, not assumed).
+Section 6's C++/llama.cpp port (v2) is still not built -- the real cache
+(`writer_handoff/KNOWN_LIMITATIONS.md` item 8) still has no prefetch.
+
+**The "TODO — Remaining Work" section below is stale and describes work that is already done.**
+It appeared in this file mid-session, written (by a different process/session, not this one)
+against an exact-signature spec (`step_cost`/`aggregate_costs` functions, `--gate
+{off,auto,fixed}`, `--predictor-base`, a separate `--mode ass`) that assumed nothing past the
+original Phase A had been built yet. That assumption was wrong by the time it was written: Phases
+B-D (and now E) already cover this same scope with different, already-shipped, already-tested
+interfaces (`scripts/cost_model.py::project_throughput`, `--scheduler {off,ass}` on the existing
+"simulate" mode, `AdaptiveSpeculativeScheduler` wrapping whatever `--predictor` was already
+selected rather than a separate `--predictor-base`). Treat the actual interfaces as documented in
+`docs/IMPLEMENTATION_STATUS.md` and the source, not the TODO section's proposed signatures --
+nobody has reconciled the two, and this note exists so that gap is not silently missed.
 Scope: Python reference/simulation package (`supervram/`) + the scripts harness. The C++/llama.cpp
 integration is a later port; this plan makes the algorithm correct and *measurably better* in the
 deterministic trace-replay harness first, where it can be validated without hardware.
