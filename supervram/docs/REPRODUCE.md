@@ -1,7 +1,9 @@
 # Reproducing the results
 
 Everything lives under `/home/truppy/Downloads/workspace/project/supervram/`. Models are expected in `~/models`
-(override with `SUPERVRAM_MODELS=/path`): `Qwen3-30B-A3B-Q4_K_M.gguf`, `Qwen3-30B-A3B-Q8_0.gguf`.
+(override with `SUPERVRAM_MODELS=/path`): `Qwen3-30B-A3B-Q4_K_M.gguf`, `Qwen3-30B-A3B-Q8_0.gguf` (the two this
+project targets), plus `Qwen3.6-35B-A3B-Q4_K_M.gguf` and a dense (non-MoE) uncensored model used to test the chat UI
+and to check the approach generalizes past the original model -- see `results/overnight/FINAL_RESULTS.md`.
 
 ## Code map
 
@@ -43,6 +45,13 @@ The environment variables `SVRAM_DIRECT_IO=1`, `SVRAM_IO_THREADS`, `SVRAM_STAGIN
 Add `--progress /tmp/claude-1000/svram-live.jsonl` to any `svram-verify` / `cold_run.py` invocation to watch it live:
 VRAM, RAM (including the real cgroup cap during a RAM-poor run), SSD read throughput vs its measured ceiling, expert
 cache hit rate, and a bottleneck indicator. Details: `monitor/README.md`.
+
+## Chat UI
+
+`python3 chat/server.py --port 8788` (or `preview_start` name `svram-chat`), then open http://localhost:8788. A model
+picker over every `.gguf` in `~/models`, a Fast/Tiered mode toggle for MoE models (Tiered runs this project's own
+expert cache, not a plain load), streaming responses, and a collapsible reasoning-effort trace. Details, architecture,
+and a real concurrency bug found and fixed while building it: `chat/README.md`.
 
 ## Experiments
 

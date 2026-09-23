@@ -6,6 +6,12 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["supervram/monitor/server.py", "--port", "8787"],
       "port": 8787
+    },
+    {
+      "name": "svram-chat",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["supervram/chat/server.py", "--port", "8788"],
+      "port": 8788
     }
   ]
 }
