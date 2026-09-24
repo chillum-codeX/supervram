@@ -1,367 +1,317 @@
-# Spec — Idea 1: Popularity-tiered expert precision
+# Spec — Idea 1 (rev 2): Popularity-tiered expert precision, **layer-granular**
 
-**Status:** draft for handoff to a coding agent. Self-contained; the agent should not need to
-read other files except the four references at the end.
-**Goal:** cut SSD-bound decode time by storing the *rarely routed* MoE experts at a lower
-precision than the frequently routed ones, in a single mixed-precision GGUF. This is the
-highest-confidence, lowest-cost throughput lever in the project's evidence base.
+**Status:** draft for handoff to a coding agent (Claude Code). Supersedes rev 1 — read the "Corrections to rev 1" section before anything else.
+**Goal:** build a mixed-precision Qwen3-30B-A3B GGUF in which **rarely-used layers are quantized to a lower precision than frequently-used layers**, using popularity data collected from routing traces. Then measure quality and throughput in the SSD-bound regime to decide if it's a real win.
+**Scope guard:** no C++ changes. Everything in this spec must be implementable with the existing `llama-quantize --tensor-type-file` path (proven in `make_synthetic_model.sh`).
 
 ---
 
-## 1. Why this, grounded in the project's own measured numbers
+## 0. Corrections to rev 1 (read this first)
 
-The regime we optimize is: model larger than VRAM, low RAM (4 GiB), SSD is the backing tier,
-decode is the metric. In that regime the evidence says decode time is dominated by **bytes
-pulled from the SSD**, and the three levers are (a) miss rate, (b) bytes per miss,
-(c) SSD bandwidth.
+Rev 1 claimed "per-expert, not per-layer" tiering. Two code findings (verified by the reviewing agent) correct that:
 
-Relevant measured facts (from `writer_handoff/EVIDENCE_LEDGER.md` and
-`docs/IMPLEMENTATION_STATUS.md`, all `evidence_class: measured_rtx3090`):
+**Correction 1 — Granularity is layer, not expert.**
+In Qwen3-30B-A3B, the expert weights are a **single 3D tensor** per `(layer, ffn_component)` — e.g. `blk.0.ffn_gate_exps.weight` has shape `[2048, 768, 128]` (vocabulary, hidden, num_experts). All 128 experts of layer 0's gate share that tensor at a single quantization type. `llama-quantize --tensor-type-file` (CLI side: `parse_tensor_type` in `tools/quantize/quantize.cpp`, exact string match on tensor name; C++ side: `llama-quant.cpp` iterates `p->pattern` as a regex over tensor names) can therefore only select **layers**, not individual experts within a layer.
 
-1. **SSD wait is 72–81% of decode time.** Q8_0 steady state: 36.1 s SSD wait of 50.4 s (72%).
-   43 GiB synthetic: 81%. Throughput is bandwidth-bound, not policy-bound.
-2. **Replacement policy is not the lever.** LRU 96.28%, Belady optimum 97.10% per-layer /
-   97.31% shared at 16 GiB. < 1 point of headroom. Stop optimizing eviction.
-3. **Lower precision is a real, measured lever.** Q4_K_M reads **32% fewer bytes** than Q8_0 at
-   the same cached fraction and decodes **41.4 vs 31.8 t/s** (+30%) at 97% hits. Full-Q4 costs
-   only **+2.1% perplexity** vs Q8 (ground-truth, 30.7k tokens of human prose, 95% CI
-   1.015–1.025) and **96.0% top-1 agreement** with Q8's tokens.
-4. **Misses are the cold experts.** "Misses are the rarely used experts (~0.2 per layer per
-   token), so they are close to unpredictable from routing history." The long tail of experts —
-   the ones that dominate *miss-bytes* — are the ones that rarely fire.
-5. **Mixed-precision GGUF already builds and runs.** `make_synthetic_model.sh` produced a
-   42.9 GiB model where layers 0–23 experts are F16 and everything else Q8_0, via
-   `llama-quantize --allow-requantize --tensor-type-file <regex>`. It ran, gated bit-exact,
-   and produced coherent output. So per-tensor mixed precision is a *proven* mechanism, not a
-   hypothesis.
-6. **Popularity is already computed and used.** `make_warm_profile.py` emits per-(layer,
-   expert) routing share from `--trace` / `SVRAM_TRACE` traces, and the warm-start +
-   admission-control features already consume a popularity ranking. We are adding precision
-   as *one more property derived from the same ranking* — it composes, it doesn't fight.
+Consequence: the deliverable is **layer-granular popularity-tiered precision**. This is weaker than the per-expert framing in rev 1 §5.2, but it's what the tooling actually supports, and it's still a real improvement over the existing "layers 0–23" arbitrary split.
 
-**The key insight this spec exploits:** today, *every* expert in the file is the same
-precision, so the ~45% of experts that rarely fire still cost full Q8 bytes when they are
-missed. Since quality tolerance is *highest* exactly for the experts that rarely fire (they
-rarely contribute to the output), downgrading *them* buys the largest byte savings per unit of
-quality risk. This is the natural, principled extension of the already-measured "Q4 is 32%
-cheaper at +2% PPL" result, applied selectively instead of uniformly.
+**Correction 2 — The cache slot budget is global, not per-layer.**
+`ggml_backend_sched_expert_cache_layout` in `ggml-backend.cpp` computes one global:
+```
+n_slots_budget = capacity_bytes / sum_expert_size   // sum over ALL tensors
+```
+and applies that **same** slot count uniformly to every tensor (Q8 and Q4 layers alike). Only the per-slot byte cost varies by each tensor's own precision.
+
+Consequence: shrinking some layers to Q4 raises the **shared** slot budget for everyone — it does not preferentially give more cached slots to the Q4 layers. The net effect is still a higher total cached-expert-count, but the causal mechanism is "more slots for all" rather than "more slots for the downgraded layers." The §7.1 tripwire and §8 framing must reflect this.
+
+Neither correction kills the idea. "Downgrade rarely-used layers to Q4, keep hot layers at Q8" remains evidence-grounded and worth building. What changes is the framing and the expected-mechanism narrative.
 
 ---
 
-## 2. What this spec does and does NOT do
+## 1. Why (evidence-grounded)
 
-**Does:**
-- Produce a popularity profile of experts from routing traces (reuse existing tooling).
-- Decide a per-expert precision tier (hot = Q8_0, cold = Q4_K_M) from that profile using an
-  explicit, tunable policy.
-- Build a single mixed-precision GGUF where the selected "cold" experts are Q4_K_M and all
-  others (including *all* non-expert weights, all gate/up/down of hot experts, and the router)
-  stay Q8_0.
-- Verify: correctness gate, byte-size accounting (bytes saved, where), quality gate
-  (teacher-forced + ground-truth PPL vs both Q8_0 and full-Q4_K_M), and the SSD-bound decode
-  benchmark (the actual metric).
+Each claim below is tied to a measured number in the project's evidence ledger or implementation status.
 
-**Does NOT (in this draft):**
-- Change the runtime cache, scheduler, or kernel. The mixed-precision file is a *drop-in
-  GGUF*; the existing cache path reads it unchanged. No C++ changes are required for v1.
-- Do signal-based prefetch (Idea 3) or parallel-drive sharding (Idea 2). Those are separate
-  specs; this one composes with them later.
-- Touch the gate/router matrices or attention — they stay Q8_0 (see §5).
+| Claim | Source |
+|---|---|
+| 72–81% of decode time in the target regime is SSD wait | `results/rtx3090/cold/` ledger |
+| Q4_K_M reads ~32% fewer bytes per expert than Q8_0 | arithmetic: Q4_K_M = 4.5 bpw vs Q8_0 = 8 bpw |
+| Q4_K_M decodes +30% faster at the same cached-expert-fraction | `results/rtx3090/ablations-long/` |
+| Full-Q4 PPL penalty is +2% over Q8 on the 100-prompt set | `results/rtx3090/quality/` |
+| Misses are dominated by cold (rarely-routed) experts | `analyze_trace.py` output in ledger |
+| `llama-quantize --tensor-type-file` builds a valid mixed-precision GGUF with bit-exact gates | `make_synthetic_model.sh` + `svram-verify` pass |
+| Per-layer popularity (share of tokens routed to each expert, per layer) is already collected by `make_warm_profile.py` | `scripts/make_warm_profile.py` |
+| The cache slot budget is global: `capacity_bytes / sum_expert_size`, uniform slot count for all tensors | `ggml-backend.cpp::ggml_backend_sched_expert_cache_layout` |
+| `--tensor-type-file` operates at tensor-name granularity; Qwen3 experts are one 3D tensor per `(layer, component)` | `tools/quantize/quantize.cpp::parse_tensor_type`, `llama-quant.cpp` |
 
-**v1 scope decision:** two precision tiers (Q8_0 hot / Q4_K_M cold). A three-tier variant
-(Q8 / Q4 / Q3) is the natural follow-up (§9) once the two-tier quality/byte tradeoff is
-measured and understood. Keep v1 to two tiers so the ablation is clean.
+**The one assumption this spec challenges:** rev 1 (and the prior "arbitrary layers 0–23" experiment) treated layer selection as a free parameter to be chosen by hand. Popularity data already exists in the traces. Using it to pick *which* layers to downgrade is strictly more principled than the existing split and costs nothing to compute.
 
 ---
 
-## 3. Definitions
+## 2. Design
 
-- **Expert weight tensor** (Qwen3-30B-A3B): the MoE expert MLP weights, GGUF names of the form
-  `blk.<L>.ffn_<gate|up|down>_exps.weight`, `<L>` in 0..47, 128 experts per layer, 48 layers.
-  (Confirmed by the regex in `make_synthetic_model.sh`:
-  `blk\.([0-9]|1[0-9]|2[23])\.ffn_(gate|up|down)_exps\.weight=f16`.)
-- **Non-expert weights:** everything else — attention (`blk.L.attn_*`), `ffn_gate`/router
-  projection, `ffn_down` (the shared/down proj if present), norms, embeddings, output head.
-  These are small in aggregate (~1.3 GiB dense for Q8_0 per the ledger) and stay Q8_0.
-- **Popularity / usage weight w(L,e):** fraction of tokens whose routing selected expert `e`
-  at layer `L`. Already produced by `make_warm_profile.py` (third column of its output).
-- **Hot set H:** the set of (L,e) experts assigned to Q8_0. **Cold set C:** the rest, assigned
-  to Q4_K_M. H ∪ C = all experts, H ∩ C = ∅.
-- **Cached fraction (bytes):** bytes of expert weights that fit in the 16 GiB cache, as a
-  fraction of total expert bytes. (Distinct from "fraction of experts," which is what the
-  43 GiB analysis used — see §8, this is exactly the assumption to re-test.)
+### 2.1 Granularity: per-layer, not per-expert
 
----
+Each layer L's expert tensors (`blk.L.ffn_gate_exps.weight`, `blk.L.ffn_up_exps.weight`, `blk.L.ffn_down_exps.weight`) are assigned **one** precision. All three components of a layer get the same precision (this is a simplification; see §9 for the refinement).
 
-## 4. Deliverables (the coding agent's concrete output)
+Non-expert tensors (attention, shared expert, router, embeddings, norms) stay at their original precision (Q8_0 for Qwen3-30B-A3B-Q8_0).
 
-1. **`scripts/popularity_to_tiers.py`** — reads one or more warm profiles (or traces) and
-   emits (a) a ranked per-expert usage table, (b) a chosen (L,e) → tier assignment under a
-   given policy, (c) a `--tensor-type-file` mapping file, and (d) a JSON summary of the
-   decision (how many experts per layer hot/cold, expected byte reduction).
-2. **`scripts/build_tiered_model.sh`** — runs `llama-quantize --allow-requantize
-   --tensor-type-file` to produce the mixed GGUF, modeled directly on
-   `make_synthetic_model.sh`.
-3. **A `results/tiered-precision/` run** with the four measurement sections in §7: size
-   accounting, exactness gate, quality (teacher-forced + ground-truth PPL), and the SSD-bound
-   decode benchmark against the two existing baselines.
-4. **Updated docs** (agent should append, following the project's convention):
-   `docs/IMPLEMENTATION_STATUS.md` (new section "Popularity-tiered precision"),
-   `writer_handoff/EVIDENCE_LEDGER.md` (new measured rows with `evidence_class` labels),
-   `writer_handoff/KNOWN_LIMITATIONS.md` if any new caveat.
+### 2.2 Tier assignment
 
-The agent should *not* hand-edit `EVIDENCE_LEDGER.md` claims beyond the measured numbers it
-actually produced — the project is strict about separating measured vs simulated vs estimated.
+From the per-layer popularity profile (see §3), assign each layer to one of two tiers:
+
+| Tier | Precision | Rationale |
+|---|---|---|
+| Hot | Q8_0 (unchanged) | high routing popularity; quality-sensitive |
+| Cold | Q4_K_M | low routing popularity; quality tolerance is highest here |
+
+The assignment is **data-driven**, not hand-picked. Three selectable policies (all produce the same file format, only the tier boundary differs):
+
+| Policy | Description | When to use |
+|---|---|---|
+| `topk` | Keep the top-K layers by aggregate popularity at Q8; downgrade the rest. K is chosen to match the byte footprint of the existing "layers 0–23" hot set, so the A/B is apples-to-apples. | Default. Directly comparable to the existing synthetic model. |
+| `threshold` | Keep layers whose aggregate popularity ≥ θ at Q8. θ is a hyperparameter. | If you want to sweep quality/throughput tradeoffs. |
+| `bytes` | Keep layers at Q8 until the cumulative Q8 byte budget is exhausted; downgrade the rest. | If you want to control total model size rather than layer count. |
+
+**Default:** `topk` with K chosen so the Q8 layers occupy the same total byte count as "layers 0–23" in the existing synthetic model. This makes the comparison clean: same cache budget, same number of hot layers, different *which* layers.
+
+### 2.3 What is NOT in scope for v1
+
+- Per-expert (within-layer) tiering. Would require a GGUF format change or a custom quantize path. Defer to v2.
+- Mixed precision within a single tensor (e.g. expert 0–63 at Q8, 64–127 at Q4 in the same `blk.L.ffn_gate_exps.weight`). Same constraint. Defer to v2.
+- Per-component tiering (gate at Q4, up at Q8, down at Q8 in the same layer). Mechanically possible via `--tensor-type-file` (three separate tensor names per layer), but it complicates the tier-assignment logic without a clear quality benefit. Defer to v2.
 
 ---
 
-## 5. Design
+## 3. Deliverables
 
-### 5.1 Tensor selection: what may be downgraded, and what must not
+Two new scripts and one modified build step. No C++ changes.
 
-**Downgrade to Q4_K_M (the cold set C):** a *contiguous per-expert triple*
-`(gate, up, down)_exps` for the chosen (L,e). These three are a single expert's MLP and must
-move together — do not split an expert's gate/up/down across precisions, that breaks the
-expert's internal consistency and adds no benefit.
+### 3.1 `scripts/popularity_to_layers.py`
 
-**Keep Q8_0 (the hot set H ∪ non-experts):**
-- All non-expert weights (attention, norms, embedding, output head, router).
-- **The router / gate projection explicitly stays Q8_0.** It decides which experts fire and is
-  small; a quantized router could systematically shift popularity in a way that invalidates the
-  very profile we built from. Keeping it exact is cheap and removes a confound. (If the agent
-  wants, it may *additionally* produce a router-quantized variant as a sensitivity row, but the
-  primary artifact keeps the router at Q8.)
-- All experts in the hot set H (their gate/up/down).
+**Purpose:** aggregate per-expert routing counts into per-layer popularity scores, assign tiers, emit a `--tensor-type-file` mapping.
 
-### 5.2 Tier-assignment policy (the tunable core)
+**Input:** one or more trace files (format: `<layer> <expert_1> <expert_2> ...` per line, as produced by `--trace` / `SVRAM_TRACE` and already consumed by `make_warm_profile.py`).
 
-Input: `w(L,e)` for all experts, from one or more warm profiles. The agent should support these
-policies, implemented as selectable modes, with the *default* being the one that maximizes
-decode throughput subject to a quality budget:
+**Processing:**
+1. For each layer L, sum the routing counts across all experts in that layer. This gives `layer_popularity[L] = Σ_e count[(L, e)]`.
+2. Normalize: `layer_popularity[L] /= total_tokens` (share of tokens that routed through layer L's expert set — note: for MoE, every token routes through every layer, so this is the *average number of experts activated per token* at that layer, weighted by popularity). The meaningful ranking is the relative ordering across layers, not the absolute value.
+3. Apply the chosen tier policy (§2.2) to assign each layer to Q8 or Q4.
+4. Emit a `--tensor-type-file` mapping: one line per Q4 layer, `blk.<L>.ffn_(gate|up|down)_exps\.weight=Q4_K_M`. Q8 layers need no line (the default `Q8_0` from the `llama-quantize` target type applies).
 
-- **`--mode topk`** (default candidate): H = the top-K experts *globally by usage weight* (or
-  top-K *per layer* — support both via `--per-layer`), C = the rest. K is the primary knob.
-- **`--mode threshold`**: C = experts with `w(L,e) < T`, H = the rest. `T` is the knob.
-- **`--mode bytes`**: given a target total byte budget B (≈ the 16 GiB cache), fill it with
-  the most-used experts at Q8 and downgrade the rest to Q4 — this directly optimizes "maximize
-  cached fraction at fixed bytes," which is the quantity the 43 GiB analysis showed matters.
+**Output files:**
+- `<out_prefix>.tensor-type-file` — the mapping file for `llama-quantize --tensor-type-file`.
+- `<out_prefix>.summary.json` — per-layer popularity scores, tier assignments, byte counts per tier, total model size estimate.
 
-Default to a configuration that mirrors the *existing* Q8_0 setup's cached byte fraction so the
-A/B comparison in §7 is apples-to-apples: i.e., choose K (or T) such that the hot-set byte
-footprint ≈ the bytes the current 71-slot/layer cache holds. That isolates "did precision
-help" from "did we just change cache size."
-
-**Why "per (L,e)" not "per layer":** popularity is highly skewed per the trace evidence (misses
-concentrate in rare experts). A whole-layer tiering (like the synthetic F16x24 model) is coarse
-and would downgrade experts that are hot *within their layer*. Per-expert tiering is the point
-of this idea; the existing tooling (`make_warm_profile.py`) already gives per-(L,e) weights, so
-the granularity is free.
-
-### 5.3 Building the tensor-type-file
-
-`make_synthetic_model.sh` writes one line `regex=<type>` per line. For per-expert tiering we
-need many lines (one per cold (L,e), plus the complement at Q8). `llama-quantize
---tensor-type-file` accepts multiple `regex=type` lines and later lines override earlier ones
-(verify this precedence in the quantize source before relying on it — see §10). Two clean ways
-to express it, prefer the one that is unambiguous:
-
-- **Explicit cold list:** emit one line per cold (L,e) triple as
-  `blk\.<L>\.ffn_(gate|up|down)_exps\.weight=Q4_K_M`, and a final catch-all line
-  `blk\.[0-9]{1,2}\.ffn_(gate|up|down)_exps\.weight=Q8_0`.
-  Order: cold-specific lines first, catch-all Q8 last (or confirm override order and rely on it).
-- **If override order is "last match wins":** emit the Q8 catch-all first, then the cold lines.
-
-The agent MUST print the resolved regex→type mapping and, ideally, a count of tensors matched by
-each line, so a wrong regex (a silent all-Q8 or all-Q4 file) is caught immediately by the size
-accounting in §7.1 rather than discovered later.
-
-### 5.4 The file that gets built (v1)
-
-`<base>-tiered-Q8hot-Q4cold.gguf` from the existing
-`Qwen3-30B-A3B-Q8_0.gguf` (the 30 GiB model is the primary target — it is the one where the
-cache competes with `--cpu-moe`/mmap and where SSD-bound decode is measured). Optionally also
-the 43 GiB synthetic model (§8) to test whether tiering rescues the 0.08× parity.
-
----
-
-## 6. Concrete build pipeline (reference commands)
-
-The agent should implement these as the scripts in §4, but here is the shape, so the intent is
-unambiguous:
-
-```bash
-# 1. Profiles already exist (from prior trace collection). If not, collect first:
-#    run svram-verify with --trace / SVRAM_TRACE over the 8 standard prompts (see
-#    scripts/prompts.txt), 384 tokens each, Q8_0, 16 GiB cache — the same setup that
-#    produced results/rtx3090/traces/. (Reusing existing trace files is fine and cheaper.)
-
-# 2. Decide tiers (default: match the current hot-set byte footprint).
-python scripts/popularity_to_tiers.py \
-    --profiles results/rtx3090/traces/profile.txt \
-    --mode bytes --byte-budget-mib 16384 \
-    --out-tier results/tiered-precision/tiers.json \
-    --out-tensorfile results/tiered-precision/tensor-types.txt
-
-# 3. Build the mixed GGUF (mirrors make_synthetic_model.sh).
-bash scripts/build_tiered_model.sh \
-    "$HOME/models/Qwen3-30B-A3B-Q8_0.gguf" \
-    "$HOME/models/Qwen3-30B-A3B-tiered-Q8hot-Q4cold.gguf" \
-    results/tiered-precision/tensor-types.txt
-
-# 4. Measure (sections in §7).
+**CLI:**
+```
+python3 popularity_to_layers.py \
+  --traces trace1.txt trace2.txt ... \
+  --policy topk \
+  --k 24 \
+  --out-prefix results/tiered/layers \
+  [--q4-type Q4_K_M]
 ```
 
-`make_warm_profile.py` output format is exactly: `<layer> <expert> <weight>` per line, weight =
-share of tokens that used the expert. `popularity_to_tiers.py` should accept this format
-directly (it is the project's existing profile format — do not invent a new one).
+**Example output (`layers.summary.json`):**
+```json
+{
+  "policy": "topk",
+  "k": 24,
+  "q8_layers": [3, 7, 12, 15, 18, 21, 25, 28, 31, 33, 36, 39, 42, 45, 0, 5, 10, 14, 19, 23, 27, 30, 34, 38],
+  "q4_layers": [1, 2, 4, 6, 8, 9, 11, 13, 16, 17, 20, 22, 24, 26, 29, 32, 35, 37, 40, 41, 43, 44, 46, 47],
+  "q8_bytes_estimate": 18600000000,
+  "q4_bytes_estimate": 10600000000,
+  "total_bytes_estimate": 29200000000,
+  "layer_popularity_ranking": [
+    {"layer": 3, "popularity": 0.0234, "tier": "q8"},
+    {"layer": 7, "popularity": 0.0221, "tier": "q8"},
+    ...
+    {"layer": 1, "popularity": 0.0089, "tier": "q4"},
+    ...
+  ]
+}
+```
+
+### 3.2 `scripts/build_tiered_model.sh`
+
+**Purpose:** build the mixed-precision GGUF using the tensor-type-file from §3.1.
+
+**Modeled directly on `make_synthetic_model.sh`,** with the key difference that the tensor-type-file is generated by `popularity_to_layers.py` rather than hard-coded.
+
+```bash
+#!/usr/bin/env bash
+# Build a popularity-tiered mixed-precision GGUF.
+# Usage: build_tiered_model.sh <source.gguf> <output.gguf> <tensor-type-file>
+#   e.g. build_tiered_model.sh \
+#     "$MODELS/Qwen3-30B-A3B-Q8_0.gguf" \
+#     "$MODELS/Qwen3-30B-A3B-tiered-Q8x24-Q4x24.gguf" \
+#     "results/tiered/layers.tensor-type-file"
+set -eu
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SRC="$1"; DST="$2"; TT="$3"
+echo "Building tiered model:"
+echo "  source:  $SRC"
+echo "  output:  $DST"
+echo "  tensor-type-file:"
+cat "$TT"
+echo ""
+"$ROOT/third_party/llama.cpp/build-3090/bin/llama-quantize" \
+  --allow-requantize \
+  --tensor-type-file "$TT" \
+  "$SRC" "$DST" Q8_0
+echo "Done: $DST"
+```
+
+### 3.3 End-to-end pipeline (reference commands)
+
+```bash
+# 1. Collect traces (if not already done). Example: 10 prompts, 256-token decode.
+#    (Use the existing harness; SVRAM_TRACE=<file> llama-cli ...)
+
+# 2. Aggregate to layer popularity + assign tiers.
+python3 scripts/popularity_to_layers.py \
+  --traces results/traces/p1.txt ... p10.txt \
+  --policy topk --k 24 \
+  --out-prefix results/tiered/layers
+
+# 3. Build the mixed-precision GGUF.
+bash scripts/build_tiered_model.sh \
+  "$MODELS/Qwen3-30B-A3B-Q8_0.gguf" \
+  "$MODELS/Qwen3-30B-A3B-tiered-Q8x24-Q4x24.gguf" \
+  "results/tiered/layers.tensor-type-file"
+
+# 4. Verify gates are bit-exact (same check as make_synthetic_model.sh).
+#    (Run svram-verify or the existing exactness check.)
+
+# 5. Quality: compare vs Q8_0 reference.
+#    (Use compare_quality.py or the existing quality harness.)
+
+# 6. Throughput in the SSD-bound regime.
+#    (Run the cold-SSD decode benchmark; compare t/s vs the Q8_0 baseline.)
+```
 
 ---
 
-## 7. Measurement plan (this is the part that proves the idea)
+## 4. Measurement plan (gate-ordered)
 
-Follow the project's existing protocols (`scripts/cold_run.py`, `scripts/compare_quality.py`,
-`scripts/run_ground_truth_ppl.sh`) so the numbers are comparable to the ledger. Run everything
-on the RTX 3090 host. Four sections, in order:
+Run these in order. If a gate fails, stop and report — do not proceed to the next.
 
-### 7.1 Size / byte accounting (gate the build)
-- Report total file size, and the bytes in expert tensors that are Q8 vs Q4 vs F16.
-- Report the **cached-fraction-bytes at 16 GiB** for: (a) current Q8_0 file, (b) the new
-  tiered file, (c) full-Q4_K_M file. The tiered file should have *more* experts/bytes cached at
-  the same 16 GiB than Q8_0, and more than full-Q4 if the hot set is a superset of what Q4
-  caches. If it does not, the tiering is not doing anything — stop and fix §5.2.
-- **This catches a silently-wrong GGUF** (all-Q8 → size ≈ 30 GiB; all-Q4 → size ≈ 17 GiB)
-  before any expensive benchmark.
+### 4.1 Gate 1: Byte accounting (tripwire)
 
-### 7.2 Exactness gate (correctness, not speed)
-- Use `svram-verify` with the tiered file, greedy, `-ub 1`, and confirm the output is
-  *deterministic and coherent*. Because the file is mixed precision, it will **not** be
-  bit-identical to pure Q8_0 (different arithmetic) — that is expected, like the Q4 case.
-  The gate here is: (a) it runs without OOM/crash, (b) greedy tokens are stable across two
-  runs (determinism), (c) output text is coherent. Bit-identical-to-something is only required
-  against *itself*, not against Q8_0.
-- Confirm the runtime cache path reads it unchanged (no C++ edits) and that hit-rate / slot
-  accounting behaves sanely (slots are byte-sized; a Q4 expert occupies fewer bytes, so more fit
-  — verify the slot count actually increases, which is the whole point).
+After building the tiered GGUF, **dump the per-tensor byte counts** (e.g. `llama-cli --list-models` or parse the GGUF header) and verify:
+- Total model size is **smaller** than the all-Q8 source (sanity: Q4 layers are smaller).
+- The Q8 layers' total byte count is **approximately equal** to the "layers 0–23" hot-set byte count from the existing synthetic model (within ~5%, since K=24 is chosen to match).
+- No tensor is accidentally at the wrong precision (e.g. a Q8 layer showing Q4_K_M type, or vice versa).
 
-### 7.3 Quality (the load-bearing cost)
-Two measurements, both already scripted in the project:
-1. **Teacher-forced** (`scripts/compare_quality.py`): tiered-file-as-candidate vs Q8_0-as-ref,
-   3,072 tokens / 8 prompts, same protocol. Report top-1 agreement and perplexity ratio.
-   **Target: between full-Q4 (96.0% agreement, +2.1% PPL) and Q8 (100%, +0%).** Expect closer
-   to Q8 because the downgraded experts are the rarely-used ones.
-2. **Ground-truth PPL** (`scripts/run_ground_truth_ppl.sh`): tiered vs Q8_0 vs full-Q4_K_M on
-   the same 60 chunks of human prose. **Target: perplexity ratio tiered/Q8 strictly below
-   full-Q4/Q8 (1.020).** If tiered lands within CI of Q8, the quality cost is effectively free.
+**If this fails:** the tensor-type-file was not applied as expected. Check multi-line precedence (later lines override earlier ones — verify with a 2-layer test file before trusting the full mapping). Stop and fix.
 
-### 7.4 The actual metric: SSD-bound decode (the win)
-Same protocol as the ledger's "Smaller experts" row so it is directly comparable:
-cold start (evict page cache), O_DIRECT, 4 GiB RAM cap, 1,536 tokens, same prompt, 16 GiB cache,
-`-ub 1`. Report for the tiered file vs Q8_0 vs full-Q4_K_M:
-- steady-state decode t/s (from token 256),
-- SSD read rate (GB/s) and total SSD bytes over the run,
-- hit rate and **cached-fraction-bytes**,
-- estimated parity vs native (~0.32× for Q8_0 is the reference point).
+### 4.2 Gate 2: Gate exactness
 
-**Success criterion for v1:** at the *same* cached-fraction-bytes as the Q8_0 baseline, the
-tiered file decodes **strictly faster than Q8_0** and **no slower than full-Q4_K_M**, with
-quality (7.3) at or better than full-Q4. A plausible target is >41.4 t/s (full-Q4's number)
-because the hot set stays Q8 while still fitting more bytes in cache than Q8_0. If the tiered
-file is *slower* than full-Q4, the byte budget wasn't actually smaller and §5.2 is wrong.
+Verify that the router (gate) weights are **bit-exact** between the tiered model and the Q8_0 source. The gate tensors are non-expert and should be at the same precision in both models. If the gate weights changed, the routing decisions change, and the tier assignment (which was computed from Q8_0 routing) is no longer valid.
 
-### 7.5 (Optional, high value) 43 GiB model
-Run 7.1 + 7.4 on the synthetic 43 GiB model with a tiered file sized to the same 16 GiB cache.
-Hypothesis: because the cold experts now cost ~half the bytes, the same 16 GiB cache covers a
-much larger *byte* fraction, and the 6.6 t/s / 0.08× parity improves toward ~0.15–0.2×. This is
-the cleanest test of whether "working set doesn't fit" is a *byte* problem (fixable by
-precision) or a *count* problem (not fixable by precision). Label it clearly as using the
-synthetic model (throughput/capacity only, not quality).
+**If this fails:** the tensor-type-file accidentally matched a gate tensor. Check the regex. Stop and fix.
 
----
+### 4.3 Gate 3: Quality
 
-## 8. The existing assumption this spec is testing
+Run the quality comparison (teacher-forced, as in `compare_quality.py`):
+- Reference: Q8_0 model, 100 prompts, free-running greedy.
+- Candidate: tiered model, `--force-tokens` = reference tokens.
+- Report: top-1 agreement %, mean NLL gap, perplexity ratio.
 
-`IMPLEMENTATION_STATUS.md` (43 GiB section): "Parity falls quickly as the model outgrows the
-cache: about 0.32x at 30 GiB, about 0.08x at 43 GiB," and "'the active working set fits in
-VRAM' holds only partly... once the cached *fraction* drops below about 55%."
+**Pass criteria:**
+- Perplexity ratio < 1.05 (i.e. < 5% PPL increase over Q8_0). The full-Q4 model is +2%; the tiered model should be between Q8 and full-Q4, closer to Q8 because the downgraded layers are the less-popular ones.
+- Top-1 agreement > 95%.
 
-That conclusion was measured with a *uniform-precision* file, where cached fraction is counted
-in **experts** (71 of 128). This spec re-frames the constraint as **bytes**: the cache holds a
-fixed number of *bytes*, so a mixed-precision file with a Q4 cold tail has the same byte budget
-cover *more* of the routing byte-distribution. If the dominant cost is truly bytes-from-SSD
-(which the 72–81% SSD-wait numbers say it is), then reducing per-miss bytes should improve
-parity even as the *expert-count* fraction stays the same. §7.5 is the direct test of this
-reframe.
+**If this fails:** the tier assignment is too aggressive. Try a more conservative policy (larger K, or threshold instead of topk). Re-run gates 1–3.
+
+### 4.4 Gate 4: Throughput in the SSD-bound regime
+
+This is the actual test of whether the idea works.
+
+**Setup:** same as the cold-SSD benchmark in `results/rtx3090/cold/`. Model > VRAM, low RAM, SSD is the backing tier. Use the existing 16 GiB cache (or whatever the target regime uses).
+
+**Measurements (3 reps, 256-token decode):**
+- Decode t/s for the tiered model.
+- Decode t/s for the all-Q8_0 baseline (same cache size, same regime).
+- Decode t/s for the existing "layers 0–23" synthetic model (same regime).
+- Cache hit rate for each.
+- SSD bytes transferred (if available from the trace or `iostat`).
+
+**Pass criteria (the actual win):**
+- Tiered model decode t/s ≥ all-Q8_0 baseline decode t/s. (This is the minimum: no regression.)
+- Tiered model decode t/s > existing "layers 0–23" synthetic model decode t/s. (This proves the popularity-based selection is better than the arbitrary split.)
+- Cache hit rate: the tiered model's hit rate should be **comparable or better** than the all-Q8 baseline. (See §4.5 for the mechanism.)
+
+**If this fails:** the idea doesn't work in this regime. Report the numbers. Do not proceed.
+
+### 4.5 Mechanism note: how the slot budget works (rev 2 correction)
+
+The runtime cache computes a **global** slot budget:
+```
+n_slots_budget = capacity_bytes / sum_expert_size_all_tensors
+```
+and applies that same slot count to **every** tensor. Q4 layers don't get *more* slots than Q8 layers; they just cost less bytes per slot.
+
+So the causal chain for the tiered model is:
+1. Downgrading some layers to Q4 reduces `sum_expert_size_all_tensors`.
+2. This **raises** `n_slots_budget` for everyone (Q8 and Q4 layers alike).
+3. More total cached experts → higher hit rate → fewer SSD reads → faster decode.
+
+This is a **global** effect, not a per-layer one. The Q4 layers don't benefit more than the Q8 layers in terms of cache slots; they benefit because their *misses* are cheaper (fewer bytes to fetch from SSD).
+
+**Implication for the §4.4 tripwire:** the expected hit-rate improvement comes from the global slot budget increase, not from "Q4 layers get cached preferentially." If the hit rate doesn't improve, the slot-budget increase wasn't enough. If the hit rate improves but the SSD bytes don't drop proportionally, the Q4 layers' misses aren't actually being served from cache (they're still hitting SSD, just with fewer bytes per read).
+
+### 4.6 (Optional) Gate 5: 43 GiB model
+
+If the tiered model shows a clear win on the 30B model, repeat the test on the 43 GiB model (6.6 t/s, 38% cached) to see if the win scales. The 43 GiB model has a much lower cache coverage ratio, so the byte-savings from Q4 cold layers should matter more there.
 
 ---
 
-## 9. Follow-ups (out of scope for v1, but the design should not block them)
+## 5. The assumption this spec challenges
 
-1. **Three tiers** (Q8 / Q4 / Q3_K) once the two-tier byte/quality tradeoff is understood — the
-   `bytes` mode already generalizes; just add a third precision level and a second budget.
-2. **Popularity as the *unifying* axis**: the same ranking already drives warm-start and
-   admission control. A future spec could co-tune precision + placement + routing-bias from one
-   popularity profile (the routing-bias feature, overnight `bias 0.02` 123s→87s, is a separate
-   but synergistic lever).
-3. **Adaptive / online**: if popularity drifts, re-quantize is expensive, so this is a *batch*
-   artifact, not a runtime one. Fine for v1. A runtime variant would need in-place precision
-   selection, which is a bigger design — do not scope it here.
-4. **Composes with Idea 2 (parallel NVMe)** and **Idea 3 (signal prefetch)**: fewer bytes per
-   miss (this) × more bandwidth (2) × fewer misses (3). The §7.4 number should be reported so it
-   can be combined multiplicatively later.
+Rev 1 (and the prior "arbitrary layers 0–23" experiment) treated the *choice* of which layers to downgrade as a free parameter, chosen by hand. This spec challenges that: **popularity data already exists in the routing traces, and using it to select layers is strictly more principled than the existing split.** The cost is one Python script (§3.1) and one line of shell (§3.2). The payoff is a data-driven tier assignment that should (a) have equal or better quality than the arbitrary split, and (b) have equal or better throughput (because the most-popular layers stay at Q8, preserving quality where it matters most).
 
 ---
 
-## 10. Risks and load-bearing uncertainties (flag these in the results writeup)
+## 6. Load-bearing uncertainties (flagged, must be verified by the implementing agent)
 
-- **`--tensor-type-file` override order / multi-line precedence** is assumed, not verified in
-  this spec. The agent MUST confirm in `llama-quantize`'s source how multiple matching regex
-  lines resolve (last-wins vs first-wins), and MUST use §7.1 size accounting as the tripwire.
-  *Load-bearing: a wrong assumption here produces a silently-wrong file.*
-- **Quality of *mixed* precision is not measured anywhere in the ledger.** The +2.1% PPL is for
-  *full* Q4. The mixed case should be better, but this is a **prediction, not a measurement** —
-  §7.3 is the experiment that turns it into evidence. Do not claim a specific PPL number until
-  §7.3 is run.
-- **Popularity is prompt-dependent.** The ledger notes decode speed ranged 15–48 t/s across the
-  8 prompts. The tier assignment should be built from *all* 8 prompts' profiles (or a held-out
-  split: train tiers on some prompts, test on others) to avoid overfitting the tiers to the
-  benchmark prompts. *If the agent uses the same 8 prompts to both build tiers and benchmark,
-  the result is optimistic; note this.*
-- **Slot/byte accounting in the runtime cache**: the cache is described as "slots" — confirm
-  whether a slot is a fixed expert-count or a fixed byte size. If slots are a fixed *count*,
-  a Q4 expert in a "slot" wastes half the slot's bytes, and the win is smaller than §7.1
-  suggests. The agent should read the cache sizing in the C++ (`ggml_backend_sched` expert
-  cache) to confirm the cache is byte-budgeted, not count-budgeted. *Load-bearing for the size
-  of the win.*
-- **`--allow-requantize` from Q8_0 to Q4_K_M for individual tensors** is the same operation the
-  synthetic model used (Q8→F16), so it should work, but the agent should confirm the quantize
-  path accepts a *target* type per tensor when the base type is Q8_0 (the synthetic script uses
-  target `Q8_0` as the file-level arg and per-tensor `f16`; here the per-tensor type is `Q4_K_M`).
+1. **`--tensor-type-file` multi-line precedence.** The spec assumes later lines override earlier ones. Verify with a 2-layer test file (one layer at Q4, one at Q8) before trusting the full mapping. If the precedence is reversed, the mapping will be wrong.
+
+2. **Gate exactness (§4.2).** The tier assignment is computed from Q8_0 routing. If the gate weights change (e.g. because the tensor-type-file accidentally matches a gate tensor), the routing decisions change and the tier assignment is invalid. Verify gates are bit-exact before proceeding.
+
+3. **Slot-budget mechanism (§4.5).** The expected hit-rate improvement comes from the global slot budget increase, not from per-layer preferential caching. If the hit rate doesn't improve as expected, the slot-budget increase wasn't enough — the idea may not work in this regime.
+
+4. **Per-component tiering (deferred to v2, §2.3).** The spec assigns all three components (gate, up, down) of a layer the same precision. This is a simplification. In v2, per-component tiering (e.g. gate at Q4, up/down at Q8) is mechanically possible via `--tensor-type-file` (three separate tensor names per layer) and might give a better quality/throughput tradeoff. Defer for now.
+
+5. **Per-expert tiering (deferred to v2, §2.3).** The spec's rev 1 framing of "per-expert, not per-layer" was the ideal, but the tooling only supports per-layer. True per-expert mixed precision within one tensor would require a GGUF format change or a custom quantize path. Defer to v2.
+
+6. **Trace coverage.** The tier assignment is only as good as the traces it's trained on. If the traces don't cover the target workload (e.g. the traces are from English prompts but the target is code generation), the tier assignment may be suboptimal. Collect traces from the actual target workload before building.
 
 ---
 
-## 11. Acceptance checklist (the coding agent is done when)
+## 7. Acceptance checklist
 
-- [ ] `popularity_to_tiers.py` produces a tier assignment + a valid `tensor-types.txt` + a JSON
-      summary, under all three modes, and prints the resolved regex→type mapping with per-line
-      tensor counts.
-- [ ] `build_tiered_model.sh` produces a GGUF whose §7.1 size/byte accounting shows the hot set
-      at Q8 and the cold set at Q4 (not accidentally all-one-or-the-other).
-- [ ] §7.2 exactness gate passes (deterministic, coherent, no OOM, slot count increased).
-- [ ] §7.3 quality: tiered top-1 agreement and ground-truth PPL both **strictly better than
-      full-Q4_K_M** and at-or-better-than Q8 within CI.
-- [ ] §7.4: at the *same* cached-fraction-bytes as Q8_0, tiered decode is **faster than Q8_0**
-      and **no slower than full-Q4**, on the cold/O_DIRECT/4GiB/16GiB protocol.
-- [ ] Results written to `results/tiered-precision/` with the four sections' raw numbers, and
-      the three docs updated with `evidence_class: measured_rtx3090` labels and a clear
-      "prediction vs measurement" distinction per §10.
-- [ ] The prompt-dependence caveat (build tiers on a held-out prompt split if possible) is
-      stated in the writeup.
+- [ ] `popularity_to_layers.py` runs on the collected traces and produces a valid tensor-type-file + summary JSON.
+- [ ] The tensor-type-file maps the expected layers to Q4_K_M and leaves the rest at Q8_0.
+- [ ] `build_tiered_model.sh` builds the mixed-precision GGUF without errors.
+- [ ] Gate 1 (byte accounting): total model size is smaller than all-Q8; Q8 layer byte count matches the "layers 0–23" hot set within ~5%.
+- [ ] Gate 2 (gate exactness): router weights are bit-exact between tiered and Q8_0.
+- [ ] Gate 3 (quality): PPL ratio < 1.05; top-1 agreement > 95%.
+- [ ] Gate 4 (throughput): tiered model decode t/s ≥ all-Q8 baseline; tiered model decode t/s > "layers 0–23" synthetic model.
+- [ ] All numbers are in the evidence ledger with `evidence_class: measured_rtx3090`.
 
-## 12. References (read these if you need more context — the spec above should be enough)
+---
 
-- `writer_handoff/EVIDENCE_LEDGER.md` — the measured numbers cited throughout.
-- `writer_handoff/KNOWN_LIMITATIONS.md` — failure modes and evidence-label conventions.
-- `docs/IMPLEMENTATION_STATUS.md` — the "Smaller experts", "43 GiB", and cache sections.
-- `scripts/make_warm_profile.py`, `scripts/make_synthetic_model.sh`,
-  `scripts/compare_quality.py`, `scripts/run_ground_truth_ppl.sh`, `scripts/cold_run.py` —
-  the existing tooling this spec extends or reuses.
+## 8. References (optional context for the implementing agent)
+
+- `writer_handoff/EVIDENCE_LEDGER.md` — measured numbers cited in §1.
+- `writer_handoff/KNOWN_LIMITATIONS.md` — known constraints (SSD bandwidth, PCIe, cache size).
+- `docs/IMPLEMENTATION_STATUS.md` — current implementation state, existing ablations.
+- `docs/PLAN_ADAPTIVE.md` — the adaptive-plan context.
+- `scripts/make_synthetic_model.sh` — the existing mixed-precision build (the "layers 0–23" arbitrary split).
+- `scripts/make_warm_profile.py` — the existing per-expert popularity profiler (input to §3.1).
+- `scripts/compare_quality.py` — the quality comparison harness (used in §4.3).
+- `third_party/llama.cpp/tools/quantize/quantize.cpp` — `parse_tensor_type` (exact string match on tensor name).
+- `third_party/llama.cpp/src/llama-quant.cpp` — `p->pattern` regex matching (C++ side of `--tensor-type-file`).
+- `third_party/llama.cpp/src/ggml-backend.cpp` — `ggml_backend_sched_expert_cache_layout` (global slot budget).
