@@ -122,16 +122,43 @@ on this model's fixed-top-8 router; see spec section 0 correction 4.
   budget for every tensor (13,392 slots vs the baseline's 10,224), so more of the *whole* model's
   working set fits in the 16 GiB cache, not just the downgraded layers' own footprint.
 
-  **Not yet done:** a byte-matched or layer-count-matched comparison against the existing
-  "layers 0-23" arbitrary-split synthetic model (`Qwen3-30B-A3B-synthetic-F16x24-Q8x24.gguf`) --
-  that model uses a different precision pair (F16/Q8, not Q8/Q4) and total size (42.9 GiB), so
-  it isn't directly comparable without building an equivalent arbitrary-split Q8/Q4 model first.
-  The minimum Gate 4 pass criterion (beat the all-Q8_0 baseline) is met with a wide margin
-  regardless.
+### Popularity-based vs arbitrary layer selection (2026-09-24, same day)
+
+Closes the "not yet done" gap above: built a byte-matched, layer-count-matched **control**
+model, `Qwen3-30B-A3B-arbitrary-q8x24-q4x24.gguf` -- identical K=24 Q8_0/Q4_K split, same
+24,061.40 MiB output size, but layers 0-23 kept hot and 24-47 downgraded (the same boundary
+`make_synthetic_model.sh` uses), instead of the entropy-based popularity selection. Same 8
+quality prompts, same cold-cache throughput benchmark (3 reps), same reference tokens.
+
+| | decode t/s (all, mean of 3) | stdev | hit rate | SSD bytes | top-1 agreement | PPL ratio |
+|---|---|---|---|---|---|---|
+| Q8_0 baseline | 26.30 | -- | 97.4% | 76.69 GB | -- | -- |
+| arbitrary split (layers 0-23) | 65.85 | 1.49 | 98.9% | 27.19 GB | 97.98% | 1.0071 |
+| popularity split (entropy, K=24) | 83.25 | 0.76 | 99.1% | 20.04 GB | 96.97% | 1.0073 |
+
+**Throughput: popularity selection wins clearly.** 83.25 vs 65.85 t/s, a **1.26x** speedup over
+the arbitrary split with the *same* total model size and *same* cache slot budget (13,392 slots
+for both -- the difference is entirely which 24 layers were chosen). Both configurations beat
+the Q8_0 baseline by a wide margin (3.17x and 2.50x respectively), confirming the core "downgrade
+cold layers" idea works regardless of selection method, but the popularity signal is what
+delivers the *extra* margin the spec's hypothesis predicted.
+
+**Quality: a wash, not a win.** Top-1 agreement and PPL ratio are statistically indistinguishable
+between the two splits (differences under 1 percentage point / 0.0002 PPL-ratio, likely within
+prompt-to-prompt noise on an 8-prompt set) -- if anything the arbitrary split is marginally
+*better* on quality. The spec's per-layer entropy hypothesis (`popularity_to_layers.py`'s
+`compute_popularity` docstring) is **not supported** by this quality data; it should not be
+cited as a quality-improving mechanism. What the data does support is a throughput-selection
+mechanism: whichever way the popularity signal is choosing layers, it produces a mix that the
+runtime's LRU expert cache serves more efficiently for this specific decode workload than an
+arbitrary contiguous block does. The precise causal reason (temporal locality of the one
+benchmark prompt's expert access pattern vs. the trace-aggregate entropy statistic used to pick
+layers) has not been isolated -- flagged as a follow-up, not resolved here.
 
 Artifacts: `results/tiered/layers.summary.json` (popularity ranking, byte accounting),
 `results/tiered/layers.tensor-type-file`, `results/tiered/quality/` (per-prompt logprobs +
-`summary-tiered-vs-q8.json`), `results/tiered/cold/` (3 cold-run reps).
+`summary-tiered-vs-q8.json`), `results/tiered/cold/` (3 cold-run reps) -- popularity split.
+`results/tiered/arbitrary/` -- arbitrary-split control (tensor-type-file, quality/, cold/).
 
 ## Still pending
 
