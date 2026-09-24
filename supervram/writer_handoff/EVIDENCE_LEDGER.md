@@ -84,6 +84,55 @@ Source: `results/overnight/FINAL_RESULTS.md`, `bench/SUMMARY.tsv`, `ram4g/SUMMAR
 output for all systems. Exactness gates: Q4_K_M tokens + logits hashes identical to full-GPU. Bias mode is approximate (perplexity checked, no task benchmark).
 The "48 GB-class" row is an all-hot proxy, not a real card.
 
+## Popularity-tiered expert precision (2026-09-24)
+
+Source: `docs/SPEC_IDEA1_POPULARITY_TIERED_PRECISION.md` rev 2, `scripts/popularity_to_layers.py`,
+`scripts/build_tiered_model.sh`, `results/tiered/`. Measured on the RTX 3090 host.
+`evidence_class: measured_rtx3090` throughout except where noted.
+
+Built `Qwen3-30B-A3B-tiered-popk24.gguf` (24,061 MiB, down from the Q8_0 source's 30,973 MiB):
+24 layers kept at Q8_0, 24 downgraded to Q4_K, selected by an entropy-based popularity signal
+over the 8-prompt/3,276-token routing trace set (`results/rtx3090/traces/`) -- NOT the literal
+activation-count formula in spec rev 1/2 section 3.1, which is degenerate (~8.0 for every layer)
+on this model's fixed-top-8 router; see spec section 0 correction 4.
+
+- **Gate 1 (byte accounting):** PASS. 25.23 GB total vs 32.48 GB Q8_0 source. Every expert tensor
+  at its expected precision (0 mismatches across 144 tensors), verified via `gguf-py` against the
+  built file.
+- **Gate 2 (gate exactness):** PASS. All 48 router (`ffn_gate_inp`) tensors bit-exact (SHA-256)
+  between the tiered model and the Q8_0 source.
+- **Gate 3 (quality):** PASS. Teacher-forced against Q8_0 on the same 8 prompts / 3,072 tokens
+  used for the existing Q4_K_M quality comparison: **96.97% top-1 agreement**, **perplexity ratio
+  1.0073** (+0.73% vs Q8_0) -- both comfortably inside the <5%/>95% gates, and well inside
+  full-Q4_K_M's already-accepted +2% PPL penalty.
+- **Gate 4 (throughput, SSD-bound cold regime):** PASS, large margin. Same benchmark as the
+  existing Q8_0 cold-cache baseline (`results/rtx3090/cold/q8-cache16g-direct-cap4g-long1536.json`):
+  16 GiB cache, 4 GiB RAM cap, evicted page cache, direct I/O, 1,536-token decode, identical
+  prompt. 3 repetitions, tightly reproducible:
+
+  | | decode t/s (all) | decode t/s (2nd half) | hit rate | SSD bytes read |
+  |---|---|---|---|---|
+  | Q8_0 baseline | 26.30 | 26.44 | 97.4% | 76.69 GB |
+  | tiered (rep 1) | 82.38 | 107.47 | 99.1% | 20.04 GB |
+  | tiered (rep 2) | 83.67 | 110.64 | 99.1% | 20.04 GB |
+  | tiered (rep 3) | 83.71 | 110.19 | 99.1% | 20.04 GB |
+
+  **~3.1-3.2x decode throughput, ~74% less SSD traffic, higher hit rate**, matching the mechanism
+  predicted in spec section 4.5: shrinking the cold layers to Q4_K raised the shared cache slot
+  budget for every tensor (13,392 slots vs the baseline's 10,224), so more of the *whole* model's
+  working set fits in the 16 GiB cache, not just the downgraded layers' own footprint.
+
+  **Not yet done:** a byte-matched or layer-count-matched comparison against the existing
+  "layers 0-23" arbitrary-split synthetic model (`Qwen3-30B-A3B-synthetic-F16x24-Q8x24.gguf`) --
+  that model uses a different precision pair (F16/Q8, not Q8/Q4) and total size (42.9 GiB), so
+  it isn't directly comparable without building an equivalent arbitrary-split Q8/Q4 model first.
+  The minimum Gate 4 pass criterion (beat the all-Q8_0 baseline) is met with a wide margin
+  regardless.
+
+Artifacts: `results/tiered/layers.summary.json` (popularity ranking, byte accounting),
+`results/tiered/layers.tensor-type-file`, `results/tiered/quality/` (per-prompt logprobs +
+`summary-tiered-vs-q8.json`), `results/tiered/cold/` (3 cold-run reps).
+
 ## Still pending
 
 - Prefetch in the actual C++/llama.cpp integration (a validated Python-only confidence-gated design exists, `supervram/scheduler.py`, `PLAN_ADAPTIVE.md`, not yet ported) and double-buffered staging (a single pinned staging buffer exists), GDS device DMA, llama-server `/metrics` cache stats.

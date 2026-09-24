@@ -1,0 +1,466 @@
+{
+  "policy": "topk",
+  "metric": "entropy",
+  "k": 24,
+  "theta": null,
+  "traces": [
+    "results/rtx3090/traces/q8-p1.trace",
+    "results/rtx3090/traces/q8-p2.trace",
+    "results/rtx3090/traces/q8-p3.trace",
+    "results/rtx3090/traces/q8-p4.trace",
+    "results/rtx3090/traces/q8-p5.trace",
+    "results/rtx3090/traces/q8-p6.trace",
+    "results/rtx3090/traces/q8-p7.trace",
+    "results/rtx3090/traces/q8-p8.trace"
+  ],
+  "total_layers": 48,
+  "q8_layers": [
+    2,
+    4,
+    6,
+    7,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    28,
+    29,
+    30,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47
+  ],
+  "q4_layers": [
+    0,
+    1,
+    3,
+    5,
+    8,
+    9,
+    10,
+    11,
+    12,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36
+  ],
+  "q4_type": "Q4_K",
+  "layer_popularity_ranking": [
+    {
+      "layer": 43,
+      "popularity": -6.138173,
+      "tier": "q8",
+      "entropy_bits": 6.1382,
+      "top1_share": 0.0532,
+      "distinct_experts_used": 115
+    },
+    {
+      "layer": 44,
+      "popularity": -6.158164,
+      "tier": "q8",
+      "entropy_bits": 6.1582,
+      "top1_share": 0.0376,
+      "distinct_experts_used": 116
+    },
+    {
+      "layer": 47,
+      "popularity": -6.164853,
+      "tier": "q8",
+      "entropy_bits": 6.1649,
+      "top1_share": 0.0312,
+      "distinct_experts_used": 111
+    },
+    {
+      "layer": 45,
+      "popularity": -6.167589,
+      "tier": "q8",
+      "entropy_bits": 6.1676,
+      "top1_share": 0.0475,
+      "distinct_experts_used": 114
+    },
+    {
+      "layer": 46,
+      "popularity": -6.187688,
+      "tier": "q8",
+      "entropy_bits": 6.1877,
+      "top1_share": 0.0339,
+      "distinct_experts_used": 114
+    },
+    {
+      "layer": 42,
+      "popularity": -6.233087,
+      "tier": "q8",
+      "entropy_bits": 6.2331,
+      "top1_share": 0.0304,
+      "distinct_experts_used": 111
+    },
+    {
+      "layer": 41,
+      "popularity": -6.2523,
+      "tier": "q8",
+      "entropy_bits": 6.2523,
+      "top1_share": 0.0275,
+      "distinct_experts_used": 118
+    },
+    {
+      "layer": 38,
+      "popularity": -6.276944,
+      "tier": "q8",
+      "entropy_bits": 6.2769,
+      "top1_share": 0.0658,
+      "distinct_experts_used": 123
+    },
+    {
+      "layer": 17,
+      "popularity": -6.287399,
+      "tier": "q8",
+      "entropy_bits": 6.2874,
+      "top1_share": 0.0457,
+      "distinct_experts_used": 124
+    },
+    {
+      "layer": 16,
+      "popularity": -6.28814,
+      "tier": "q8",
+      "entropy_bits": 6.2881,
+      "top1_share": 0.043,
+      "distinct_experts_used": 120
+    },
+    {
+      "layer": 40,
+      "popularity": -6.308439,
+      "tier": "q8",
+      "entropy_bits": 6.3084,
+      "top1_share": 0.036,
+      "distinct_experts_used": 117
+    },
+    {
+      "layer": 18,
+      "popularity": -6.309033,
+      "tier": "q8",
+      "entropy_bits": 6.309,
+      "top1_share": 0.0375,
+      "distinct_experts_used": 123
+    },
+    {
+      "layer": 29,
+      "popularity": -6.336506,
+      "tier": "q8",
+      "entropy_bits": 6.3365,
+      "top1_share": 0.0437,
+      "distinct_experts_used": 125
+    },
+    {
+      "layer": 6,
+      "popularity": -6.338747,
+      "tier": "q8",
+      "entropy_bits": 6.3387,
+      "top1_share": 0.0304,
+      "distinct_experts_used": 126
+    },
+    {
+      "layer": 15,
+      "popularity": -6.348681,
+      "tier": "q8",
+      "entropy_bits": 6.3487,
+      "top1_share": 0.036,
+      "distinct_experts_used": 122
+    },
+    {
+      "layer": 7,
+      "popularity": -6.351816,
+      "tier": "q8",
+      "entropy_bits": 6.3518,
+      "top1_share": 0.0364,
+      "distinct_experts_used": 124
+    },
+    {
+      "layer": 13,
+      "popularity": -6.35214,
+      "tier": "q8",
+      "entropy_bits": 6.3521,
+      "top1_share": 0.0329,
+      "distinct_experts_used": 119
+    },
+    {
+      "layer": 39,
+      "popularity": -6.353535,
+      "tier": "q8",
+      "entropy_bits": 6.3535,
+      "top1_share": 0.028,
+      "distinct_experts_used": 121
+    },
+    {
+      "layer": 28,
+      "popularity": -6.361945,
+      "tier": "q8",
+      "entropy_bits": 6.3619,
+      "top1_share": 0.0356,
+      "distinct_experts_used": 123
+    },
+    {
+      "layer": 14,
+      "popularity": -6.362267,
+      "tier": "q8",
+      "entropy_bits": 6.3623,
+      "top1_share": 0.0337,
+      "distinct_experts_used": 122
+    },
+    {
+      "layer": 30,
+      "popularity": -6.367357,
+      "tier": "q8",
+      "entropy_bits": 6.3674,
+      "top1_share": 0.0323,
+      "distinct_experts_used": 124
+    },
+    {
+      "layer": 4,
+      "popularity": -6.376055,
+      "tier": "q8",
+      "entropy_bits": 6.3761,
+      "top1_share": 0.0232,
+      "distinct_experts_used": 123
+    },
+    {
+      "layer": 37,
+      "popularity": -6.378584,
+      "tier": "q8",
+      "entropy_bits": 6.3786,
+      "top1_share": 0.0283,
+      "distinct_experts_used": 117
+    },
+    {
+      "layer": 2,
+      "popularity": -6.380594,
+      "tier": "q8",
+      "entropy_bits": 6.3806,
+      "top1_share": 0.0325,
+      "distinct_experts_used": 122
+    },
+    {
+      "layer": 19,
+      "popularity": -6.38086,
+      "tier": "q4",
+      "entropy_bits": 6.3809,
+      "top1_share": 0.0317,
+      "distinct_experts_used": 121
+    },
+    {
+      "layer": 9,
+      "popularity": -6.384365,
+      "tier": "q4",
+      "entropy_bits": 6.3844,
+      "top1_share": 0.0304,
+      "distinct_experts_used": 125
+    },
+    {
+      "layer": 25,
+      "popularity": -6.390591,
+      "tier": "q4",
+      "entropy_bits": 6.3906,
+      "top1_share": 0.028,
+      "distinct_experts_used": 119
+    },
+    {
+      "layer": 27,
+      "popularity": -6.39199,
+      "tier": "q4",
+      "entropy_bits": 6.392,
+      "top1_share": 0.0299,
+      "distinct_experts_used": 128
+    },
+    {
+      "layer": 31,
+      "popularity": -6.392083,
+      "tier": "q4",
+      "entropy_bits": 6.3921,
+      "top1_share": 0.0311,
+      "distinct_experts_used": 124
+    },
+    {
+      "layer": 21,
+      "popularity": -6.396236,
+      "tier": "q4",
+      "entropy_bits": 6.3962,
+      "top1_share": 0.0279,
+      "distinct_experts_used": 123
+    },
+    {
+      "layer": 33,
+      "popularity": -6.414755,
+      "tier": "q4",
+      "entropy_bits": 6.4148,
+      "top1_share": 0.0301,
+      "distinct_experts_used": 122
+    },
+    {
+      "layer": 3,
+      "popularity": -6.420858,
+      "tier": "q4",
+      "entropy_bits": 6.4209,
+      "top1_share": 0.0319,
+      "distinct_experts_used": 124
+    },
+    {
+      "layer": 5,
+      "popularity": -6.422568,
+      "tier": "q4",
+      "entropy_bits": 6.4226,
+      "top1_share": 0.0333,
+      "distinct_experts_used": 126
+    },
+    {
+      "layer": 26,
+      "popularity": -6.426132,
+      "tier": "q4",
+      "entropy_bits": 6.4261,
+      "top1_share": 0.0269,
+      "distinct_experts_used": 125
+    },
+    {
+      "layer": 36,
+      "popularity": -6.436988,
+      "tier": "q4",
+      "entropy_bits": 6.437,
+      "top1_share": 0.0278,
+      "distinct_experts_used": 123
+    },
+    {
+      "layer": 20,
+      "popularity": -6.444193,
+      "tier": "q4",
+      "entropy_bits": 6.4442,
+      "top1_share": 0.034,
+      "distinct_experts_used": 127
+    },
+    {
+      "layer": 8,
+      "popularity": -6.444642,
+      "tier": "q4",
+      "entropy_bits": 6.4446,
+      "top1_share": 0.0338,
+      "distinct_experts_used": 127
+    },
+    {
+      "layer": 12,
+      "popularity": -6.4472,
+      "tier": "q4",
+      "entropy_bits": 6.4472,
+      "top1_share": 0.0322,
+      "distinct_experts_used": 126
+    },
+    {
+      "layer": 24,
+      "popularity": -6.448576,
+      "tier": "q4",
+      "entropy_bits": 6.4486,
+      "top1_share": 0.0303,
+      "distinct_experts_used": 125
+    },
+    {
+      "layer": 34,
+      "popularity": -6.456479,
+      "tier": "q4",
+      "entropy_bits": 6.4565,
+      "top1_share": 0.0238,
+      "distinct_experts_used": 125
+    },
+    {
+      "layer": 22,
+      "popularity": -6.461527,
+      "tier": "q4",
+      "entropy_bits": 6.4615,
+      "top1_share": 0.0258,
+      "distinct_experts_used": 126
+    },
+    {
+      "layer": 10,
+      "popularity": -6.470097,
+      "tier": "q4",
+      "entropy_bits": 6.4701,
+      "top1_share": 0.025,
+      "distinct_experts_used": 125
+    },
+    {
+      "layer": 32,
+      "popularity": -6.472806,
+      "tier": "q4",
+      "entropy_bits": 6.4728,
+      "top1_share": 0.0316,
+      "distinct_experts_used": 127
+    },
+    {
+      "layer": 35,
+      "popularity": -6.488379,
+      "tier": "q4",
+      "entropy_bits": 6.4884,
+      "top1_share": 0.0263,
+      "distinct_experts_used": 125
+    },
+    {
+      "layer": 11,
+      "popularity": -6.502028,
+      "tier": "q4",
+      "entropy_bits": 6.502,
+      "top1_share": 0.0284,
+      "distinct_experts_used": 125
+    },
+    {
+      "layer": 23,
+      "popularity": -6.508766,
+      "tier": "q4",
+      "entropy_bits": 6.5088,
+      "top1_share": 0.0276,
+      "distinct_experts_used": 124
+    },
+    {
+      "layer": 1,
+      "popularity": -6.572486,
+      "tier": "q4",
+      "entropy_bits": 6.5725,
+      "top1_share": 0.029,
+      "distinct_experts_used": 128
+    },
+    {
+      "layer": 0,
+      "popularity": -6.619513,
+      "tier": "q4",
+      "entropy_bits": 6.6195,
+      "top1_share": 0.0258,
+      "distinct_experts_used": 125
+    }
+  ],
+  "metric_note": "activation_count is near-constant (~8.0) for every layer on this fixed-top-8 router and carries no ranking signal; entropy is the corrected, actually-discriminating metric used by default -- see compute_popularity() docstring for the (unvalidated) hypothesis behind its tiering direction.",
+  "byte_accounting": {
+    "source_gguf": "/home/truppy/models/Qwen3-30B-A3B-Q8_0.gguf",
+    "q8_layers_bytes_at_q8": 15401484288,
+    "q4_layers_bytes_at_q8": 15401484288,
+    "q4_layers_bytes_estimate_at_q4": 8153726976,
+    "total_expert_bytes_estimate": 23555211264,
+    "total_expert_bytes_if_all_q8": 30802968576,
+    "note": "q4 estimate uses the measured Q4_K/Q8_0 per-tensor size ratio from a single-layer --dry-run, not the full built GGUF; verify against the actual built GGUF (gate 1)."
+  }
+}

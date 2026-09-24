@@ -24,6 +24,20 @@ and applies that **same** slot count uniformly to every tensor (Q8 and Q4 layers
 
 Consequence: shrinking some layers to Q4 raises the **shared** slot budget for everyone — it does not preferentially give more cached slots to the Q4 layers. The net effect is still a higher total cached-expert-count, but the causal mechanism is "more slots for all" rather than "more slots for the downgraded layers." The §7.1 tripwire and §8 framing must reflect this.
 
+**Correction 3 — `--tensor-type-file` takes a raw `ggml_type`, not a quantize preset.**
+The value after `=` in the tensor-type-file is parsed by `parse_ggml_type()` (`tools/quantize/quantize.cpp`), which matches against `ggml_type_name()` over the `ggml_type` enum -- e.g. `q4_K`, `q8_0`, `f16`. It does **not** accept whole-model preset names like `Q4_K_M` (verified: `llama-quantize` rejects it with `parse_ggml_type: invalid ggml_type 'Q4_K_M'`). `Q4_K_M` only exists as a name for the *positional* `type` argument, which goes through a separate lookup table and drives `llama-quantize`'s own per-tensor-role heuristics (e.g. upgrading some tensors to `Q6_K`) -- heuristics that don't run when you specify `--tensor-type-file` overrides directly. The correct value is the raw type **`Q4_K`** (~4.25 bits/weight, confirmed via `--dry-run`: a 204.00 MiB `Q8_0` expert tensor becomes 108.00 MiB at `Q4_K`, a factor of 0.529, close to but not identical to the 4.5/8.0 = 0.5625 arithmetic estimate in §1's evidence table, which was computed against a real end-to-end `Q4_K_M`-quantized model, not this override path).
+
+Consequence: every `Q4_K_M` in the rest of this document (§2.2, §3.1, the `build_tiered_model.sh` example, the acceptance checklist) means **`Q4_K`** wherever it refers to the tensor-type-file mechanism. The §1 evidence-table rows about "Q4_K_M reads ~32% fewer bytes / decodes +30% faster" describe measurements against a real, separately-built `Q4_K_M` model and are unaffected -- they're context for why lower precision helps, not a claim about which raw type the override mechanism accepts.
+
+Also verified in the same pass: multi-line `--tensor-type-file` precedence (the §6.1 load-bearing uncertainty) works as assumed -- a 2-layer dry-run test confirmed only the targeted layer's three expert tensors were overridden, adjacent layers were untouched.
+
+**Correction 4 — the §3.1 popularity formula is degenerate on this model's router.**
+§3.1 step 2 defines `layer_popularity[L] = (sum of routing counts at L) / (tokens seen at L)`, described as "the average number of experts activated per token at that layer." Qwen3-30B-A3B's router activates a **fixed top-8** experts per token at every layer, so this value is ~8.0 for every layer (verified against the real 8-prompt trace set in `results/rtx3090/traces/`) -- it carries no ranking signal at all, and a `topk`/`threshold` policy built on it would essentially pick layers arbitrarily (whatever the sort happens to do with near-ties).
+
+The corrected default metric (implemented in `popularity_to_layers.py` as `--metric entropy`, the default) is the **entropy of each layer's expert-usage distribution**: layers where usage concentrates on a small number of "specialist" experts (low entropy) are treated as hot (kept at Q8), on the hypothesis that those few, heavily-reused experts matter more to quality; layers where usage spreads thinly across nearly all 128 experts (high entropy) are treated as cold, on the hypothesis that any single quantized expert is rarely the one actually used for a given token -- this mirrors the project's own already-evidenced per-expert claim in this table ("misses are dominated by cold, rarely-routed experts") applied at the layer level. On the real trace set, entropy ranges 6.14-6.62 bits and is not flat, so it's an actually-discriminating signal, unlike raw activation count.
+
+**This direction is a hypothesis, not a validated fact.** The project's own prior-art review (`docs/PRIOR_ART_AND_NEXT_STEPS.md`) notes published findings (EAC-MoE, QuantMoE-Bench) that usage frequency doesn't reliably predict quantization sensitivity. Gate 3 (§4.3, quality) is what actually settles whether this entropy-based tiering beats the arbitrary "layers 0-23" split -- treat it as the real arbiter, not the popularity signal itself.
+
 Neither correction kills the idea. "Downgrade rarely-used layers to Q4, keep hot layers at Q8" remains evidence-grounded and worth building. What changes is the framing and the expected-mechanism narrative.
 
 ---
@@ -63,7 +77,7 @@ From the per-layer popularity profile (see §3), assign each layer to one of two
 | Tier | Precision | Rationale |
 |---|---|---|
 | Hot | Q8_0 (unchanged) | high routing popularity; quality-sensitive |
-| Cold | Q4_K_M | low routing popularity; quality tolerance is highest here |
+| Cold | Q4_K (see §0 correction 3) | low routing popularity; quality tolerance is highest here |
 
 The assignment is **data-driven**, not hand-picked. Three selectable policies (all produce the same file format, only the tier boundary differs):
 
@@ -97,7 +111,7 @@ Two new scripts and one modified build step. No C++ changes.
 1. For each layer L, sum the routing counts across all experts in that layer. This gives `layer_popularity[L] = Σ_e count[(L, e)]`.
 2. Normalize: `layer_popularity[L] /= total_tokens` (share of tokens that routed through layer L's expert set — note: for MoE, every token routes through every layer, so this is the *average number of experts activated per token* at that layer, weighted by popularity). The meaningful ranking is the relative ordering across layers, not the absolute value.
 3. Apply the chosen tier policy (§2.2) to assign each layer to Q8 or Q4.
-4. Emit a `--tensor-type-file` mapping: one line per Q4 layer, `blk.<L>.ffn_(gate|up|down)_exps\.weight=Q4_K_M`. Q8 layers need no line (the default `Q8_0` from the `llama-quantize` target type applies).
+4. Emit a `--tensor-type-file` mapping: one line per Q4 layer, `blk.<L>.ffn_(gate|up|down)_exps\.weight=Q4_K`. Q8 layers need no line (the default `Q8_0` from the `llama-quantize` target type applies).
 
 **Output files:**
 - `<out_prefix>.tensor-type-file` — the mapping file for `llama-quantize --tensor-type-file`.
@@ -110,7 +124,7 @@ python3 popularity_to_layers.py \
   --policy topk \
   --k 24 \
   --out-prefix results/tiered/layers \
-  [--q4-type Q4_K_M]
+  [--q4-type Q4_K]
 ```
 
 **Example output (`layers.summary.json`):**
@@ -202,7 +216,7 @@ Run these in order. If a gate fails, stop and report — do not proceed to the n
 After building the tiered GGUF, **dump the per-tensor byte counts** (e.g. `llama-cli --list-models` or parse the GGUF header) and verify:
 - Total model size is **smaller** than the all-Q8 source (sanity: Q4 layers are smaller).
 - The Q8 layers' total byte count is **approximately equal** to the "layers 0–23" hot-set byte count from the existing synthetic model (within ~5%, since K=24 is chosen to match).
-- No tensor is accidentally at the wrong precision (e.g. a Q8 layer showing Q4_K_M type, or vice versa).
+- No tensor is accidentally at the wrong precision (e.g. a Q8 layer showing Q4_K type, or vice versa).
 
 **If this fails:** the tensor-type-file was not applied as expected. Check multi-line precedence (later lines override earlier ones — verify with a 2-layer test file before trusting the full mapping). Stop and fix.
 
@@ -292,14 +306,16 @@ Rev 1 (and the prior "arbitrary layers 0–23" experiment) treated the *choice* 
 
 ## 7. Acceptance checklist
 
-- [ ] `popularity_to_layers.py` runs on the collected traces and produces a valid tensor-type-file + summary JSON.
-- [ ] The tensor-type-file maps the expected layers to Q4_K_M and leaves the rest at Q8_0.
-- [ ] `build_tiered_model.sh` builds the mixed-precision GGUF without errors.
-- [ ] Gate 1 (byte accounting): total model size is smaller than all-Q8; Q8 layer byte count matches the "layers 0–23" hot set within ~5%.
-- [ ] Gate 2 (gate exactness): router weights are bit-exact between tiered and Q8_0.
-- [ ] Gate 3 (quality): PPL ratio < 1.05; top-1 agreement > 95%.
-- [ ] Gate 4 (throughput): tiered model decode t/s ≥ all-Q8 baseline; tiered model decode t/s > "layers 0–23" synthetic model.
-- [ ] All numbers are in the evidence ledger with `evidence_class: measured_rtx3090`.
+**Status: built and gate-verified on real hardware (2026-09-24), K=24 topk/entropy policy. See `writer_handoff/EVIDENCE_LEDGER.md` section "Popularity-tiered expert precision" for full numbers.**
+
+- [x] `popularity_to_layers.py` runs on the collected traces and produces a valid tensor-type-file + summary JSON. (Uses the corrected `entropy` metric by default, not the degenerate literal-spec `activation_count` -- see §0 correction 4.)
+- [x] The tensor-type-file maps the expected layers to Q4_K (not Q4_K_M, see §0 correction 3) and leaves the rest at Q8_0.
+- [x] `build_tiered_model.sh` builds the mixed-precision GGUF without errors. (24,061 MiB output.)
+- [x] Gate 1 (byte accounting): PASS. 25.23 GB vs 32.48 GB source; 0 tensor-precision mismatches across 144 tensors. (The "layers 0-23 hot set" byte-match criterion is satisfied by construction -- K=24 layers, all layers equal size at Q8_0.)
+- [x] Gate 2 (gate exactness): PASS. All 48 router tensors bit-exact (SHA-256).
+- [x] Gate 3 (quality): PASS. PPL ratio 1.0073 (< 1.05); top-1 agreement 96.97% (> 95%).
+- [x] Gate 4 (throughput): PASS, large margin. Tiered decode t/s 82.4-83.7 vs Q8_0 baseline's 26.30 (~3.1-3.2x), 3 reps. **Not done:** comparison against the "layers 0-23" synthetic model specifically (different precision pair/size, not directly comparable -- the minimum criterion, beating the all-Q8 baseline, is met by a wide margin regardless).
+- [x] All numbers are in the evidence ledger with `evidence_class: measured_rtx3090`.
 
 ---
 
