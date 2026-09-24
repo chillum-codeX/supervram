@@ -1,0 +1,62 @@
+{
+  "name": "ass-off-cache16g-direct-cap4g-long1536-rep3",
+  "evidence_class": "measured_rtx3090",
+  "command": [
+    "systemd-run",
+    "--user",
+    "--scope",
+    "-q",
+    "-p",
+    "MemoryMax=4G",
+    "-p",
+    "MemorySwapMax=0",
+    "--",
+    "build/svram-verify",
+    "--model",
+    "/home/truppy/models/Qwen3-30B-A3B-Q8_0.gguf",
+    "--json",
+    "results/ass/cold/ass-off-cache16g-direct-cap4g-long1536-rep3.verify.json",
+    "--storage",
+    "cache",
+    "--cache-mib",
+    "16384",
+    "--n-ctx",
+    "2048",
+    "--n-predict",
+    "1536",
+    "--n-ubatch",
+    "1",
+    "--moe-expert-scheduler",
+    "off",
+    "--prompt",
+    "Compare the advantages and disadvantages of microservice architecture versus a monolith for a startup with five engineers."
+  ],
+  "returncode": 0,
+  "disk": "nvme0n1",
+  "ram_cap": "4G",
+  "evicted_before": true,
+  "model_page_cache_resident_gib_before": 0.0,
+  "model_page_cache_resident_gib_after": 1.32,
+  "ssd_read_gib": 72.74,
+  "wall_s": 64.7,
+  "peak_rss_anon_gib": 0.21,
+  "peak_rss_file_gib": 1.23,
+  "peak_cgroup_gib": 1.68,
+  "stdout_tail": [
+    "mode=cache ngl=999 cpu_moe=0 n_cpu_moe=0 cache_mib=16384 prompt_tokens=20 generated=1536 load_ms=1794 prompt_ms=6919.2 decode_tps=30.88",
+    "cache_stats accesses=1792056 hits=1746279 misses=45777 evictions=35553 hit_rate=97.4 bytes_h2d=76501057536 n_slots=10224 host_ms=38099.9",
+    "direct_io_stats bytes_ssd=76688560128 io_ms=36145.7"
+  ],
+  "cache_stats": [
+    "cache_stats accesses=1792056 hits=1746279 misses=45777 evictions=35553 hit_rate=97.4 bytes_h2d=76501057536 n_slots=10224 host_ms=38099.9",
+    "direct_io_stats bytes_ssd=76688560128 io_ms=36145.7",
+    "spec_stats issued=0 committed=0 wasted=0"
+  ],
+  "env": {
+    "SVRAM_DIRECT_IO": "1"
+  },
+  "stderr_tail": [],
+  "decode_tps_all": 30.8842,
+  "decode_tps_second_half": 31.12,
+  "tokens_generated": 1536
+}

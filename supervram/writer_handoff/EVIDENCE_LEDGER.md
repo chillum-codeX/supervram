@@ -160,8 +160,73 @@ Artifacts: `results/tiered/layers.summary.json` (popularity ranking, byte accoun
 `summary-tiered-vs-q8.json`), `results/tiered/cold/` (3 cold-run reps) -- popularity split.
 `results/tiered/arbitrary/` -- arbitrary-split control (tensor-type-file, quality/, cold/).
 
+## ASS confidence-gated speculative prefetch: real C++ port (2026-09-25)
+
+Source: `docs/ASS_CPP_PORT_PROGRESS.md`, `third_party/llama.cpp/ggml/src/ggml-backend-expert-scheduler.h`,
+`ggml/src/ggml-backend.cpp` (`ggml_backend_sched_expert_cache_spec_*`), `results/ass/cold/`.
+Measured on the RTX 3090 host, `evidence_class: measured_rtx3090` throughout. This closes the
+gap flagged in `docs/PRIOR_ART_AND_NEXT_STEPS.md` section 5: the `AdaptiveSpeculativeScheduler`
+existed only as a Python simulation before this; it is now a real, working, measured C++ feature
+in the classic/direct-io expert cache tier, gated behind `--moe-expert-scheduler {off,ass}`
+(default off, verified bit-exact no-op).
+
+**Correctness (bit-exact, with prefetch genuinely active, not the trivial off-vs-off case):**
+256-token greedy decode, 4 GiB cache (deliberately small, to maximize eviction-path exercise),
+`off` vs `ass` diffed via `scripts/compare_verify.py`: 23,574 speculative reads issued / 23,571
+committed during the `ass` run, and **tokens and logits hashes identical across all 256 steps**.
+Confirms the additive-only design (prefetch only ever warms extra cache slots; it never changes
+which expert gets computed for a step the model actually needs) held up under real, heavy
+exercise. `test-expert-cache`'s full suite (3 pre-existing cache-bookkeeping tests + 4 new tests
+verifying the ported confidence-gate math is bit-exact against the real Python
+`ConfidencePredictor`/`plan_window` reference) also passes.
+
+**Throughput, real target regime — a genuine regression, reported honestly.** Same protocol as
+every other cold-SSD row in this ledger: 16 GiB cache, 4 GiB RAM cap, evicted page cache, direct
+I/O, 1,536-token decode, `Qwen3-30B-A3B-Q8_0.gguf`, 3 reps each:
+
+| | decode t/s (mean of 3) | stdev | hit rate (required path) | SSD bytes read | spec issued / committed / wasted |
+|---|---|---|---|---|---|
+| `--moe-expert-scheduler off` | 30.68 | 0.30 | 97.4% | 72.74 GB | 0 / 0 / 0 |
+| `--moe-expert-scheduler ass` | 26.84 | 0.24 | 97.4% | 92.35 GB | 11,970 / 11,802 / 168 |
+
+**~12.5% slower, ~27% more SSD traffic, and no improvement in the required path's own hit
+rate** — if anything very slightly worse (required-path hits dropped by ~597, misses rose by the
+same amount, out of ~1.79M accesses: `ass`'s eviction-based admission policy occasionally evicted
+an expert that turned out to be needed again shortly after, a real and measured cost of allowing
+speculative fills to evict, not just fill empty slots). The speculative mechanism itself works as
+designed (98.6% of issued reads committed successfully, confirming the background worker +
+re-verified commit logic is sound) — the extra ~19.6 GB of SSD reads is almost entirely
+*genuinely wasted* bandwidth: candidates that were fetched but not turned into a required-path
+hit before being evicted again or superseded.
+
+**Root cause, diagnosed from the data, not guessed:** the ported confidence-gate's budget model
+(faithfully reproducing `supervram/scheduler.py`'s Python design) measures its spending budget in
+*compute time* (`compute_ms_per_layer`), implicitly assuming an overlap regime where I/O can be
+hidden behind spare GPU compute (`docs/PLAN_ADAPTIVE.md` section 2.3's "overlap model"). But
+SuperVRAM's actual target regime — the one every benchmark in this ledger measures — is
+**SSD-bandwidth-bound**: 72-81% of decode time is literally SSD wait (see the evidence table at
+the top of this file). In that regime there is no meaningful compute-time slack to hide I/O
+behind; the scarce resource is SSD bandwidth itself, and every speculative byte directly competes
+with the required path's own bytes on the same physical drive, regardless of which thread or
+queue issues the read. A budget denominated in compute-time headroom structurally cannot see this
+contention, so the gate keeps firing (in fact fires often: `default_confidence=0.5` clears the
+`gate_threshold=0.3` floor by default for any never-observed candidate, and Qwen3-30B-A3B's
+routing is high-entropy enough — see the tiered-precision entropy numbers above — that many
+candidates never build up enough track record to be confidently refused) even though, in this
+regime, firing is essentially always a net loss.
+
+**Implication for future work, not attempted here:** the fix this diagnosis points to is
+denominating the gate's budget in *spare SSD bandwidth* (bytes/sec beyond what the required path
+is already consuming), not compute-time — a materially different design, not a parameter tweak,
+and out of scope for this port per the approved plan's "smallest viable port first" principle.
+Whether that redesign would actually help is an open, testable question, not assumed here.
+
+Artifacts: `results/ass/cold/` (3 reps each, `off` and `ass`), `docs/ASS_CPP_PORT_PROGRESS.md`
+(full design writeup, the bugs found while porting and while wiring into the real cache, and the
+Phase 4 correctness methodology).
+
 ## Still pending
 
-- Prefetch in the actual C++/llama.cpp integration (a validated Python-only confidence-gated design exists, `supervram/scheduler.py`, `PLAN_ADAPTIVE.md`, not yet ported) and double-buffered staging (a single pinned staging buffer exists), GDS device DMA, llama-server `/metrics` cache stats.
+- Confidence-gated speculative prefetch **is now ported and measured** (see the "ASS confidence-gated speculative prefetch" section above) -- real, bit-exact, but a measured ~12.5% throughput regression in the SSD-bandwidth-bound target regime, root-caused to the gate's compute-time budget model not accounting for SSD bandwidth contention. Not a net win as shipped; the bandwidth-budget redesign that diagnosis points to is unbuilt. Double-buffered staging (a single pinned staging buffer exists), GDS device DMA, and llama-server `/metrics` cache stats remain unbuilt.
 - Prompt-batch cache (v1 errors when `n_used > n_slots`).
 - Full 720-run ablation matrix (prefetch/predictor axes, >= 5 reps, pp512), energy, Nsight overlap traces. The simulation-mode ablation harness (`scripts/run_ablations.py`) now has scheduler x gate x lookahead axes for ASS, but a full run has not been executed on this host, only a 15-run smoke test.

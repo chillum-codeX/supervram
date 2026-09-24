@@ -1,0 +1,802 @@
+diff --git a/ggml/include/ggml-backend.h b/ggml/include/ggml-backend.h
+index 471ecfe..99f6da9 100644
+--- a/ggml/include/ggml-backend.h
++++ b/ggml/include/ggml-backend.h
+@@ -368,6 +368,13 @@ extern "C" {
+         GGML_SCHED_EXPERT_CACHE_LFU = 1,
+     };
+ 
++    // ASS: confidence-gated speculative prefetch (classic/direct-io tier only). OFF is a true
++    // no-op -- identical behavior to a build that never reads this field at all.
++    enum ggml_backend_sched_expert_scheduler {
++        GGML_SCHED_EXPERT_SCHEDULER_OFF = 0,
++        GGML_SCHED_EXPERT_SCHEDULER_ASS = 1,
++    };
++
+     struct ggml_backend_sched_expert_cache_params {
+         size_t capacity_bytes;                              // device bytes for expert slots, shared by all cached tensors
+         enum ggml_backend_sched_expert_cache_policy policy; // eviction policy
+@@ -377,6 +384,7 @@ extern "C" {
+         size_t staging_bytes;                               // pinned staging buffer size (0 -> SVRAM_STAGING_MIB or 128 MiB)
+         const char * trace_path;                            // record the experts each layer selects per token (NULL -> SVRAM_TRACE)
+         int    zero_copy;                                   // 1 = experts stay in pinned host RAM and the GPU kernels read them in place through a per-expert pointer table (also SVRAM_ZEROCOPY=1)
++        enum ggml_backend_sched_expert_scheduler scheduler; // OFF (default) -> no behavior change; also SVRAM_SCHEDULER=ass
+     };
+ 
+     struct ggml_backend_sched_expert_cache_stats {
+@@ -394,6 +402,10 @@ extern "C" {
+         double   host_ms;          // host time spent in the load path (ids download, policy, copy issue)
+         uint64_t bytes_ssd;        // bytes read from the file with O_DIRECT (direct-I/O mode), incl. alignment padding
+         double   io_ms;            // wall time spent waiting for those reads
++        // ASS (GGML_SCHED_EXPERT_SCHEDULER_ASS only): confidence-gated speculative prefetch, classic/direct-io tier
++        uint64_t spec_issued;      // speculative reads submitted to the background worker
++        uint64_t spec_committed;   // speculative reads that landed in cache before being needed (a future hit this bought)
++        uint64_t spec_wasted;      // speculative reads discarded at commit time (slot/expert claimed by a real miss first)
+     };
+ 
+     // Tell the expert cache where a host expert weight lives on disk. With SVRAM_DIRECT_IO=1 (Linux) cache misses are
+diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
+index f22c904..b6be419 100644
+--- a/ggml/src/ggml-backend.cpp
++++ b/ggml/src/ggml-backend.cpp
+@@ -12,6 +12,7 @@
+ #include "ggml-backend-impl.h"
+ #include "ggml-alloc.h"
+ #include "ggml-impl.h"
++#include "ggml-backend-expert-scheduler.h"
+ 
+ #include <assert.h>
+ #include <limits.h>
+@@ -912,6 +913,7 @@ struct ggml_backend_sched_expert_tensor {
+     std::vector<uint64_t> last_use;             // [n_slots]   tick of last use
+     std::vector<uint32_t> use_count;            // [n_slots]
+     uint64_t              tick = 0;
++    std::vector<float>    spec_score;           // ASS: decayed per-expert recency/frequency, [n_expert], independent of slot residency (classic/direct-io tier; layer/kind below are reused, previously zero-copy-only)
+ 
+     // per-graph tensors, live in sched->ctx and are rebuilt by ggml_backend_sched_split_graph
+     struct ggml_tensor * slots_view = nullptr;  // {ne0, ne1, n_slots} on the device, pre-allocated in `buffer`
+@@ -979,6 +981,7 @@ struct ggml_backend_sched_expert_cache {
+     FILE *   trace          = nullptr;          // SVRAM_TRACE=<file>: one line per (token, layer): "<layer> <distinct expert ids>"
+     bool     direct_io      = false;
+     int      io_threads     = 8;
++    ggml_backend_sched_expert_scheduler scheduler = GGML_SCHED_EXPERT_SCHEDULER_OFF; // ASS: classic/direct-io tier only, see SVRAM_SCHEDULER
+     size_t   staging_bytes  = 128u << 20;
+     bool     staging_busy   = false;            // async copies from the staging buffer may still be in flight
+     uint8_t * staging       = nullptr;          // 4 KiB aligned view into staging_buf (or into staging_heap)
+@@ -989,6 +992,39 @@ struct ggml_backend_sched_expert_cache {
+     ggml_expert_io_pool * pool = nullptr;
+ #endif
+ 
++    // ASS: confidence-gated speculative prefetch (classic/direct-io tier). The background
++    // spec_worker thread only ever reads bytes into a job's own staging buffer via pread() --
++    // it never touches cache bookkeeping (slot_of_expert/expert_of_slot/last_use/etc.), which
++    // stays single-threaded on the main compute thread inside
++    // ggml_backend_sched_expert_cache_spec_commit(), exactly like the zero-copy tier's
++    // promote() two-phase "commit previous, then issue new" pattern -- this avoids any data
++    // race on the arrays plan() also reads/writes, at the cost of a possibly-wasted read if a
++    // real miss claims the same slot/expert before the speculative copy commits (tracked in
++    // spec_wasted, not a correctness bug).
++    struct ggml_spec_job {
++        ggml_backend_sched_expert_tensor * et = nullptr;
++        int64_t   expert = -1;
++        int       victim = -1;
++        int64_t   evicted_expert = -1;  // the slot's occupant at submit time (-1 = was empty); re-verified unchanged at commit
++        uint64_t  evicted_last_use = 0; // et.last_use[victim] at submit time; if it advanced by commit time, the occupant was
++                                         // genuinely touched again in between (a real hit) even though it's still the same
++                                         // expert -- must not evict something just legitimately used
++        uint8_t * staging = nullptr;   // owned by the job; malloc'd O_DIRECT-aligned buffer of staging_len bytes
++        uint64_t  offset_aligned = 0;  // 4 KiB aligned file offset the read starts at
++        size_t    staging_len = 0;     // 4 KiB aligned read length (>= head + et->expert_size)
++        size_t    head = 0;            // byte offset within `staging` where the expert's actual data starts
++        size_t    need = 0;            // head + et->expert_size -- bytes that must be present (read_full's short-read check)
++        bool      ok = false;          // read succeeded
++    };
++    svram::SpeculativeGate * spec_gate = nullptr;
++    std::thread              spec_worker;
++    std::mutex                spec_mtx;
++    std::condition_variable   spec_cv;
++    std::vector<ggml_spec_job *> spec_queue;  // jobs waiting for the worker (protected by spec_mtx)
++    std::vector<ggml_spec_job *> spec_done;   // jobs completed, awaiting main-thread commit (protected by spec_mtx)
++    bool     spec_stop = false;
++    double   spec_drive_bytes_per_sec = 2.4e9; // SVRAM_SPEC_DRIVE_GBPS overrides; used only for the gate's t_read budget math
++
+     ~ggml_backend_sched_expert_cache() {
+         if (worker.joinable()) {
+             {
+@@ -998,6 +1034,23 @@ struct ggml_backend_sched_expert_cache {
+             wcv.notify_all();
+             worker.join();
+         }
++        if (spec_worker.joinable()) {
++            {
++                std::lock_guard<std::mutex> lock(spec_mtx);
++                spec_stop = true;
++            }
++            spec_cv.notify_all();
++            spec_worker.join();
++        }
++        for (ggml_spec_job * job : spec_queue) {
++            free(job->staging);
++            delete job;
++        }
++        for (ggml_spec_job * job : spec_done) {
++            free(job->staging);
++            delete job;
++        }
++        delete spec_gate;
+         if (copy_backend) {
+             ggml_backend_free(copy_backend);
+         }
+@@ -1241,6 +1294,12 @@ static void ggml_backend_sched_expert_cache_desc_init(ggml_backend_sched_t sched
+         if (ggml_backend_tensor_alloc(et.buffer, et.slots_persist, ggml_backend_buffer_get_base(et.buffer)) != GGML_STATUS_SUCCESS) {
+             GGML_ABORT("%s: failed to bind the slot descriptor for %s\n", __func__, et.weight->name);
+         }
++        // et.layer/et.kind were previously populated only by the zero-copy-only ctl_init() below;
++        // ASS (classic/direct-io tier) needs them too, so parse here where both modes run.
++        et.layer = -1;
++        sscanf(et.weight->name, "blk.%d.", &et.layer);
++        et.kind = strstr(et.weight->name, "gate_exps") ? 0 : strstr(et.weight->name, "up_exps") ? 1 : strstr(et.weight->name, "down_exps") ? 2 : -1;
++        et.spec_score.assign((size_t) et.n_expert, 0.0f);
+     }
+ }
+ 
+@@ -1826,6 +1885,235 @@ static bool ggml_backend_sched_expert_cache_read_direct(
+ #endif
+ }
+ 
++// ASS: confidence-gated speculative prefetch, classic/direct-io tier only. See
++// docs/ASS_CPP_PORT_PROGRESS.md for the design and svram::SpeculativeGate (ggml-backend-expert-scheduler.h)
++// for the ported confidence-gate math. Everything below only runs when cache->scheduler ==
++// GGML_SCHED_EXPERT_SCHEDULER_ASS and cache->direct_io; it is inert (zero cost, zero behavior
++// change) otherwise.
++
++// background worker: pulls a job off spec_queue, reads its bytes with a plain blocking pread()
++// (reusing ggml_expert_io_pool::read_full so the O_DIRECT read path isn't duplicated), pushes the
++// completed job to spec_done. Never touches cache bookkeeping -- see the struct's own comment.
++static void ggml_backend_sched_expert_cache_spec_worker_loop(struct ggml_backend_sched_expert_cache * cache) {
++#if defined(__linux__)
++    for (;;) {
++        ggml_backend_sched_expert_cache::ggml_spec_job * job = nullptr;
++        {
++            std::unique_lock<std::mutex> lock(cache->spec_mtx);
++            cache->spec_cv.wait(lock, [cache] { return cache->spec_stop || !cache->spec_queue.empty(); });
++            if (cache->spec_stop) {
++                return;
++            }
++            job = cache->spec_queue.back();
++            cache->spec_queue.pop_back();
++        }
++        job->ok = ggml_expert_io_pool::read_full({ job->et->src_fd, job->staging, job->offset_aligned, job->staging_len, job->need });
++        {
++            std::lock_guard<std::mutex> lock(cache->spec_mtx);
++            cache->spec_done.push_back(job);
++        }
++    }
++#else
++    GGML_UNUSED(cache);
++#endif
++}
++
++static void ggml_backend_sched_expert_cache_spec_ensure(struct ggml_backend_sched_expert_cache * cache) {
++    if (cache->spec_gate == nullptr) {
++        svram::SpeculativeGateConfig cfg; // defaults match the validated Python simulation's own defaults
++        cache->spec_gate = new svram::SpeculativeGate(cfg);
++        if (const char * env = getenv("SVRAM_SPEC_DRIVE_GBPS")) {
++            const double gbps = atof(env);
++            if (gbps > 0) {
++                cache->spec_drive_bytes_per_sec = gbps * 1e9;
++            }
++        }
++    }
++#if defined(__linux__)
++    if (!cache->spec_worker.joinable()) {
++        cache->spec_worker = std::thread([cache] { ggml_backend_sched_expert_cache_spec_worker_loop(cache); });
++    }
++#endif
++}
++
++// Main-thread only (called from plan(), before that tensor's real hit/miss resolution runs for
++// this step): commit any speculative reads the background worker finished since the last call.
++// Re-verifies both the expert and the victim slot are still free at commit time -- if a real
++// miss claimed either in the meantime, the read is discarded (spec_wasted), never overwriting
++// state a real access already established. A committed fill registers as a genuine hit if this
++// step's required-miss resolution (which runs right after this, still inside plan()) turns out
++// to need that exact expert.
++static void ggml_backend_sched_expert_cache_spec_commit(struct ggml_backend_sched_expert_cache * cache, ggml_backend_t split_backend) {
++#if defined(__linux__)
++    std::vector<ggml_backend_sched_expert_cache::ggml_spec_job *> done;
++    {
++        std::lock_guard<std::mutex> lock(cache->spec_mtx);
++        if (cache->spec_done.empty()) {
++            return;
++        }
++        done.swap(cache->spec_done);
++    }
++    for (ggml_backend_sched_expert_cache::ggml_spec_job * job : done) {
++        ggml_backend_sched_expert_tensor & et = *job->et;
++        // Re-verify BOTH sides are still exactly as they were when this job was submitted:
++        // the candidate itself must still be non-resident (a real miss may have fetched it since),
++        // and the victim slot must still hold whatever it held at submit time (job->evicted_expert,
++        // or -1 if it was empty) -- if a real access claimed either in the meantime, discard rather
++        // than clobber state a real access already established.
++        const bool still_valid = job->ok && et.slot_of_expert[job->expert] < 0
++            && et.expert_of_slot[job->victim] == job->evicted_expert
++            && et.last_use[job->victim] == job->evicted_last_use;
++        if (still_valid) {
++            ggml_backend_tensor_set_async(split_backend, et.slots_view ? et.slots_view : et.slots_persist,
++                job->staging + job->head, (size_t) job->victim * et.expert_size, et.expert_size);
++            if (job->evicted_expert >= 0) {
++                et.slot_of_expert[job->evicted_expert] = -1;
++            }
++            et.expert_of_slot[job->victim] = (int32_t) job->expert;
++            et.slot_of_expert[job->expert] = job->victim;
++            et.last_use[job->victim]       = et.tick; // pre-increment tick: stale relative to this step, evictable if truly needed
++            et.use_count[job->victim]      = 0;        // not yet actually used -- a speculative fill earns no LFU credit until a real hit touches it
++            cache->stats.spec_committed++;
++        } else {
++            cache->stats.spec_wasted++;
++        }
++        free(job->staging);
++        delete job;
++    }
++#else
++    GGML_UNUSED(cache); GGML_UNUSED(split_backend);
++#endif
++}
++
++// Main-thread only (called from plan(), after this step's real hit/miss resolution): decide
++// what to speculatively prefetch for this tensor's NEXT visit (one token from now) and submit
++// those reads to the background worker. See the module-top comment and
++// docs/ASS_CPP_PORT_PROGRESS.md for why this predicts same-layer/next-token reuse rather than a
++// genuine multi-layer lookahead (not physically available for batch=1 autoregressive decode).
++static void ggml_backend_sched_expert_cache_spec_generate(struct ggml_backend_sched_expert_cache * cache, ggml_backend_sched_expert_tensor & et) {
++#if defined(__linux__)
++    if (et.layer < 0 || et.kind < 0 || et.src_fd < 0) {
++        return; // needs both a parsed (layer,kind) identity and a direct-io source
++    }
++    ggml_backend_sched_expert_cache_spec_ensure(cache);
++    const int32_t gate_layer = et.layer * 3 + et.kind; // keeps gate/up/down confidence independent, see struct comment
++
++    // 1. decay the per-expert recency score, bump whatever this step actually used (cache->used
++    //    was just populated by the hit/miss resolution this function runs after).
++    const float decay = 0.9f;
++    std::vector<int32_t> chosen;
++    for (int64_t e = 0; e < et.n_expert; e++) {
++        if (cache->used[e]) {
++            et.spec_score[e] = et.spec_score[e] * decay + 1.0f;
++            chosen.push_back((int32_t) e);
++        } else {
++            et.spec_score[e] *= decay;
++        }
++    }
++
++    // 2. resolve whatever was predicted last visit against this visit's real outcome.
++    cache->spec_gate->observe(gate_layer, chosen);
++
++    // 3. candidates for the NEXT visit: highest spec_score among not-currently-resident experts.
++    const int top_k = cache->spec_gate->config().top_k;
++    std::vector<int32_t> ranked;
++    ranked.reserve((size_t) et.n_expert);
++    for (int64_t e = 0; e < et.n_expert; e++) {
++        if (et.slot_of_expert[e] < 0 && et.spec_score[e] > 0.0f) {
++            ranked.push_back((int32_t) e);
++        }
++    }
++    std::stable_sort(ranked.begin(), ranked.end(), [&et](int32_t a, int32_t b) { return et.spec_score[a] > et.spec_score[b]; });
++    if ((int) ranked.size() > top_k) {
++        ranked.resize((size_t) top_k);
++    }
++    cache->spec_gate->set_pending(gate_layer, ranked);
++    if (ranked.empty()) {
++        return;
++    }
++
++    // 4. gate: which of those candidates actually earn a speculative read against the shared budget.
++    std::vector<svram::SpeculativeCandidate> pool;
++    pool.reserve(ranked.size());
++    const double t_read = cache->spec_drive_bytes_per_sec > 0 ? (double) et.expert_size / cache->spec_drive_bytes_per_sec : 0.0;
++    for (int32_t e : ranked) {
++        pool.push_back({ gate_layer, e, t_read });
++    }
++    const auto decisions = cache->spec_gate->plan_window(pool, /*window_steps=*/top_k);
++
++    // 5. issue: prefer a genuinely empty slot; once the cache is warm (the common case -- an
++    //    empty-slots-only policy would leave this permanently inert once the cache fills, which
++    //    is exactly what an earlier version of this function did and was verified empirically to
++    //    never fire past the first couple of steps) fall back to evicting a slot NOT touched this
++    //    tick, using the exact same LRU/LFU comparison the required-miss path already trusts
++    //    (ggml_backend_sched_expert_cache_plan's own eviction loop above). This can still turn
++    //    out to be a mistake if the evicted expert is needed again soon -- that shows up as an
++    //    ordinary extra miss in the required path's own stats, not a correctness bug (re-verified
++    //    at commit time regardless, see spec_commit). `claimed` prevents two decisions in this
++    //    same call from picking the same victim slot.
++    const size_t align = 4096;
++    std::vector<bool> claimed(et.n_slots, false);
++    for (const auto & d : decisions) {
++        if (!d.fire) {
++            continue;
++        }
++        int victim = -1;
++        for (int s = 0; s < et.n_slots; s++) {
++            if (!claimed[s] && et.expert_of_slot[s] < 0) {
++                victim = s;
++                break;
++            }
++        }
++        if (victim < 0) {
++            for (int s = 0; s < et.n_slots; s++) {
++                if (claimed[s] || et.last_use[s] == et.tick) {
++                    continue; // already spoken for this call, or genuinely needed this step
++                }
++                if (victim < 0) {
++                    victim = s;
++                    continue;
++                }
++                const bool better = cache->params.policy == GGML_SCHED_EXPERT_CACHE_LFU
++                    ? (et.use_count[s] < et.use_count[victim] || (et.use_count[s] == et.use_count[victim] && et.last_use[s] < et.last_use[victim]))
++                    : (et.last_use[s] < et.last_use[victim]);
++                if (better) {
++                    victim = s;
++                }
++            }
++        }
++        if (victim < 0) {
++            break; // every slot is needed by this exact step; nothing safe to use
++        }
++        claimed[victim] = true;
++        const uint64_t off = et.src_offset + (uint64_t) d.key.expert * et.expert_size;
++        const uint64_t a   = off & ~(uint64_t) (align - 1);
++        const uint64_t end = (off + et.expert_size + align - 1) & ~(uint64_t) (align - 1);
++        auto * job = new ggml_backend_sched_expert_cache::ggml_spec_job();
++        job->et             = &et;
++        job->expert         = d.key.expert;
++        job->victim         = victim;
++        job->evicted_expert = et.expert_of_slot[victim];
++        job->evicted_last_use = et.last_use[victim];
++        job->offset_aligned = a;
++        job->staging_len    = (size_t) (end - a);
++        job->head            = (size_t) (off - a);
++        job->need            = job->head + et.expert_size;
++        if (posix_memalign((void **) &job->staging, align, job->staging_len) != 0) {
++            delete job;
++            continue;
++        }
++        {
++            std::lock_guard<std::mutex> lock(cache->spec_mtx);
++            cache->spec_queue.push_back(job);
++        }
++        cache->spec_cv.notify_one();
++        cache->stats.spec_issued++;
++    }
++#else
++    GGML_UNUSED(cache); GGML_UNUSED(et);
++#endif
++}
++
+ // classic slot cache (misses read from RAM or the SSD): fill the slots from a usage profile before the first prompt, reading the
+ // experts from the model file with the direct-I/O path (or from the host mapping), so prompt batches can reuse them
+ static double ggml_backend_sched_expert_cache_warm_classic(ggml_backend_sched_t sched, const char * path) {
+@@ -1937,6 +2225,14 @@ static enum ggml_status ggml_backend_sched_expert_cache_plan(
+         *prev_ids_tensor = ids;
+     }
+ 
++    // ASS: commit any speculative fills the background worker finished since this tensor was
++    // last visited, BEFORE this step's own hit/miss resolution runs -- so a speculative fill
++    // that happens to match what this step needs correctly registers as a hit below, not a
++    // redundant miss. See ggml_backend_sched_expert_cache_spec_commit's own comment.
++    if (cache->scheduler == GGML_SCHED_EXPERT_SCHEDULER_ASS && cache->direct_io) {
++        ggml_backend_sched_expert_cache_spec_commit(cache, split_backend);
++    }
++
+     const int64_t n_expert = et.n_expert;
+     et.tick++;
+ 
+@@ -2062,6 +2358,12 @@ static enum ggml_status ggml_backend_sched_expert_cache_plan(
+     cache->stats.max_used_per_step = std::max<uint64_t>(cache->stats.max_used_per_step, (uint64_t) n_used);
+     cache->stats.host_ms += (ggml_time_us() - t_start) / 1000.0;
+ 
++    // ASS: after this step's real needs are satisfied, decide what to speculatively prefetch
++    // for this tensor's next visit. See ggml_backend_sched_expert_cache_spec_generate.
++    if (cache->scheduler == GGML_SCHED_EXPERT_SCHEDULER_ASS && cache->direct_io) {
++        ggml_backend_sched_expert_cache_spec_generate(cache, et);
++    }
++
+     return GGML_STATUS_SUCCESS;
+ }
+ 
+@@ -3612,6 +3914,12 @@ void ggml_backend_sched_set_expert_cache(ggml_backend_sched_t sched, const struc
+     }
+     const char * env_zc = getenv("SVRAM_ZEROCOPY");
+     sched->expert_cache->zero_copy = params->zero_copy != 0 || (env_zc != nullptr && atoi(env_zc) != 0);
++    if (params->scheduler != GGML_SCHED_EXPERT_SCHEDULER_OFF) {
++        sched->expert_cache->scheduler = params->scheduler;
++    } else if (const char * env_sched = getenv("SVRAM_SCHEDULER")) {
++        sched->expert_cache->scheduler = (atoi(env_sched) != 0 || strcmp(env_sched, "ass") == 0)
++            ? GGML_SCHED_EXPERT_SCHEDULER_ASS : GGML_SCHED_EXPERT_SCHEDULER_OFF;
++    }
+     // explicit parameters win, the SVRAM_* environment variables are the fallback
+     const char * trace_path = params->trace_path != nullptr && params->trace_path[0] != '\0' ? params->trace_path : getenv("SVRAM_TRACE");
+     if (trace_path != nullptr && trace_path[0] != '\0') {
+diff --git a/include/llama.h b/include/llama.h
+index cec2fef..51d1461 100644
+--- a/include/llama.h
++++ b/include/llama.h
+@@ -232,6 +232,13 @@ extern "C" {
+         LLAMA_MOE_EXPERT_CACHE_POLICY_LFU = 1,
+     };
+ 
++    // ASS: confidence-gated speculative prefetch for the classic/direct-io expert cache tier.
++    // OFF is a true no-op (identical behavior/output to a build without this field at all).
++    enum llama_moe_expert_scheduler {
++        LLAMA_MOE_EXPERT_SCHEDULER_OFF = 0,
++        LLAMA_MOE_EXPERT_SCHEDULER_ASS = 1,
++    };
++
+     enum llama_context_type {
+         LLAMA_CONTEXT_TYPE_DEFAULT = 0,
+         LLAMA_CONTEXT_TYPE_MTP     = 1,
+@@ -418,6 +425,7 @@ extern "C" {
+         int32_t      moe_expert_cache_bias_mul; // 1 = multiplicative bias: resident experts score x(1+bias) instead of +bias (relative margin)
+         float        moe_expert_cache_bias;   // cache-aware routing: added to the router score of experts resident in VRAM (0 = off; changes outputs)
+         int32_t      moe_expert_zerocopy;     // 1 = experts stay in pinned host RAM (see --override-tensor ...=CUDA_Host) and GPU kernels read them in place
++        enum llama_moe_expert_scheduler moe_expert_scheduler; // OFF (default) = no behavior change; ASS = confidence-gated speculative prefetch (classic/direct-io tier only)
+ 
+         // Keep the booleans together and at the end of the struct to avoid misalignment during copy-by-value.
+         bool embeddings;  // if true, extract embeddings (together with logits)
+diff --git a/src/llama-context.cpp b/src/llama-context.cpp
+index 5b525f8..fc101e6 100644
+--- a/src/llama-context.cpp
++++ b/src/llama-context.cpp
+@@ -281,6 +281,7 @@ llama_context::llama_context(
+     cparams.moe_expert_zerocopy     = params.moe_expert_zerocopy;
+     cparams.moe_expert_cache_bias   = params.moe_expert_cache_bias;
+     cparams.moe_expert_cache_bias_mul = params.moe_expert_cache_bias_mul;
++    cparams.moe_expert_scheduler    = params.moe_expert_scheduler;
+     if (model.moe_expert_storage() == LLAMA_MOE_EXPERT_STORAGE_CACHE && cparams.moe_expert_cache_bytes == 0) {
+         cparams.moe_expert_cache_bytes = 8ull * 1024 * 1024 * 1024;
+         LLAMA_LOG_WARN("%s: moe_expert_storage = cache but no cache size given, using %zu MiB\n", __func__, cparams.moe_expert_cache_bytes / 1024 / 1024);
+@@ -630,6 +631,7 @@ void llama_context::sched_set_expert_cache() {
+         /*.staging_bytes  =*/ (size_t) std::max<int32_t>(0, cparams.moe_expert_staging_mib) << 20,
+         /*.trace_path     =*/ cparams.moe_expert_trace,
+         /*.zero_copy      =*/ cparams.moe_expert_zerocopy,
++        /*.scheduler      =*/ cparams.moe_expert_scheduler == LLAMA_MOE_EXPERT_SCHEDULER_ASS ? GGML_SCHED_EXPERT_SCHEDULER_ASS : GGML_SCHED_EXPERT_SCHEDULER_OFF,
+     };
+     ggml_backend_sched_set_expert_cache(sched.get(), &xc);
+ }
+@@ -3739,6 +3741,7 @@ llama_context_params llama_context_default_params() {
+         /*.moe_expert_cache_bias_mul   =*/ 0,
+         /*.moe_expert_cache_bias       =*/ 0.0f,
+         /*.moe_expert_zerocopy         =*/ 0,
++        /*.moe_expert_scheduler        =*/ LLAMA_MOE_EXPERT_SCHEDULER_OFF,
+         /*.embeddings                  =*/ false,
+         /*.offload_kqv                 =*/ true,
+         /*.no_perf                     =*/ true,
+diff --git a/src/llama-cparams.h b/src/llama-cparams.h
+index da809ca..95efc5b 100644
+--- a/src/llama-cparams.h
++++ b/src/llama-cparams.h
+@@ -63,6 +63,7 @@ struct llama_cparams {
+     int32_t      moe_expert_zerocopy;
+     float        moe_expert_cache_bias;
+     int32_t      moe_expert_cache_bias_mul;
++    enum llama_moe_expert_scheduler moe_expert_scheduler;
+ 
+     std::vector<bool> embeddings_layer_inp; // [n_layer()] extract input embeddings for layer
+ 
+diff --git a/tests/test-expert-cache.cpp b/tests/test-expert-cache.cpp
+index 5e17799..dd0155f 100644
+--- a/tests/test-expert-cache.cpp
++++ b/tests/test-expert-cache.cpp
+@@ -20,7 +20,9 @@
+ #include "ggml-backend.h"
+ #include "../ggml/src/ggml-backend-impl.h"
+ #include "../ggml/src/ggml-impl.h"
++#include "../ggml/src/ggml-backend-expert-scheduler.h"
+ 
++#include <cmath>
+ #include <cstdio>
+ #include <cstdlib>
+ #include <cstring>
+@@ -449,11 +451,143 @@ void test_oversized_step_fails_cleanly() {
+     ggml_backend_sched_free(sched);
+ }
+ 
++// ---- ASS: SpeculativeGate (svram::SpeculativeGate, ggml-backend-expert-scheduler.h) ----
++//
++// Phase 2 of the ASS port (see docs/SPEC plan / writer_handoff/EVIDENCE_LEDGER.md "ASS"
++// sections): the confidence-gate logic in isolation, no ggml_backend_sched involved. Reference
++// values below were generated by running the actual Python implementation
++// (supervram/predictors.py::ConfidencePredictor, supervram/scheduler.py::plan_window) on the
++// identical input sequence -- not hand-derived -- specifically because a first hand-derivation
++// attempt here caught a real bug (float vs double precision: two confidence values that are
++// conceptually both "2/3" land on different doubles depending on their EMA update path, and
++// that residual difference is what plan_window's p_use tie-break actually keys off in practice).
++
++// exact bit patterns of the Python reference's final confidence table (see hex() dump), so
++// these tests catch a precision regression (e.g. float used instead of double), not just a
++// "close enough" logic bug.
++void test_gate_confidence_matches_python_reference() {
++    svram::SpeculativeGate gate;
++
++    // mirrors AdaptiveSpeculativeScheduler.record_and_observe's rhythm: observe() against
++    // whatever was pending, THEN set_pending() for the next visit.
++    const struct { std::vector<int32_t> candidates; std::vector<int32_t> chosen; } steps[] = {
++        { {1, 2, 3}, {1, 2} },
++        { {1, 2, 4}, {1, 4} },
++        { {1, 2, 4}, {1, 2, 4} },
++        { {1, 2, 4}, {2} },
++    };
++    for (const auto & step : steps) {
++        gate.observe(/*layer=*/0, step.chosen);
++        gate.set_pending(/*layer=*/0, step.candidates);
++    }
++
++    const double expected[5] = { 0.0, 0.6666666666666666, 0.6666666666666667, 0.0, 0.5 }; // index 1..4
++    for (int32_t e = 1; e <= 4; e++) {
++        const double actual = gate.confidence_of(0, e);
++        if (actual != expected[e]) {
++            fprintf(stderr, "expert=%d: expected=%.17g actual=%.17g (bit-exact mismatch vs Python reference)\n",
++                    e, expected[e], actual);
++            GGML_ABORT("SpeculativeGate confidence diverged from the Python reference");
++        }
++    }
++    // expert 3 was only ever a candidate once (step 1) and missed -> single observation, hit=0,
++    // effective_alpha = min(alpha, 0/1) = 0, so confidence = 0*default + 1*0 = 0.0 exactly.
++    GGML_ASSERT(gate.confidence_of(0, 3) == 0.0);
++    // never-seen expert must return the neutral default, not 0 or some other fallback.
++    GGML_ASSERT(gate.confidence_of(0, 99) == 0.5);
++}
++
++// Reproduces the exact fire/no-fire pattern computed by the real
++// AdaptiveSpeculativeScheduler.plan_window on the same confidence table + a fixed candidate
++// pool, including the floating-point-noise-driven tie-break order documented above (Python:
++// expert=2 sorts before expert=1 among p_use~=0.6667 ties, NOT the "larger t_read first" the
++// plan-window docstring's stated tie-break rule alone would suggest -- confirmed against the
++// real Python run, not assumed).
++void test_gate_plan_window_matches_python_reference() {
++    const struct { std::vector<int32_t> candidates; std::vector<int32_t> chosen; } steps[] = {
++        { {1, 2, 3}, {1, 2} },
++        { {1, 2, 4}, {1, 4} },
++        { {1, 2, 4}, {1, 2, 4} },
++        { {1, 2, 4}, {2} },
++    };
++    // sizes chosen to deliberately vary t_read across experts (bytes / (2.4 GB/s)):
++    // expert1: 300MB->0.125s, expert2: 150MB->0.0625s, expert3: 900MB->0.375s, expert4: 150MB->0.0625s
++    const std::vector<svram::SpeculativeCandidate> pool = {
++        {0, 1, 0.125}, {0, 2, 0.0625}, {0, 3, 0.375}, {0, 4, 0.0625},
++        {0, 1, 0.125}, {0, 2, 0.0625}, {0, 3, 0.375}, {0, 4, 0.0625},
++    };
++    svram::SpeculativeGateConfig cfg;
++    cfg.compute_ms_per_layer = 0.19;
++    cfg.gate_threshold = 0.3;
++    cfg.top_k = 4;
++    svram::SpeculativeGate gate2(cfg);
++    // re-run the same observe/set_pending trace on gate2 (fresh instance with the target config)
++    for (const auto & step : steps) {
++        gate2.observe(0, step.chosen);
++        gate2.set_pending(0, step.candidates);
++    }
++
++    const auto decisions = gate2.plan_window(pool, /*window_steps=*/2);
++    // budget_seconds = 0.19/1000 * 2 = 0.00038; top_k=4 keeps only the highest-(p_use,t_read)
++    // 4 of the 8 pooled entries -- per the Python reference run, that is expert=2 (x2) then
++    // expert=1 (x2), all of which fail the budget (0.0625s and 0.125s both exceed 0.00038s).
++    GGML_ASSERT(decisions.size() == 4);
++    const int32_t expected_order[4] = { 2, 2, 1, 1 };
++    for (size_t i = 0; i < decisions.size(); i++) {
++        if (decisions[i].key.expert != expected_order[i]) {
++            fprintf(stderr, "position %zu: expected expert=%d actual expert=%d\n", i, expected_order[i], decisions[i].key.expert);
++            GGML_ABORT("SpeculativeGate::plan_window pool order diverged from the Python reference");
++        }
++        GGML_ASSERT(decisions[i].fire == false); // every candidate's t_read exceeds the tiny 2-step budget
++    }
++}
++
++// A candidate whose confidence clears the gate_threshold AND whose read fits the remaining
++// budget must fire; once the budget is spent, a later (lower-priority) candidate that would
++// still individually fit is correctly refused if an earlier, higher-confidence candidate
++// already consumed the budget it needed -- this is the actual point of "budget-pooled" (a
++// per-candidate-independent gate would fire both).
++void test_gate_budget_is_shared_not_per_candidate() {
++    svram::SpeculativeGateConfig cfg;
++    cfg.compute_ms_per_layer = 100.0; // generous budget in ms so the numbers are easy to reason about
++    cfg.gate_threshold = 0.3;
++    cfg.top_k = 8;
++    svram::SpeculativeGate gate(cfg);
++    gate.observe(0, {});               // no-op, nothing pending yet
++    gate.set_pending(0, {1, 2});
++    gate.observe(0, {1, 2});           // both hit -> confidence(1)=confidence(2)=1.0 after 1 observation
++
++    // budget_seconds = 100/1000 * 1 = 0.1s. Two candidates at 0.06s each: the first fits, the
++    // second does not (0.06 + 0.06 = 0.12 > 0.1), even though each individually is well under
++    // the total budget and both have maximal confidence.
++    const std::vector<svram::SpeculativeCandidate> pool = { {0, 1, 0.06}, {0, 2, 0.06} };
++    const auto decisions = gate.plan_window(pool, /*window_steps=*/1);
++    GGML_ASSERT(decisions.size() == 2);
++    GGML_ASSERT(decisions[0].fire == true);
++    GGML_ASSERT(decisions[1].fire == false);
++}
++
++// A second observe() for the same layer without an intervening set_pending() must be a no-op
++// (matches Python's dict.pop(..., None) semantics) -- confirms the pending-set consumption
++// behavior, not just the EMA math.
++void test_gate_observe_without_pending_is_noop() {
++    svram::SpeculativeGate gate;
++    gate.set_pending(0, {5});
++    gate.observe(0, {5}); // consumes the pending set: confidence(0,5) becomes 1.0
++    GGML_ASSERT(gate.confidence_of(0, 5) == 1.0);
++    gate.observe(0, {});  // nothing pending anymore -> must not touch confidence(0,5)
++    GGML_ASSERT(gate.confidence_of(0, 5) == 1.0);
++}
++
+ } // namespace
+ 
+ int main() {
+     run("test_cache_correctness_and_stats", test_cache_correctness_and_stats);
+     run("test_cache_disabled_is_noop", test_cache_disabled_is_noop);
+     run("test_oversized_step_fails_cleanly", test_oversized_step_fails_cleanly);
++    run("test_gate_confidence_matches_python_reference", test_gate_confidence_matches_python_reference);
++    run("test_gate_plan_window_matches_python_reference", test_gate_plan_window_matches_python_reference);
++    run("test_gate_budget_is_shared_not_per_candidate", test_gate_budget_is_shared_not_per_candidate);
++    run("test_gate_observe_without_pending_is_noop", test_gate_observe_without_pending_is_noop);
+     return 0;
+ }
+diff --git a/ggml/src/ggml-backend-expert-scheduler.h b/ggml/src/ggml-backend-expert-scheduler.h
+new file mode 100644
+index 0000000..6ad78e0
+--- /dev/null
++++ b/ggml/src/ggml-backend-expert-scheduler.h
+@@ -0,0 +1,153 @@
++// ASS: confidence-gated, budget-pooled speculative expert prefetch -- the "gate" decision logic
++// only, ported from the validated Python simulation (supervram/scheduler.py::AdaptiveSpeculativeScheduler,
++// supervram/predictors.py::ConfidencePredictor). See docs/SPEC pattern in
++// docs/PLAN_ADAPTIVE.md and writer_handoff/EVIDENCE_LEDGER.md's "ASS" sections for the design
++// history; note the code (not docs/PLAN_ADAPTIVE.md sections 2.1/4's pseudocode) is ground truth
++// -- the doc formula was tried and abandoned because it degenerates to ignoring confidence.
++//
++// This header has NO dependency on ggml/ggml-backend types by design (Phase 2 of the port): it
++// is pure, backend-agnostic logic, independently unit-testable against the Python reference
++// before being wired into the real classic/direct-io cache path (Phase 3).
++//
++// Candidate generation (deciding WHICH (layer,expert) pairs are worth asking the gate about, and
++// what their real I/O cost is) is deliberately NOT this class's job -- the caller supplies a pool
++// of candidates with a measured read cost; this class only calibrates confidence from observed
++// history and decides which candidates to fire against a shared time budget.
++#pragma once
++
++#include <algorithm>
++#include <cstdint>
++#include <unordered_map>
++#include <vector>
++
++namespace svram {
++
++struct ExpertKey {
++    int32_t layer;
++    int32_t expert;
++
++    bool operator==(const ExpertKey & o) const { return layer == o.layer && expert == o.expert; }
++};
++
++struct ExpertKeyHash {
++    size_t operator()(const ExpertKey & k) const {
++        return std::hash<int64_t>()((((int64_t) k.layer) << 32) | (uint32_t) k.expert);
++    }
++};
++
++// one candidate the gate is asked to judge: which expert, and how long a real read would take
++struct SpeculativeCandidate {
++    int32_t layer;
++    int32_t expert;
++    double  t_read_seconds;
++};
++
++// the gate's verdict on one candidate
++struct ReadDecision {
++    ExpertKey key;
++    double    p_use;
++    double    t_read_seconds;
++    bool      fire;
++};
++
++struct SpeculativeGateConfig {
++    double compute_ms_per_layer = 0.19; // per-window-step compute time the budget is measured against (real value should be measured, not this default)
++    double gate_threshold       = 0.3;  // hard floor: p_use below this never fires regardless of budget
++    int    top_k                = 4;    // pool-wide cap on how many candidates are even considered, after sorting by (p_use, t_read) desc
++    double alpha                = 0.9;  // EMA smoothing factor once a (layer,expert) has enough observations
++    double default_confidence   = 0.5;  // neutral prior for a never-observed (layer,expert) -- NOT gated off by default
++};
++
++// Ports supervram/predictors.py::ConfidencePredictor (the EMA confidence table) and the
++// pooled-budget greedy-knapsack spend from supervram/scheduler.py::AdaptiveSpeculativeScheduler.plan_window.
++class SpeculativeGate {
++public:
++    explicit SpeculativeGate(SpeculativeGateConfig cfg = {}) : cfg_(cfg) {}
++
++    // Mirrors ConfidencePredictor.observe(access): resolves whatever candidate set was last
++    // `set_pending()` for this layer against the real outcome (`chosen`), updating the EMA
++    // confidence table. Bias-corrected EMA: effective_alpha ramps 0 -> cfg_.alpha as the
++    // observation count grows, exactly matching the Python reference (predictors.py).
++    //
++    // Matches Python's `self._pending.pop(access.layer, None)` exactly: the pending set is
++    // consumed (erased) here, not just read -- a second observe() for the same layer without an
++    // intervening set_pending() is a deliberate no-op, same as the Python reference.
++    //
++    // Precision note: confidence is stored as `double` (not `float`), matching Python's `float`
++    // (CPython doubles), not merely for parity's sake -- verified empirically that two
++    // confidence values which are conceptually equal (e.g. both "2/3") can reach that value via
++    // different EMA update paths and land on bit-different doubles; plan_window's tie-break on
++    // p_use then depends on that residual difference. Losing precision to `float` here would
++    // make that ordering (and therefore fire/no-fire decisions) diverge from the Python reference.
++    void observe(int32_t layer, const std::vector<int32_t> & chosen) {
++        auto it = pending_.find(layer);
++        if (it == pending_.end()) {
++            return; // nothing was predicted for this layer yet, nothing to resolve
++        }
++        std::vector<int32_t> candidates = std::move(it->second);
++        pending_.erase(it);
++        for (int32_t expert : candidates) {
++            const ExpertKey key{ layer, expert };
++            const bool hit = std::find(chosen.begin(), chosen.end(), expert) != chosen.end();
++            int & count = counts_[key];
++            count++;
++            const double effective_alpha = std::min(cfg_.alpha, (double) (count - 1) / (double) count);
++            double & conf = confidence_.try_emplace(key, cfg_.default_confidence).first->second;
++            conf = effective_alpha * conf + (1.0 - effective_alpha) * (hit ? 1.0 : 0.0);
++        }
++    }
++
++    // Mirrors ConfidencePredictor.set_pending(layer, candidates): stores the layer's next
++    // candidate set for the following observe() call to resolve against. Python stores this as
++    // a `set[int]` (deduplicated) -- mirrored here so a caller passing a duplicate expert id
++    // doesn't double-count that expert's EMA update on the next observe().
++    void set_pending(int32_t layer, std::vector<int32_t> candidates) {
++        std::sort(candidates.begin(), candidates.end());
++        candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
++        pending_[layer] = std::move(candidates);
++    }
++
++    // Mirrors ConfidencePredictor.confidence_of(layer, expert): pure O(1) lookup, neutral
++    // default for anything never observed.
++    double confidence_of(int32_t layer, int32_t expert) const {
++        auto it = confidence_.find(ExpertKey{ layer, expert });
++        return it == confidence_.end() ? cfg_.default_confidence : it->second;
++    }
++
++    // Mirrors AdaptiveSpeculativeScheduler.plan_window's pooled greedy-knapsack: pool candidates
++    // across the whole window, sort by (p_use, t_read) descending, truncate to top_k, then
++    // greedily spend a SHARED time budget (compute_ms_per_layer/1000 * window_steps) in that
++    // order, gated by a hard confidence floor independent of budget.
++    std::vector<ReadDecision> plan_window(const std::vector<SpeculativeCandidate> & pool, int window_steps) const {
++        std::vector<ReadDecision> decisions;
++        decisions.reserve(pool.size());
++        for (const auto & c : pool) {
++            decisions.push_back({ ExpertKey{ c.layer, c.expert }, confidence_of(c.layer, c.expert), c.t_read_seconds, false });
++        }
++        std::stable_sort(decisions.begin(), decisions.end(), [](const ReadDecision & a, const ReadDecision & b) {
++            if (a.p_use != b.p_use) return a.p_use > b.p_use;
++            return a.t_read_seconds > b.t_read_seconds;
++        });
++        if ((int) decisions.size() > cfg_.top_k) {
++            decisions.resize((size_t) cfg_.top_k);
++        }
++        double remaining_budget = cfg_.compute_ms_per_layer / 1000.0 * window_steps;
++        for (auto & d : decisions) {
++            d.fire = d.p_use >= cfg_.gate_threshold && d.t_read_seconds <= remaining_budget;
++            if (d.fire) {
++                remaining_budget -= d.t_read_seconds;
++            }
++        }
++        return decisions;
++    }
++
++    const SpeculativeGateConfig & config() const { return cfg_; }
++
++private:
++    SpeculativeGateConfig cfg_;
++    std::unordered_map<ExpertKey, double, ExpertKeyHash> confidence_;
++    std::unordered_map<ExpertKey, int, ExpertKeyHash>    counts_;
++    std::unordered_map<int32_t, std::vector<int32_t>>    pending_;
++};
++
++} // namespace svram

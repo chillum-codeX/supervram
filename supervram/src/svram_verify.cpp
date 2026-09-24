@@ -59,6 +59,7 @@ struct options {
     int io_threads = 0;        // --io-threads N (0 = default)
     int staging_mib = 0;       // --staging-mib N (0 = default)
     std::string trace;         // --trace FILE: record per-token expert selections
+    std::string scheduler = "off"; // --moe-expert-scheduler off|ass: confidence-gated speculative prefetch (classic/direct-io tier)
     int n_predict = 32;
     int n_ctx = 1024;
     int n_batch = 512;
@@ -106,6 +107,7 @@ bool parse(int argc, char ** argv, options & o) {
         else if (a == "--io-threads") { if (!next(v)) return false; o.io_threads = std::atoi(v.c_str()); }
         else if (a == "--staging-mib") { if (!next(v)) return false; o.staging_mib = std::atoi(v.c_str()); }
         else if (a == "--trace") { if (!next(o.trace)) return false; }
+        else if (a == "--moe-expert-scheduler") { if (!next(o.scheduler)) return false; }
         else if (a == "--n-predict") { if (!next(v)) return false; o.n_predict = std::atoi(v.c_str()); }
         else if (a == "--n-ctx") { if (!next(v)) return false; o.n_ctx = std::atoi(v.c_str()); }
         else if (a == "--n-batch") { if (!next(v)) return false; o.n_batch = std::atoi(v.c_str()); }
@@ -219,6 +221,7 @@ int main(int argc, char ** argv) {
         cparams.moe_expert_io_threads = o.io_threads;
         cparams.moe_expert_staging_mib = o.staging_mib;
         cparams.moe_expert_trace = o.trace.empty() ? nullptr : o.trace.c_str();
+        cparams.moe_expert_scheduler = o.scheduler == "ass" ? LLAMA_MOE_EXPERT_SCHEDULER_ASS : LLAMA_MOE_EXPERT_SCHEDULER_OFF;
     }
 #endif
     llama_context * ctx = llama_init_from_model(model, cparams);
@@ -472,6 +475,8 @@ int main(int argc, char ** argv) {
                         (unsigned long long) st.evictions, hit_rate, (unsigned long long) st.bytes_h2d,
                         (unsigned long long) st.n_slots_total, st.host_ms);
             std::printf("direct_io_stats bytes_ssd=%llu io_ms=%.1f\n", (unsigned long long) st.bytes_ssd, st.io_ms);
+            std::printf("spec_stats issued=%llu committed=%llu wasted=%llu\n",
+                        (unsigned long long) st.spec_issued, (unsigned long long) st.spec_committed, (unsigned long long) st.spec_wasted);
         }
     }
 #endif
@@ -483,7 +488,8 @@ int main(int argc, char ** argv) {
         std::ofstream out(o.json);
         out << "{\n  \"schema_version\": 1,\n  \"evidence_class\": \"measured_rtx3090\",\n";
         out << "  \"mode\": \"" << o.storage << "\", \"ngl\": " << o.ngl << ", \"cpu_moe\": " << (o.cpu_moe ? "true" : "false")
-            << ", \"n_cpu_moe\": " << o.n_cpu_moe << ", \"cache_mib\": " << o.cache_mib << ", \"cache_policy\": \"" << o.cache_policy << "\",\n";
+            << ", \"n_cpu_moe\": " << o.n_cpu_moe << ", \"cache_mib\": " << o.cache_mib << ", \"cache_policy\": \"" << o.cache_policy
+            << "\", \"moe_expert_scheduler\": \"" << o.scheduler << "\",\n";
         out << "  \"model\": \"" << o.model << "\",\n  \"prompt_tokens\": " << n_prompt << ",\n";
         out << "  \"load_ms\": " << load_ms << ",\n  \"prompt_ms\": " << prompt_ms << ",\n  \"decode_tps\": " << tps << ",\n";
         out << "  \"tokens\": [";

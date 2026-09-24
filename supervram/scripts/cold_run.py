@@ -123,7 +123,7 @@ def main() -> None:
         "peak_rss_file_gib": round(peaks["rss_file_kib"] / 2**20, 2),
         "peak_cgroup_gib": round(peaks["cgroup_bytes"] / 2**30, 2),
         "stdout_tail": stdout.strip().splitlines()[:3],
-        "cache_stats": [l for l in stdout.splitlines() if l.startswith(("cache_stats", "direct_io_stats"))],
+        "cache_stats": [l for l in stdout.splitlines() if l.startswith(("cache_stats", "direct_io_stats", "spec_stats"))],
         "env": {k: os.environ[k] for k in os.environ if k.startswith("SVRAM_")},
         "stderr_tail": stderr.strip().splitlines()[-4:] if proc.returncode else [],
     }
