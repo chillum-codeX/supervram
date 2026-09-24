@@ -29,16 +29,10 @@
     --shadow-md: 0 2px 6px rgba(30,34,54,.05), 0 8px 24px rgba(30,34,54,.08);
     --shadow-lg: 0 8px 20px rgba(30,34,54,.08), 0 24px 64px rgba(30,34,54,.12);
   }
-  @media (prefers-color-scheme: light) {
-    :root:not([data-theme="dark"]) {
-      --bg: #f2f3f7; --panel: #ffffff; --panel-2: #f7f8fb; --border: #e5e7ef;
-      --text: #191b22; --text-dim: #636a7e; --text-faint: #9aa0b3;
-      --user-bubble: #e5edff; --asst-bubble: #f6f7fa; --accent-dim: #e2ecff;
-      --shadow-sm: 0 1px 2px rgba(30,34,54,.06);
-      --shadow-md: 0 2px 6px rgba(30,34,54,.05), 0 8px 24px rgba(30,34,54,.08);
-      --shadow-lg: 0 8px 20px rgba(30,34,54,.08), 0 24px 64px rgba(30,34,54,.12);
-    }
-  }
+  /* Dark is the fixed default regardless of OS/browser color-scheme preference -- this app is
+     meant to look like its own dark, Apple-vibrancy-styled surface, not flip to light because
+     the host system happens to prefer light. :root[data-theme="light"] above remains available
+     for a future manual toggle. */
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); }
   body { display: flex; overflow: hidden; -webkit-font-smoothing: antialiased; }
