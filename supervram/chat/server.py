@@ -6,6 +6,7 @@ API (streaming) on a fixed port -- this process only manages "which model is loa
 
 No third-party dependencies. Run: python3 chat/server.py [--port 8788]
 """
+import hashlib
 import http.server
 import json
 import os
@@ -20,6 +21,8 @@ import uuid
 from pathlib import Path
 
 import agent_tools
+from context_manager import ContextConfig, ContextOverflowPrevented
+from context_manager.service import ContextService
 
 ROOT = Path(__file__).resolve().parent
 SUPERVRAM_ROOT = ROOT.parent
@@ -116,6 +119,52 @@ def log_app_event(kind: str, detail: dict):
     with log_write_lock:
         with open(APP_LOG_PATH, "a") as f:
             f.write(json.dumps(entry) + "\n")
+
+
+# Long-agent-session context management (PLAN found in workspace-5, independently verified this
+# session: 194,085 naive tokens -> 4,303 with this system, exact-tokenizer-based, not a char/N
+# guess). One ContextService per workspace root; ContextService itself session-pools
+# ContextManagers and -- critically -- wraps every operation in `with manager._lock:`
+# (service.py). An earlier version of this integration called ContextManager methods directly
+# without that lock and corrupted a session's SQLite index ("database disk image is malformed")
+# when a second /api/workspace/select landed while the first indexing run was still in progress:
+# two threads writing the same sqlite3 connection with no serialization between them. Use
+# ContextService as designed rather than a partial reimplementation of its own locking.
+context_services = {}
+context_services_lock = threading.Lock()
+CONTEXT_DATA_ROOT = ROOT / "context_data"
+CONTEXT_INDEX_EXCLUDES = [
+    ".git/**", "**/__pycache__/**", "**/.pytest_cache/**", "**/node_modules/**",
+    "**/build/**", "**/build-*/**", "**/third_party/**", "**/*.gguf", "**/*.bin",
+    "**/*.so", "**/*.a", "**/*.png", "**/*.jpg", "**/*.jpeg", "**/*.pdf",
+    "**/.env", "**/.env.*", "**/*secret*", "**/*credential*", "context_data/**",
+    "**/history/**", "**/logs/**",
+    # Generated ablation/benchmark output, not source or prose: 22,262 files / 962 MiB in this
+    # project's results/ alone. Indexing all of it (a) is useless for retrieval (nobody wants an
+    # FTS5 chunk of run-0347.json) and (b) held a write transaction open long enough that a
+    # 10s busy_timeout wasn't sufficient, producing "database is locked" on concurrent reads
+    # during the first index of a workspace that has this directory.
+    "results/**", "**/results/**",
+]
+
+
+def _workspace_data_root(workspace_root: str) -> Path:
+    slug = hashlib.sha256(workspace_root.encode()).hexdigest()[:16]
+    return CONTEXT_DATA_ROOT / slug
+
+
+def get_context_service(workspace_root: str) -> ContextService:
+    with context_services_lock:
+        service = context_services.get(workspace_root)
+        if service is None:
+            service = ContextService(Path(workspace_root), _workspace_data_root(workspace_root))
+            service.config = ContextConfig(model=service.config.model, index_excludes=CONTEXT_INDEX_EXCLUDES)
+            context_services[workspace_root] = service
+        with state_lock:
+            service.config.model.max_context_tokens = state.get("ctx_size") or CTX_SIZE_DEFAULT
+        if not service.config.model.tokenizer_endpoint:
+            service.config.model.tokenizer_endpoint = f"http://127.0.0.1:{CHAT_PORT}"
+        return service
 
 
 def browse_dir(raw_path: str):
@@ -390,7 +439,34 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             p = Path(body.get("path", "")).expanduser()
             if not p.is_dir():
                 return self._json({"error": "not a directory"}, 400)
-            return self._json({"ok": True, "path": str(p.resolve())})
+            resolved = str(p.resolve())
+            # Index in the background: population makes retrieval (used by /api/context/assemble)
+            # useful from the first turn instead of only after some other call happens to trigger
+            # it, and re-indexing on reselect picks up files changed since a prior session.
+            def _index():
+                try:
+                    get_context_service(resolved).command("__index__", "index")
+                except Exception as e:
+                    log_app_event("context_index_error", {"workspace_root": resolved, "error": str(e)})
+            threading.Thread(target=_index, daemon=True).start()
+            return self._json({"ok": True, "path": resolved})
+        if self.path == "/api/context/assemble":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            workspace_root = body.get("workspace_root")
+            session_id = body.get("session_id") or "default"
+            messages = body.get("messages") or []
+            if not workspace_root:
+                return self._json({"error": "workspace_root required"}, 400)
+            try:
+                result = get_context_service(workspace_root).assemble(session_id, messages)
+            except ContextOverflowPrevented as e:
+                log_app_event("context_overflow", {"workspace_root": workspace_root, "session_id": session_id, "error": str(e)})
+                return self._json({"error": str(e), "overflow": True}, 413)
+            except Exception as e:
+                log_app_event("context_assemble_error", {"workspace_root": workspace_root, "session_id": session_id, "error": str(e)})
+                return self._json({"error": str(e)}, 500)
+            return self._json(result)
         if self.path == "/api/tool/execute":
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or b"{}")

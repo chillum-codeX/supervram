@@ -283,6 +283,7 @@
     <div class="app-mode-row">
       <div class="app-mode-btn active" data-appmode="chat">💬 Chat</div>
       <div class="app-mode-btn" data-appmode="coding">🛠 Coding agent</div>
+      <div class="app-mode-btn" data-appmode="rnd">🧪 R&amp;D Agent</div>
     </div>
     <div class="hint" id="codingModelHint" style="display:none">
       Coding sessions fill up context fast (whole files get read into it). <b id="codingModelHintName"></b> has a much
@@ -393,7 +394,8 @@ let history = []; // {role, content, reasoning}
 let streaming = false;
 let abortCtrl = null;
 let currentConvId = null;
-let appMode = 'chat'; // 'chat' | 'coding'
+let appMode = 'chat'; // 'chat' | 'coding' | 'rnd'
+function isAgentMode() { return appMode === 'coding' || appMode === 'rnd'; }
 let workspaceRoot = null;
 let browserCwd = null;
 let currentCtxSize = 32768;
@@ -406,17 +408,19 @@ document.querySelectorAll('.app-mode-btn').forEach(el => el.onclick = () => {
   if (streaming) return;
   appMode = el.dataset.appmode;
   document.querySelectorAll('.app-mode-btn').forEach(b => b.classList.toggle('active', b === el));
-  $('workspaceSection').style.display = appMode === 'coding' ? 'flex' : 'none';
-  $('input').placeholder = appMode === 'coding' ? 'Describe what to build, fix, or explain…' : 'Message…';
+  $('workspaceSection').style.display = isAgentMode() ? 'flex' : 'none';
+  $('input').placeholder = appMode === 'coding' ? 'Describe what to build, fix, or explain…'
+    : appMode === 'rnd' ? 'Describe the problem to research — be as ambitious as you want…'
+    : 'Message…';
   updateCodingModelHint();
 });
 
-// Coding sessions accumulate whole file contents in history and blow past a small context fast --
-// nudge toward the long-context model instead of silently swapping it out from under the user.
+// Agent sessions (coding or R&D) accumulate whole file contents in history and blow past a small
+// context fast -- nudge toward the long-context model instead of silently swapping it out.
 function updateCodingModelHint() {
   const hint = $('codingModelHint');
   if (!hint) return;
-  const show = appMode === 'coding' && longContextModelId && selectedModelId !== longContextModelId;
+  const show = isAgentMode() && longContextModelId && selectedModelId !== longContextModelId;
   hint.style.display = show ? 'block' : 'none';
   if (show) {
     const m = models.find(x => x.id === longContextModelId);
@@ -678,6 +682,7 @@ $('newchat').onclick = () => {
   if (streaming) stopStreaming();
   history = [];
   currentConvId = null;
+  contextSessionId = null;
   $('messages').innerHTML = '<div class="empty-state" id="emptyState">New chat.</div>';
   renderHistoryList();
 };
@@ -821,7 +826,8 @@ async function send() {
   $('sendbtn').textContent = '■'; $('sendbtn').classList.add('stop'); $('sendbtn').disabled = false;
   $('input').disabled = true;
   try {
-    if (appMode === 'coding') await runCodingTurn();
+    if (appMode === 'coding') await runAgentTurn(CODING_SYSTEM_PROMPT, 'coding_turn_error');
+    else if (appMode === 'rnd') await runAgentTurn(RND_SYSTEM_PROMPT, 'rnd_turn_error');
     else await runChatTurn();
   } finally {
     streaming = false;
@@ -853,7 +859,8 @@ function stopStreaming() {
   if (abortCtrl) abortCtrl.abort();
 }
 
-// --- coding agent ---------------------------------------------------------
+// --- agent modes: coding agent + R&D agent share the same tool-calling loop, sandboxed tools,
+// and diff-approval mechanism; only the system prompt (and therefore behavior) differs -----------
 
 const MAX_AGENT_TURNS = 8;
 let toolSchemas = [];
@@ -893,19 +900,75 @@ function trimForContext(msgs) {
   return out;
 }
 
-function buildAgentApiMessages() {
-  const sys = {role: 'system', content:
-    'You are a careful local coding assistant working inside one folder the user selected as ' +
-    'their workspace. You have tools to look at and edit files in it, and nothing outside it. ' +
-    'Always use list_dir/read_file/search_files to look at relevant files before proposing a ' +
-    'change. When editing, call write_file with the file\'s COMPLETE new content, not a partial ' +
-    'patch -- the person reviews a diff and approves or rejects it before anything is written, ' +
-    'so a rejected or still-pending change is not yet real. Be concise in your final answers.'};
+const CODING_SYSTEM_PROMPT =
+  'You are a careful local coding assistant working inside one folder the user selected as ' +
+  'their workspace. You have tools to look at and edit files in it, and nothing outside it. ' +
+  'Always use list_dir/read_file/search_files to look at relevant files before proposing a ' +
+  'change. When editing, call write_file with the file\'s COMPLETE new content, not a partial ' +
+  'patch -- the person reviews a diff and approves or rejects it before anything is written, ' +
+  'so a rejected or still-pending change is not yet real. Be concise in your final answers.';
+
+// R&D agent: deliberately NOT the coding assistant's "be conservative, match existing style"
+// framing. The point of this mode is unconventional algorithm/architecture ideation that a more
+// cautious prompt would hedge away from -- but "unconventional" means the technical proposal, not
+// the model's normal safety behavior, and it still has to be grounded in this project's own
+// measured evidence rather than free-floating speculation (this project's whole culture is
+// evidence-class-labeled claims, not vibes -- see writer_handoff/EVIDENCE_LEDGER.md).
+const RND_SYSTEM_PROMPT =
+  'You are an R&D partner for an open, evidence-driven systems research project (SuperVRAM: ' +
+  'making large MoE models runnable on consumer hardware via VRAM+RAM+SSD tiered caching). Your ' +
+  'job is not to recommend the safe, already-tried, textbook approach -- propose genuinely novel ' +
+  'algorithms and architectures, extrapolate aggressively past what has already been measured, ' +
+  'and challenge the project\'s own existing assumptions when you have a real technical argument ' +
+  'to do so. Always ground proposals in the project\'s actual measured evidence: use ' +
+  'list_dir/read_file/search_files to read the relevant docs first -- especially ' +
+  'writer_handoff/EVIDENCE_LEDGER.md, writer_handoff/KNOWN_LIMITATIONS.md, ' +
+  'docs/IMPLEMENTATION_STATUS.md, and docs/PLAN_ADAPTIVE.md -- before proposing anything. An ' +
+  'unconventional idea that ignores a measured hard constraint (SSD bandwidth, PCIe bandwidth, ' +
+  'real predictor accuracy, etc.) is not creative, it is just wrong. Clearly separate what is ' +
+  'grounded in evidence from what is speculative extrapolation -- do not blur the two. If you ' +
+  'want to prototype an idea, call write_file with the file\'s COMPLETE new content, not a ' +
+  'partial patch -- the person reviews a diff and approves or rejects it before anything is ' +
+  'written, so a rejected or still-pending change is not yet real. Be direct and technical; ' +
+  'don\'t hedge with unnecessary caveats, but do flag real, load-bearing uncertainty when it ' +
+  'actually exists.';
+
+// A per-conversation id for the server-side context manager (structured memory + artifacts are
+// keyed by this; the repository index is shared across sessions on the same workspace). Not the
+// same thing as currentConvId (saved-history id), which doesn't exist until the first save.
+let contextSessionId = null;
+function getContextSessionId() {
+  if (!contextSessionId) {
+    contextSessionId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('sess-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+  }
+  return contextSessionId;
+}
+
+// Assembles the request's message list via the server-side context manager: exact-tokenizer
+// budget accounting (llama-server's own /tokenize, not a chars/4 guess), structured session
+// memory, code retrieval, and content-addressed archiving of large tool output -- see
+// server.py's get_context_manager. Falls back to the old local estimate-based trim if the
+// orchestrator's context service is unreachable, so a turn never just fails outright.
+async function assembleAgentMessages(systemPrompt) {
+  const sys = {role: 'system', content: systemPrompt};
   const raw = history.map(m => {
     if (m.role === 'tool') return {role: 'tool', tool_call_id: m.tool_call_id, content: m.content};
     if (m.role === 'assistant' && m.tool_calls) return {role: 'assistant', content: m.content || '', tool_calls: m.tool_calls};
     return {role: m.role, content: m.content};
   });
+  const payload = [sys, ...raw];
+  try {
+    const resp = await fetch('/api/context/assemble', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({workspace_root: workspaceRoot, session_id: getContextSessionId(), messages: payload})});
+    if (resp.ok) {
+      const data = await resp.json();
+      return data.messages;
+    }
+    const errBody = await resp.json().catch(() => ({}));
+    logAppError('context_assemble_failed', {status: resp.status, detail: errBody.error});
+  } catch (e) {
+    logAppError('context_assemble_unreachable', {message: e.message});
+  }
   return [sys, ...trimForContext(raw)];
 }
 
@@ -1004,7 +1067,7 @@ async function runToolCall(tc) {
   return text;
 }
 
-async function runCodingTurn() {
+async function runAgentTurn(systemPrompt, errorLogKind) {
   if (!workspaceRoot) {
     addMessage('assistant', 'No workspace folder selected yet — click "Browse…" in the sidebar under Workspace folder to pick one first.');
     return;
@@ -1015,11 +1078,12 @@ async function runCodingTurn() {
     const ph = addAssistantPlaceholder();
     let result;
     try {
-      result = await streamCompletion(buildAgentApiMessages(), {reasoning_effort, tools: toolSchemas, tool_choice: 'auto'}, ph);
+      const apiMessages = await assembleAgentMessages(systemPrompt);
+      result = await streamCompletion(apiMessages, {reasoning_effort, tools: toolSchemas, tool_choice: 'auto'}, ph);
     } catch (e) {
       if (e.name === 'AbortError') { ph.wrap.parentElement.remove(); return; }
       ph.bubble.textContent = '[error: ' + e.message + ']';
-      logAppError('coding_turn_error', {message: e.message, turn});
+      logAppError(errorLogKind, {message: e.message, turn});
       return;
     }
     if (!result.content && !result.toolCalls.length) ph.wrap.parentElement.remove();
