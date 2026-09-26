@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tiered Precision for MoE Inference</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --bg: #f6f7f5;
+    --panel: #ffffff;
+    --panel-2: #eef0ee;
+    --ink: #14181a;
+    --ink-dim: #4b5560;
+    --ink-faint: #7c8790;
+    --border: #dde1e0;
+    --border-strong: #c3c9c7;
+    --accent: #1f6f78;
+    --accent-ink: #ffffff;
+    --accent-dim: #e3eef0;
+    --good: #2f7d4f;
+    --good-dim: #e6f2ea;
+    --bad: #b23b2e;
+    --bad-dim: #f7e9e7;
+    --mono-bg: #eef0ee;
+    --shadow: 0 1px 2px rgba(20,24,26,.05), 0 6px 20px rgba(20,24,26,.06);
+    --serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+    --sans: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1214; --panel: #171b1d; --panel-2: #1c2224;
+      --ink: #eef1f0; --ink-dim: #a8b0ae; --ink-faint: #6e7876;
+      --border: #2a3033; --border-strong: #3a4144;
+      --accent: #4fb3bd; --accent-ink: #06181a; --accent-dim: #172b2d;
+      --good: #57c98a; --good-dim: #16261d;
+      --bad: #e0685a; --bad-dim: #2a1a17;
+      --mono-bg: #1c2224;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1214; --panel: #171b1d; --panel-2: #1c2224;
+    --ink: #eef1f0; --ink-dim: #a8b0ae; --ink-faint: #6e7876;
+    --border: #2a3033; --border-strong: #3a4144;
+    --accent: #4fb3bd; --accent-ink: #06181a; --accent-dim: #172b2d;
+    --good: #57c98a; --good-dim: #16261d;
+    --bad: #e0685a; --bad-dim: #2a1a17;
+    --mono-bg: #1c2224;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); }
+  body {
+    color: var(--ink); font-family: var(--serif);
+    margin: 0; padding-block: 56px; padding-inline: 20px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 740px; margin: 0 auto; }
+
+  .kicker {
+    font-family: var(--sans); font-size: 12px; font-weight: 600; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 14px;
+  }
+  h1 {
+    font-family: var(--sans); font-size: 34px; font-weight: 700; line-height: 1.18;
+    letter-spacing: -.01em; margin: 0 0 12px; text-wrap: balance;
+  }
+  .subtitle {
+    font-family: var(--serif); font-style: italic; font-size: 18px; color: var(--ink-dim);
+    line-height: 1.5; margin: 0 0 22px; text-wrap: balance;
+  }
+  .meta {
+    font-family: var(--mono); font-size: 12px; color: var(--ink-faint);
+    display: flex; flex-wrap: wrap; gap: 4px 18px; padding-top: 18px; border-top: 1px solid var(--border);
+  }
+  .meta b { color: var(--ink-dim); font-weight: 600; }
+
+  .abstract {
+    margin-top: 34px; padding: 22px 24px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; box-shadow: var(--shadow);
+  }
+  .abstract-label {
+    font-family: var(--sans); font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-faint); margin: 0 0 10px;
+  }
+  .abstract p { margin: 0; font-size: 15.5px; line-height: 1.65; }
+  .abstract p + p { margin-top: 12px; }
+
+  nav.toc {
+    margin: 26px 0 0; padding: 16px 20px; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--panel-2); font-family: var(--sans); font-size: 13px;
+  }
+  nav.toc .toc-label { font-weight: 700; color: var(--ink-faint); letter-spacing: .06em; text-transform: uppercase; font-size: 10.5px; margin-bottom: 8px; display: block; }
+  nav.toc ol { margin: 0; padding-left: 18px; columns: 2; column-gap: 24px; }
+  nav.toc li { margin-bottom: 5px; break-inside: avoid; }
+  nav.toc a { color: var(--ink-dim); text-decoration: none; }
+  nav.toc a:hover { color: var(--accent); text-decoration: underline; }
+
+  section { margin-top: 50px; }
+  h2 {
+    font-family: var(--sans); font-size: 22px; font-weight: 700; letter-spacing: -.005em;
+    margin: 0 0 4px; padding-bottom: 14px; border-bottom: 2px solid var(--ink);
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; }
+  h3 {
+    font-family: var(--sans); font-size: 16.5px; font-weight: 600; margin: 30px 0 12px; color: var(--ink);
+  }
+  p { font-size: 15.5px; line-height: 1.7; margin: 0 0 14px; }
+  p.lede { font-size: 16.5px; color: var(--ink-dim); }
+  ul, ol { font-size: 15.5px; line-height: 1.7; padding-left: 22px; margin: 0 0 14px; }
+  li { margin-bottom: 6px; }
+  strong { font-weight: 600; }
+  em.term { font-style: italic; color: var(--accent); }
+  code {
+    font-family: var(--mono); font-size: .87em; background: var(--mono-bg); padding: 1.5px 5px;
+    border-radius: 4px; color: var(--ink);
+  }
+  a { color: var(--accent); }
+
+  .callout {
+    display: flex; gap: 12px; padding: 14px 16px; border-radius: 8px; margin: 18px 0;
+    border: 1px solid var(--border); font-size: 14.5px; line-height: 1.6;
+  }
+  .callout .tag {
+    font-family: var(--sans); font-weight: 700; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
+    flex-shrink: 0; padding: 3px 8px; border-radius: 5px; height: fit-content; white-space: nowrap;
+  }
+  .callout.good { background: var(--good-dim); border-color: color-mix(in srgb, var(--good) 30%, var(--border)); }
+  .callout.good .tag { background: var(--good); color: #06210f; }
+  .callout.bad { background: var(--bad-dim); border-color: color-mix(in srgb, var(--bad) 30%, var(--border)); }
+  .callout.bad .tag { background: var(--bad); color: #2a0805; }
+  .callout p { margin: 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 13.5px; font-family: var(--sans); }
+  caption { text-align: left; font-family: var(--sans); font-size: 12px; color: var(--ink-faint); margin-bottom: 8px; caption-side: top; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+  th { font-weight: 600; color: var(--ink-dim); font-size: 11.5px; letter-spacing: .03em; text-transform: uppercase; border-bottom: 2px solid var(--ink); }
+  tr.hl td { background: var(--accent-dim); font-weight: 600; }
+  tr.win td:nth-child(2) { color: var(--good); font-weight: 700; }
+  tr.lose td:nth-child(2) { color: var(--bad); font-weight: 700; }
+  td.num, th.num { text-align: right; }
+  .table-wrap { overflow-x: auto; }
+
+  .barchart { margin: 22px 0; display: flex; flex-direction: column; gap: 10px; }
+  .bar-row { display: grid; grid-template-columns: 150px 1fr 76px; align-items: center; gap: 10px; }
+  .bar-label { font-family: var(--sans); font-size: 12.5px; color: var(--ink-dim); text-align: right; }
+  .bar-track { background: var(--panel-2); border-radius: 5px; height: 26px; overflow: hidden; border: 1px solid var(--border); }
+  .bar-fill { height: 100%; border-radius: 4px 0 0 4px; display: flex; align-items: center; }
+  .bar-value { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+  .bar-note { font-family: var(--sans); font-size: 10.5px; color: var(--ink-faint); text-align: right; margin-top: -6px; }
+
+  .gate-list { display: flex; flex-direction: column; gap: 8px; margin: 18px 0; }
+  .gate {
+    display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid var(--border);
+    border-radius: 8px; font-family: var(--sans); font-size: 13.5px; background: var(--panel);
+  }
+  .gate .check { font-family: var(--mono); font-weight: 700; width: 20px; text-align: center; flex-shrink: 0; }
+  .gate.pass .check { color: var(--good); }
+  .gate b { font-weight: 600; }
+  .gate .desc { color: var(--ink-dim); }
+
+  .findings { counter-reset: finding; }
+  .finding { counter-increment: finding; position: relative; padding-left: 34px; margin-bottom: 22px; }
+  .finding::before {
+    content: counter(finding); position: absolute; left: 0; top: 1px; width: 24px; height: 24px;
+    border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-family: var(--sans);
+    font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  }
+  .finding h4 { font-family: var(--sans); font-size: 14.5px; font-weight: 600; margin: 0 0 4px; }
+  .finding p { margin: 0; font-size: 14.5px; }
+
+  .related-row { display: grid; grid-template-columns: 1fr; gap: 14px; margin: 18px 0; }
+  .related-item { padding: 14px 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+  .related-item .rname { font-family: var(--sans); font-weight: 600; font-size: 14px; }
+  .related-item .rname a { text-decoration: none; }
+  .related-item .rmeta { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin: 2px 0 8px; }
+  .related-item p { font-size: 13.5px; margin: 0; color: var(--ink-dim); }
+
+  .verdict-box {
+    margin: 22px 0; padding: 20px 22px; border-radius: 10px; background: var(--panel);
+    border: 1px solid var(--border-strong); box-shadow: var(--shadow);
+  }
+  .verdict-box .vlabel { font-family: var(--sans); font-weight: 700; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+  .verdict-box p { margin: 0; font-size: 15px; }
+  .verdict-box p + p { margin-top: 10px; }
+
+  .repro-grid { display: grid; grid-template-columns: 1fr; gap: 0; margin: 18px 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .repro-row { display: grid; grid-template-columns: 160px 1fr; border-bottom: 1px solid var(--border); }
+  .repro-row:last-child { border-bottom: none; }
+  .repro-row .k { padding: 10px 14px; background: var(--panel-2); font-family: var(--sans); font-size: 12.5px; font-weight: 600; color: var(--ink-dim); }
+  .repro-row .v { padding: 10px 14px; font-family: var(--mono); font-size: 12.5px; background: var(--panel); word-break: break-word; }
+
+  footer {
+    margin-top: 60px; padding-top: 22px; border-top: 1px solid var(--border);
+    font-family: var(--sans); font-size: 12px; color: var(--ink-faint); line-height: 1.7;
+  }
+
+  @media (max-width: 560px) {
+    h1 { font-size: 27px; }
+    nav.toc ol { columns: 1; }
+    .bar-row { grid-template-columns: 90px 1fr 62px; }
+    .repro-row { grid-template-columns: 120px 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <p class="kicker">Technical report &middot; reproducible on request</p>
+  <h1>Tiered Precision and Speculative Prefetch for Local MoE Inference</h1>
+  <p class="subtitle">What actually happens when you try to run a 30B mixture-of-experts model on one consumer GPU that's too small for it — including the idea that worked and the one that didn't.</p>
+  <div class="meta">
+    <span><b>System</b> SuperVRAM (llama.cpp-based)</span>
+    <span><b>Hardware</b> RTX 3090 24GB, WD SN550 NVMe</span>
+    <span><b>Date</b> September 2026</span>
+    <span><b>Evidence class</b> measured_rtx3090</span>
+  </div>
+
+  <div class="abstract">
+    <p class="abstract-label">Abstract</p>
+    <p>
+      SuperVRAM is a VRAM+RAM+SSD expert cache for running mixture-of-experts (MoE) language
+      models larger than available GPU memory on a single consumer GPU, built as a fork of
+      llama.cpp. This report covers two pieces of work built and measured on real hardware:
+      first, a <em class="term">popularity-tiered mixed-precision</em> quantization scheme that
+      downgrades the least-predictable transformer layers to 4-bit while keeping the rest at
+      8-bit, selected from real routing traces rather than an arbitrary split — measured at
+      <strong>3.1&times; higher decode throughput</strong> than the 8-bit baseline, and
+      <strong>1.26&times;</strong> higher than an equally-sized arbitrary-split control, at a
+      quality cost of +0.73% perplexity. Second, a C++ port of a confidence-gated speculative
+      expert-prefetch scheduler, previously validated only in Python simulation — built,
+      correctness-verified bit-exact under real load, and then measured to
+      <strong>regress</strong> throughput by 12.5% in the system's actual SSD-bandwidth-bound
+      regime, with the cause diagnosed rather than assumed. Both results are reported with the
+      same rigor: every claim in this document is backed by a repeatable command and a JSON
+      artifact, not a benchmark run once and rounded up.
+    </p>
+  </div>
+
+  <nav class="toc">
+    <span class="toc-label">Contents</span>
+    <ol>
+      <li><a href="#background">Background &amp; system</a></li>
+      <li><a href="#method-a">Popularity-tiered precision</a></li>
+      <li><a href="#method-b">Speculative prefetch (C++)</a></li>
+      <li><a href="#related">Related work</a></li>
+      <li><a href="#verdict">Honest assessment</a></li>
+      <li><a href="#repro">Reproducibility</a></li>
+    </ol>
+  </nav>
+
+  <section id="background">
+    <h2><span class="num">1.</span> Background &amp; system</h2>
+    <p class="lede">
+      The problem: a mixture-of-experts model like Qwen3-30B-A3B has 48 layers of 128 experts
+      each, but only 8 experts fire per token per layer. Its full weights don't fit in a 24GB
+      consumer GPU — but at any given moment, most of those weights are dead code. SuperVRAM
+      exploits that: a bounded set of expert slots lives in VRAM, backed by direct-I/O reads from
+      SSD on a cache miss, with LRU/LFU eviction.
+    </p>
+    <p>
+      Every configuration in this cache — resident, RAM-cached, SSD-cached — is verified to
+      produce <strong>bit-identical token IDs and logit hashes</strong> against full-GPU
+      execution before any throughput number is trusted. This is the same discipline both pieces
+      of work below inherit: a benchmark number is not believed until correctness is checked
+      first, separately.
+    </p>
+    <p>
+      In the regime this system targets — one request, one GPU, a model that doesn't fit — the
+      dominant cost is not compute. Across every cold-cache benchmark in this project's evidence
+      ledger, <strong>72&ndash;81% of decode time is spent waiting on the SSD</strong>. That single
+      fact is the thread connecting both results below: one exploits it, the other was defeated
+      by not accounting for it.
+    </p>
+  </section>
+
+  <section id="method-a">
+    <h2><span class="num">2.</span> Popularity-tiered precision</h2>
+    <p class="lede">
+      The idea: not all layers are equal, so don't quantize them equally. Use real routing data
+      to decide <em>which</em> layers can afford to lose precision, instead of picking an
+      arbitrary split.
+    </p>
+
+    <h3>2.1 Design</h3>
+    <p>
+      Each of the 48 layers is assigned to one of two tiers — Q8_0 (&ldquo;hot&rdquo;) or Q4_K
+      (&ldquo;cold&rdquo;) — using a popularity signal computed from 3,276 tokens of real routing
+      traces. The literal formula the original spec called for (average number of experts
+      activated per token) turned out to be <strong>degenerate</strong> on this model: Qwen3's
+      router always fires exactly 8 experts, so that signal is ~8.0 for every layer with no
+      discriminating power at all. The signal that was actually used instead is the
+      <strong>entropy of each layer's expert-usage distribution</strong> — how concentrated vs.
+      diffuse a layer's routing is across its 128 experts — which does vary meaningfully
+      (6.14&ndash;6.62 bits across layers on the real trace set). 24 layers with the lowest entropy
+      (most concentrated, &ldquo;specialist&rdquo; routing) are kept at Q8_0; the other 24 are
+      downgraded to Q4_K.
+    </p>
+
+    <h3>2.2 Correctness gates</h3>
+    <p>Four gates, run in order, before any throughput number was trusted:</p>
+    <div class="gate-list">
+      <div class="gate pass"><span class="check">&#10003;</span><b>Byte accounting</b><span class="desc">&mdash; 25.2 GB total (down from 32.5 GB Q8_0 source), 0 precision mismatches across 144 tensors</span></div>
+      <div class="gate pass"><span class="check">&#10003;</span><b>Gate exactness</b><span class="desc">&mdash; all 48 router tensors bit-exact vs. the Q8_0 source</span></div>
+      <div class="gate pass"><span class="check">&#10003;</span><b>Quality</b><span class="desc">&mdash; 96.97% top-1 token agreement, +0.73% perplexity vs. Q8_0 (full Q4 costs +2%)</span></div>
+      <div class="gate pass"><span class="check">&#10003;</span><b>Throughput</b><span class="desc">&mdash; measured on real hardware, cold-SSD protocol, 3 reps</span></div>
+    </div>
+
+    <h3>2.3 Results</h3>
+    <p>
+      16 GiB cache, 4 GiB RAM cap, evicted page cache, direct I/O, 1,536-token decode &mdash; the
+      same protocol used for every throughput number in this report.
+    </p>
+
+    <div class="barchart" role="img" aria-label="Decode throughput: Q8_0 baseline 26.3 tokens per second, arbitrary split 65.85, popularity split 83.25">
+      <div class="bar-row">
+        <span class="bar-label">Q8_0 baseline</span>
+        <div class="bar-track"><div class="bar-fill" style="width:31.6%; background:var(--ink-faint);"></div></div>
+        <span class="bar-value">26.30 t/s</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">Arbitrary split</span>
+        <div class="bar-track"><div class="bar-fill" style="width:79.1%; background:var(--accent-dim); border-right:2px solid var(--accent);"></div></div>
+        <span class="bar-value">65.85 t/s</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">Popularity split</span>
+        <div class="bar-track"><div class="bar-fill" style="width:100%; background:var(--accent);"></div></div>
+        <span class="bar-value" style="color:var(--good)">83.25 t/s</span>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+    <table>
+      <caption>Cold-SSD decode throughput, mean of 3 reps &middot; results/tiered/cold/, results/tiered/arbitrary/cold/</caption>
+      <thead><tr><th>Configuration</th><th class="num">t/s</th><th class="num">Hit rate</th><th class="num">SSD read</th><th class="num">Top-1 agree.</th><th class="num">PPL ratio</th></tr></thead>
+      <tbody>
+        <tr><td>Q8_0 baseline</td><td class="num">26.30</td><td class="num">97.4%</td><td class="num">76.69 GB</td><td class="num">&mdash;</td><td class="num">&mdash;</td></tr>
+        <tr><td>Arbitrary split (layers 0&ndash;23)</td><td class="num">65.85</td><td class="num">98.9%</td><td class="num">27.19 GB</td><td class="num">97.98%</td><td class="num">1.0071</td></tr>
+        <tr class="hl"><td>Popularity split (K=24)</td><td class="num">83.25</td><td class="num">99.1%</td><td class="num">20.04 GB</td><td class="num">96.97%</td><td class="num">1.0073</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <div class="callout good">
+      <span class="tag">Real win</span>
+      <p><strong>3.1&times;</strong> over plain Q8_0, and <strong>1.26&times;</strong> over an
+      arbitrary split of identical size &mdash; at the same total model size and same cache slot
+      budget, so the gain is attributable entirely to <em>which</em> layers were chosen.</p>
+    </div>
+
+    <h3>2.4 The honest complication</h3>
+    <p>
+      The mechanism is not what the spec hypothesized. Top-1 agreement and perplexity are
+      statistically indistinguishable between the popularity split and the arbitrary control
+      &mdash; if anything the arbitrary split is marginally <em>better</em> on quality. The
+      popularity signal earns its win on <strong>throughput</strong>, not quality: it happens to
+      pick a mix of layers the runtime's LRU cache serves more efficiently for this workload,
+      not a mix that better preserves accuracy. That's a real, reproducible effect &mdash; just not
+      the effect the original spec predicted, and the write-up was corrected to say so rather
+      than let the original hypothesis stand uncontradicted.
+    </p>
+  </section>
+
+  <section id="method-b">
+    <h2><span class="num">3.</span> Speculative prefetch, ported to C++</h2>
+    <p class="lede">
+      The idea: predict which experts will be needed next and start loading them from disk
+      before they're asked for, so I/O wait hides behind other work. Confidence-gated, so a bad
+      guess costs a wasted read instead of corrupting the cache.
+    </p>
+
+    <h3>3.1 What was built</h3>
+    <p>
+      A confidence-gated scheduler (<code>AdaptiveSpeculativeScheduler</code>) existed only as a
+      validated Python simulation before this work &mdash; 44 unit tests, a 3,600-run simulated
+      ablation matrix, never run against real hardware. It was ported into the real classic/SSD
+      tier of llama.cpp's expert cache, behind a new <code>--moe-expert-scheduler {off,ass}</code>
+      flag (default off, verified bit-exact no-op). The port includes a background worker thread
+      that reads speculative candidates into a staging buffer without ever touching cache
+      bookkeeping directly &mdash; that mutation happens only on the main thread, at a defined
+      commit point, avoiding any data race with the required (non-speculative) cache path.
+    </p>
+
+    <h3>3.2 Two bugs the port caught by checking against the real reference</h3>
+    <div class="findings">
+      <div class="finding">
+        <h4>Stale prediction reuse</h4>
+        <p>The Python reference consumes (removes) a pending prediction once resolved; a first
+        C++ draft only read it, which would silently reuse a stale prediction on a second call.
+        Caught by generating reference values from the actual Python code, not by hand.</p>
+      </div>
+      <div class="finding">
+        <h4>Float vs. double precision</h4>
+        <p>Two confidence values that are conceptually both &ldquo;2/3&rdquo; can land on
+        different doubles depending on which arithmetic path reached them &mdash; and the gate's
+        tie-break logic depends on that residual difference. A first draft used 32-bit floats;
+        fixed to 64-bit doubles, verified bit-exact against the Python reference's own
+        floating-point representation.</p>
+      </div>
+      <div class="finding">
+        <h4>Empty-slots-only admission was permanently inert</h4>
+        <p>The safest-looking policy &mdash; never evict, only fill empty cache slots &mdash;
+        turned out to never fire past the first few steps, because a warmed-up cache simply has
+        no empty slots left. Confirmed via instrumentation: <code>issued=0</code> across 256
+        tokens. Fixed by allowing eviction of an LRU-eligible victim, with two-part
+        re-verification at commit time to avoid evicting something genuinely needed in the
+        interim.</p>
+      </div>
+    </div>
+
+    <h3>3.3 Correctness, under real load</h3>
+    <p>
+      256-token decode, prefetch genuinely active (not the trivial off-vs-off case): 23,574
+      speculative reads issued, 23,571 committed &mdash; and tokens plus logit hashes identical to
+      <code>--moe-expert-scheduler off</code> across all 256 steps. The additive-only design (it
+      only ever warms extra cache slots; it never changes which expert gets computed for a
+      required step) held up under real, heavy exercise, not just the case where nothing fired.
+    </p>
+
+    <h3>3.4 Throughput &mdash; a genuine regression</h3>
+
+    <div class="barchart" role="img" aria-label="Decode throughput with scheduler off, 30.68 tokens per second, versus on, 26.84 tokens per second">
+      <div class="bar-row">
+        <span class="bar-label">Scheduler off</span>
+        <div class="bar-track"><div class="bar-fill" style="width:100%; background:var(--ink-dim);"></div></div>
+        <span class="bar-value">30.68 t/s</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">Scheduler on</span>
+        <div class="bar-track"><div class="bar-fill" style="width:87.5%; background:var(--bad-dim); border-right:2px solid var(--bad);"></div></div>
+        <span class="bar-value" style="color:var(--bad)">26.84 t/s</span>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+    <table>
+      <caption>Same cold-SSD protocol, mean of 3 reps &middot; results/ass/cold/</caption>
+      <thead><tr><th>Configuration</th><th class="num">t/s</th><th class="num">Hit rate</th><th class="num">SSD read</th><th class="num">Speculative reads</th></tr></thead>
+      <tbody>
+        <tr><td><code>--moe-expert-scheduler off</code></td><td class="num">30.68</td><td class="num">97.4%</td><td class="num">72.74 GB</td><td class="num">0</td></tr>
+        <tr class="lose"><td><code>--moe-expert-scheduler ass</code></td><td class="num">26.84</td><td class="num">97.4%</td><td class="num">92.35 GB</td><td class="num">11,970 issued</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <div class="callout bad">
+      <span class="tag">Negative result</span>
+      <p><strong>12.5% slower</strong>, <strong>27% more SSD traffic</strong>, and no improvement
+      in the required path's own hit rate &mdash; if anything slightly worse, from occasionally
+      evicting an expert that was needed again shortly after. The mechanism itself worked exactly
+      as designed (98.6% of issued reads landed successfully); the extra bandwidth was
+      overwhelmingly wasted, not misapplied.</p>
+    </div>
+
+    <h3>3.5 Root cause, diagnosed from the data</h3>
+    <p>
+      The ported gate's budget is denominated in <em>compute time</em>, faithfully matching the
+      Python design &mdash; which implicitly assumes an overlap regime where I/O hides behind spare
+      GPU compute. But this system's actual regime is <strong>SSD-bandwidth-bound</strong>
+      (Section&nbsp;1): there is no compute slack to hide anything behind, so every speculative
+      byte directly competes with required bytes on the same physical drive. A compute-time
+      budget structurally cannot see that contention, so the gate kept firing &mdash; and in this
+      regime, firing was close to a coin flip that cost real bandwidth either way. The fix this
+      points to &mdash; denominating the budget in spare SSD bandwidth instead of compute time
+      &mdash; is a different design, not a parameter tweak, and was not attempted here.
+    </p>
+  </section>
+
+  <section id="related">
+    <h2><span class="num">4.</span> Related work</h2>
+    <p class="lede">Neither idea is unprecedented. Both sit in active, recent (2025&ndash;2026) research areas, with at least one close, independently-published match for each.</p>
+
+    <div class="related-row">
+      <div class="related-item">
+        <div class="rname">SPICE <span style="font-weight:400;color:var(--ink-faint)">(arXiv 2608.21240)</span></div>
+        <div class="rmeta">Submitted Aug 2026 &middot; accepted ASP-DAC 2027</div>
+        <p>A near-identical idea to the prefetch scheduler &mdash; confidence-gated adaptive
+        lookahead with a low-rank fallback &mdash; published essentially the same week this
+        project's Python simulator was built. Measured on real multi-GPU hardware, DeepSeek-V2-Lite
+        and Qwen2-57B-A14B, up to 3.12&times; speedup in TPOT. Independent convergence on the same
+        principle; SPICE has the hardware validation this project's C++ port also now has &mdash;
+        just not the same result.</p>
+      </div>
+      <div class="related-item">
+        <div class="rname">ggml-org/llama.cpp issue #20757</div>
+        <div class="rmeta">Open, unimplemented feature request</div>
+        <p>Describes almost exactly the core three-tier VRAM/RAM/SSD cache this project ships,
+        down to recommending SLRU as the eviction default &mdash; something this project's own
+        policy ablations found makes &lt;1 point of difference vs. plain LRU. The llama.cpp
+        community has been asking, unanswered, for the system underlying this report.</p>
+      </div>
+      <div class="related-item">
+        <div class="rname">GEMQ, MODE, EAC-MoE, QuantMoE-Bench</div>
+        <div class="rmeta">2024&ndash;2026 academic work on importance-aware expert quantization</div>
+        <p>Multiple papers in this family flag that routing frequency doesn't reliably predict
+        quantization sensitivity &mdash; exactly what Section 2.4 found empirically: the popularity
+        signal helped throughput, not quality, contradicting the naive hypothesis that motivated
+        it.</p>
+      </div>
+      <div class="related-item">
+        <div class="rname"><code>FareedKhan-dev/kimi-k3-in-c</code></div>
+        <div class="rmeta">From-scratch C99 inference engine, 2.78T-parameter Kimi K3</div>
+        <p>A larger-scale, independently-built peer project solving the same shape of problem
+        (stream a model too big for RAM from disk). Reports &ldquo;80% of a token is waiting for
+        a disk&rdquo; &mdash; nearly identical to this project's own 72&ndash;81% figure &mdash; and
+        deliberately chose a simple static admission policy over predictive prefetching, a quiet
+        piece of corroborating evidence for Section 3's own finding.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="verdict">
+    <h2><span class="num">5.</span> Honest assessment</h2>
+    <div class="verdict-box">
+      <p class="vlabel">What this is, and isn't</p>
+      <p>
+        Neither result is conceptually novel at the idea level &mdash; both land in active research
+        areas with recent, sometimes independently-converging prior art. What's real here is
+        <strong>measured, verified evidence on actual consumer hardware</strong>: a working 3.1&times;
+        speedup you can use today, and a negative result reported with its actual cause
+        diagnosed instead of hidden. The honest framing is <em>&ldquo;built, measured, and
+        correctly attributed two real results on a single consumer GPU&rdquo;</em> &mdash; not
+        &ldquo;solved a problem nobody else has solved.&rdquo;
+      </p>
+      <p>
+        The negative result is not a lesser finding than the positive one. A confidence-gated
+        prefetch design copied faithfully from a validated simulation, that turns out to regress
+        performance for a specific, diagnosed reason (a compute-time budget in a
+        bandwidth-bound regime) is exactly the kind of result that prevents someone &mdash;
+        including a future version of this project &mdash; from re-discovering the same dead end
+        the slow way.
+      </p>
+    </div>
+  </section>
+
+  <section id="repro">
+    <h2><span class="num">6.</span> Reproducibility</h2>
+    <p class="lede">Every number in this report has a JSON artifact and an exact command behind it.</p>
+    <div class="repro-grid">
+      <div class="repro-row"><div class="k">Hardware</div><div class="v">Intel i9-9920X (24 threads), 125 GiB RAM, RTX 3090 24GB, WD SN550 NVMe (measured ceiling ~2.4 GB/s)</div></div>
+      <div class="repro-row"><div class="k">Protocol</div><div class="v">16 GiB cache &middot; 4 GiB RAM cap &middot; evicted page cache &middot; direct I/O &middot; 1,536-token decode &middot; 3 reps</div></div>
+      <div class="repro-row"><div class="k">Tiered-precision</div><div class="v">results/tiered/cold/, results/tiered/arbitrary/cold/, results/tiered/quality/</div></div>
+      <div class="repro-row"><div class="k">Prefetch (C++)</div><div class="v">results/ass/cold/, patches/0010-ass-confidence-gated-speculative-prefetch.patch</div></div>
+      <div class="repro-row"><div class="k">Correctness tool</div><div class="v">svram-verify &rarr; scripts/compare_verify.py (token + logit-hash bit-exactness)</div></div>
+      <div class="repro-row"><div class="k">Full writeups</div><div class="v">docs/SPEC_IDEA1_POPULARITY_TIERED_PRECISION.md &middot; docs/ASS_CPP_PORT_PROGRESS.md &middot; writer_handoff/EVIDENCE_LEDGER.md</div></div>
+    </div>
+  </section>
+
+  <footer>
+    All throughput figures are decode-only, cold-SSD, single request, on the hardware listed above &mdash;
+    they do not generalize to other drives, GPUs, or batch sizes without re-measurement. Every
+    result marked measured_rtx3090 was produced by the exact command paths referenced in
+    Section 6; the ASS C++ changes live in a gitignored vendored llama.cpp tree and are captured
+    reproducibly via the patch file listed above, verified by applying it to a clean checkout,
+    rebuilding, and re-running the full test suite.
+  </footer>
+
+</div>
+</body>
+</html>
