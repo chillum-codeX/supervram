@@ -1,0 +1,95 @@
+<svg viewBox="0 0 1000 620" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'SF Pro Text','Segoe UI',sans-serif">
+  <defs>
+    <style>
+      .mono { font-family: 'SF Mono','JetBrains Mono',ui-monospace,Menlo,Consolas,monospace; }
+    </style>
+  </defs>
+  <rect width="1000" height="620" rx="14" fill="#08090d"/>
+
+  <!-- sidebar -->
+  <rect x="0" y="0" width="260" height="620" rx="14" fill="#101218"/>
+  <rect x="0" y="0" width="14" height="620" fill="#101218"/>
+  <line x1="260" y1="0" x2="260" y2="620" stroke="#21242f" stroke-width="1"/>
+
+  <text x="24" y="38" fill="#f0f1f5" font-size="16" font-weight="700">SuperVRAM Chat</text>
+  <text x="24" y="56" fill="#565d70" font-size="11" class="mono">local models, one GPU</text>
+
+  <text x="24" y="88" fill="#565d70" font-size="10" font-weight="700" letter-spacing="1">MODE</text>
+  <rect x="24" y="98" width="70" height="34" rx="9" fill="#132840" stroke="#0a84ff" stroke-width="1.3"/>
+  <text x="59" y="119" fill="#0a84ff" font-size="11" font-weight="700" text-anchor="middle">💬 Chat</text>
+  <rect x="100" y="98" width="76" height="34" rx="9" fill="#15171f" stroke="#21242f"/>
+  <text x="138" y="119" fill="#9298ab" font-size="10.5" font-weight="600" text-anchor="middle">🛠 Coding</text>
+  <rect x="182" y="98" width="70" height="34" rx="9" fill="#15171f" stroke="#21242f"/>
+  <text x="217" y="119" fill="#9298ab" font-size="10.5" font-weight="600" text-anchor="middle">🧪 R&amp;D</text>
+
+  <text x="24" y="152" fill="#565d70" font-size="10" font-weight="700" letter-spacing="1">MODEL</text>
+
+  <rect x="24" y="162" width="212" height="40" rx="9" fill="#15171f" stroke="#21242f"/>
+  <text x="34" y="179" fill="#f0f1f5" font-size="11" font-weight="600">Qwen3-30B-A3B-Q8_0</text>
+  <rect x="34" y="185" width="26" height="12" rx="4" fill="#132840"/>
+  <text x="47" y="194" fill="#0a84ff" font-size="8" font-weight="700" text-anchor="middle">MoE</text>
+  <text x="66" y="194" fill="#9298ab" font-size="9.5" class="mono">30.3 GB</text>
+
+  <rect x="24" y="210" width="212" height="44" rx="9" fill="#132840" stroke="#0a84ff" stroke-width="1.3"/>
+  <text x="34" y="227" fill="#f0f1f5" font-size="11" font-weight="700">Qwen3-30B-A3B-tiered-popk24</text>
+  <rect x="34" y="233" width="26" height="12" rx="4" fill="#0a84ff" opacity="0.25"/>
+  <text x="47" y="242" fill="#0a84ff" font-size="8" font-weight="700" text-anchor="middle">MoE</text>
+  <text x="66" y="242" fill="#9298ab" font-size="9.5" class="mono">23.5 GB · 3.1x</text>
+
+  <rect x="24" y="262" width="212" height="40" rx="9" fill="#15171f" stroke="#21242f"/>
+  <text x="34" y="279" fill="#f0f1f5" font-size="11" font-weight="600">Qwen3.6-35B-A3B-Q4_K_M</text>
+  <rect x="34" y="285" width="26" height="12" rx="4" fill="#132840"/>
+  <text x="47" y="294" fill="#0a84ff" font-size="8" font-weight="700" text-anchor="middle">MoE</text>
+  <text x="66" y="294" fill="#9298ab" font-size="9.5" class="mono">19 GB</text>
+
+  <text x="24" y="330" fill="#565d70" font-size="10" font-weight="700" letter-spacing="1">MODE</text>
+  <rect x="24" y="340" width="104" height="30" rx="9" fill="#132840" stroke="#0a84ff" stroke-width="1.2"/>
+  <text x="76" y="359" fill="#0a84ff" font-size="11" font-weight="700" text-anchor="middle">Fast</text>
+  <rect x="132" y="340" width="104" height="30" rx="9" fill="#15171f" stroke="#21242f"/>
+  <text x="184" y="359" fill="#9298ab" font-size="10.5" font-weight="600" text-anchor="middle">Tiered (SuperVRAM)</text>
+
+  <!-- main panel -->
+  <rect x="274" y="0" width="726" height="56" fill="none"/>
+  <circle cx="298" cy="28" r="4.5" fill="#34d399"/>
+  <text x="312" y="32" fill="#9298ab" font-size="12">ready</text>
+  <text x="360" y="32" fill="#f0f1f5" font-size="13" font-weight="700">Qwen3-30B-A3B-tiered-popk24</text>
+  <line x1="274" y1="56" x2="1000" y2="56" stroke="#21242f" stroke-width="1"/>
+
+  <!-- user bubble -->
+  <rect x="620" y="86" width="360" height="46" rx="14" fill="#16305c"/>
+  <path d="M 980 118 L 980 132 L 966 118 Z" fill="#16305c"/>
+  <text x="638" y="114" fill="#f0f1f5" font-size="12.5">What's the core idea behind SuperVRAM's</text>
+  <text x="638" y="130" fill="#f0f1f5" font-size="12.5">expert cache, in two sentences?</text>
+
+  <!-- thinking disclosure -->
+  <text x="298" y="162" fill="#565d70" font-size="11" class="mono">▸ Thinking</text>
+
+  <!-- assistant bubble -->
+  <rect x="298" y="176" width="430" height="72" rx="14" fill="#14161d" stroke="#21242f"/>
+  <path d="M 298 240 L 298 226 L 312 240 Z" fill="#14161d"/>
+  <text x="316" y="200" fill="#f0f1f5" font-size="12.5">Most expert weights are dead code for any given</text>
+  <text x="316" y="218" fill="#f0f1f5" font-size="12.5">token, so only a bounded set lives in VRAM at once</text>
+  <text x="316" y="236" fill="#f0f1f5" font-size="12.5">&#8212; the rest streams from SSD on a cache miss.</text>
+
+  <!-- metrics chip -->
+  <g class="mono" font-size="10.5" fill="#565d70">
+    <text x="298" y="266">TTFT</text>
+    <text x="328" y="266" fill="#9298ab" font-weight="700">9.16s</text>
+    <circle cx="374" cy="263" r="1.6" fill="#565d70"/>
+    <text x="386" y="266" fill="#9298ab" font-weight="700">71.1</text>
+    <text x="409" y="266">tok/s</text>
+    <circle cx="450" cy="263" r="1.6" fill="#565d70"/>
+    <text x="462" y="266" fill="#9298ab" font-weight="700">680</text>
+    <text x="485" y="266">tokens</text>
+    <circle cx="530" cy="263" r="1.6" fill="#565d70"/>
+    <text x="542" y="266">prompt</text>
+    <text x="583" y="266" fill="#9298ab" font-weight="700">95</text>
+    <text x="598" y="266">tok/s</text>
+  </g>
+
+  <!-- input row -->
+  <rect x="298" y="558" width="600" height="40" rx="16" fill="#15171f" stroke="#0a84ff" stroke-width="1.3"/>
+  <text x="316" y="583" fill="#565d70" font-size="12.5">Message&#8230;</text>
+  <circle cx="866" cy="578" r="16" fill="#0a84ff"/>
+  <text x="866" y="583" fill="#ffffff" font-size="14" text-anchor="middle">&#8593;</text>
+</svg>
